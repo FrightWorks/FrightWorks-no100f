@@ -79,9 +79,11 @@ public:
     consume();
     // Wait for stragglers to leave consume() entirely, not just finish their chunks,
     // so the next dispatch can safely reset the shared counters.
-    while (m_remaining.load(std::memory_order_acquire) != 0 ||
-           m_active.load(std::memory_order_acquire) != 0) {
-      std::this_thread::yield();
+    {
+      std::unique_lock lock(m_completionMutex);
+      m_complete.wait(lock, [this] {
+        return m_remaining.load(std::memory_order_acquire) == 0 && m_active.load(std::memory_order_acquire) == 0;
+      });
     }
     m_invoke = nullptr;
   }
@@ -127,13 +129,18 @@ private:
         m_active.fetch_add(1, std::memory_order_relaxed);
       }
       consume();
-      m_active.fetch_sub(1, std::memory_order_release);
+      if (m_active.fetch_sub(1, std::memory_order_release) == 1) {
+        std::lock_guard lock(m_completionMutex);
+        m_complete.notify_one();
+      }
     }
   }
 
   std::vector<std::thread> m_workers;
   std::mutex m_mutex;
   std::condition_variable m_wake;
+  std::mutex m_completionMutex;
+  std::condition_variable m_complete;
   uint64_t m_generation = 0;
   std::function<void(size_t)> m_invoke;
   std::atomic_size_t m_count{0};
