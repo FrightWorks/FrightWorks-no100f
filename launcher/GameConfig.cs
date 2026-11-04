@@ -1,4 +1,4 @@
-﻿namespace ScoobyReMasked;
+﻿namespace FrightWorks;
 
 // Config.toml in the user data folder (DataPaths), edited the way the runtime's WriteSetting does: line by line, inside the key's
 // section, comments and unknown keys kept. shortcut: '#' inside a quoted value counts as a comment start;

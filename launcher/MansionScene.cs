@@ -3,7 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Text.Json;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // The launcher's main screen: a stormy night sky with lightning, the mansion (launcher\art, made by
 // tools\launcher-art\make_launcher_art.py) whose windows light up, draw their curtains and show the odd silhouette,

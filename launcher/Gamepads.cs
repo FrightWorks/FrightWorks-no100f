@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Connected gamepads, read with the game's own SDL3.dll so the launcher sees the same controller types as the game
 // (button prompts, Xbox layout). SDL runs on its own thread (its device notifications need that thread's message

@@ -1,4 +1,4 @@
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Bringing the player's files over from an earlier copy of the game: a FrightWorks or Scooby-Doo: Refrightened zip
 // folder (data\UserData, or Play\UserData in old Refrightened ones), or Documents\MarioWiiSaveData (where a FrightWorks

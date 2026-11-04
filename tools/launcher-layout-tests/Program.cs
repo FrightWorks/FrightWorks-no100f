@@ -20,7 +20,7 @@ static class LauncherLayoutTests
     // Simulated monitor layouts: the same cases and expected text as the game's wiicompiled/runtime/tests/monitor_labels_tests.cpp.
     static void CheckMonitorLabels(Assembly assembly)
     {
-        var labels = assembly.GetType("ScoobyReMasked.Monitors")!.GetMethod("Labels", BindingFlags.Static | BindingFlags.Public)!;
+        var labels = assembly.GetType("FrightWorks.Monitors")!.GetMethod("Labels", BindingFlags.Static | BindingFlags.Public)!;
         (string, Rectangle, bool) M(string name, int x, int y, int w, int h, bool primary = false) => (name, new Rectangle(x, y, w, h), primary);
         void Case(string name, (string, Rectangle, bool)[] layout, params string[] expected)
         {
@@ -74,8 +74,8 @@ static class LauncherLayoutTests
             Directory.CreateDirectory(Path.Combine(userData, "mods", $"{i:D2}-" + new string('M', 100)));
 
         var assembly = Assembly.Load("FrightWorks");
-        var type = assembly.GetType("ScoobyReMasked.MainForm")!;
-        var paths = Activator.CreateInstance(assembly.GetType("ScoobyReMasked.DataPaths")!, fixture, game);
+        var type = assembly.GetType("FrightWorks.MainForm")!;
+        var paths = Activator.CreateInstance(assembly.GetType("FrightWorks.DataPaths")!, fixture, game);
         using var form = (Form)Activator.CreateInstance(type, new object?[] { null, paths })!;
         form.Text = "Launcher layout regression checks";
         Console.WriteLine($"Available monitors: {Screen.AllScreens.Length}");
@@ -302,7 +302,7 @@ static class LauncherLayoutTests
                 {
                     form.SuspendLayout();
                     syntheticScale *= factor;
-                    assembly.GetType("ScoobyReMasked.Theme")!.GetField("K")!.SetValue(null, nativeScale * syntheticScale);
+                    assembly.GetType("FrightWorks.Theme")!.GetField("K")!.SetValue(null, nativeScale * syntheticScale);
                     form.Scale(new SizeF(factor, factor));
                     foreach (var entry in fonts)
                         entry.Control.Font = new Font(entry.Font.FontFamily, entry.Font.Size * syntheticScale, entry.Font.Style);

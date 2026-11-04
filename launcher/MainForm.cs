@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
-using static ScoobyReMasked.Theme;
+using static FrightWorks.Theme;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // The launcher window: the haunted mansion (MansionScene) whose signs are the menu. Play starts the game; Settings,
 // Mods and Extras open a board over the left of the house. Everything it changes goes to Config.toml (DataPaths),
