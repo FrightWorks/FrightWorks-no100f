@@ -225,7 +225,7 @@ useful:
 - **Launcher screenshots** without opening it: `& "launcher\publish\FrightWorks.exe" --shots <dir>`
   draws every page to `<dir>\<Page>.png`.
 - **Isolated launcher layout regression** (Windows, .NET 10 SDK or newer):
-  `dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout`.
+  `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout`.
   This builds the launcher and checks Settings/Display, Controls, Mods and Extras at normal, minimum and smaller
   window sizes, reopening and growing/shrinking layouts, long mod names, nested scrolling, dropdown widths, keyboard
   button activation, transparent button corners (normal, hover, pressed and disabled, including the gradient-backed
