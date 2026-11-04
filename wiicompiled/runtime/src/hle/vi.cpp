@@ -1237,9 +1237,9 @@ extern "C" void VIConfigure_HLE_801b9f6c(CpuContext* ctx)
     ViSetR3(ctx, 0);
 }
 
-// The VI only scans out viHeight lines of the XFB, but the presenter shows the whole display copy. Scooby-Doo!
-// Unmasked configures a 448-line VI mode BEFORE GXInit, whose __GXInitGX defaults the copy to 640x480, then
-// never sets it again (the console's VI just drops the extra lines): 32 undrawn lines showed as a band at the
+// The VI only scans out viHeight lines of the XFB, but the presenter shows the whole display copy. A game can
+// configure a 448-line VI mode BEFORE GXInit, whose __GXInitGX defaults the copy to 640x480, then
+// never set it again (the console's VI just drops the extra lines): 32 undrawn lines showed as a band at the
 // bottom. Copy (and size the XFB) as the TV shows it: on VIConfigure and again after GXInit (gx_init.cpp).
 void VI_HLE_ApplyDisplayCopyForMode() {
     CopyMode mode{};

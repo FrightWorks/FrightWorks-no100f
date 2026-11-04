@@ -583,7 +583,7 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
   const auto& layout = info.matrixLayout;
   // `postex_mtx[current_pnmtx]` indexes raw matrix memory, so a current-matrix index of 10 or more selects a texture matrix; the normal array only covers the position rows and clamps.
   // Index MaxPostexMtx is GX_IDENTITY (id 60): GameCube games select it as the position matrix for screen-space
-  // draws (Scooby-Doo! Unmasked's HUD: GXSetCurrentMtx(GX_IDENTITY) with an ortho projection). __GXInitGX loads
+  // draws (a HUD: GXSetCurrentMtx(GX_IDENTITY) with an ortho projection). __GXInitGX loads
   // identity there; XF writes to it are not modelled, so it is staged as a constant below.
   const u32 currentPostexSlot = std::min<u32>(g_gxState.currentPnMtx, MaxPostexMtx);
   static const Mat3x4<float> kIdentityMtx{{1.f, 0.f, 0.f, 0.f}, {0.f, 1.f, 0.f, 0.f}, {0.f, 0.f, 1.f, 0.f}};

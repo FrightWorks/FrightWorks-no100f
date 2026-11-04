@@ -654,7 +654,7 @@ int RunTranslateRecursive(string[] argsTail)
 
         FunctionDiscoveryResult? Attempt((uint Address, int Depth, string Name) work, bool speculative)
         {
-            // shortcut: Scooby-Doo! Unmasked logic modules (overlay above the 24 MiB MEM1) keep strings and tables
+            // shortcut: modules in the overlay (above the 24 MiB MEM1) keep strings and tables
             // inside .text, and their lis/addi address constants look like function pointers to discovery. There
             // the map (every STT_FUNC symbol of every module) is the complete set of function starts: anything
             // else is skipped, and map entries that fail are dropped like speculative ones. A real call to a
@@ -3558,7 +3558,7 @@ List<AddressRange> BuildExecutableRanges()
 }
 
 TranslationProjectConfig RequireProject() => project ?? throw new InvalidOperationException(
-    "This command requires --project <path>. See projects/scooby/recomp.yml for an example.");
+    "This command requires --project <path>. See projects/no100f/recomp.yml for an example.");
 
 int ShowHelp(string invalidCommand)
 {

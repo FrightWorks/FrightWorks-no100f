@@ -2030,7 +2030,7 @@ public sealed partial class PpcLifter
             case "bgt":
             case "ble":
             case "bge":
-            case "bso":  // Bink audio (Scooby-Doo! Unmasked) tests the SO bit
+            case "bso":  // Bink audio tests the SO bit
             case "bns":
                 {
                     // Extract CR field from operand if present (for cr1-cr7), otherwise default to cr0

@@ -149,7 +149,7 @@ std::vector<RuntimeRiivolution::Overlay> RiivoDiscoverRoots() {
         RiivoAddRoot(overlays, root, "recomp mod manifest");
     }
 
-    // Scooby-Doo! Unmasked mods: <UserData>/mods/<name>/files mirrors the disc's files/ tree. Folders load
+    // Mods: <UserData>/mods/<name>/files mirrors the disc's files/ tree. Folders load
     // in name order and a later name overrides an earlier one (roots apply in reverse, so add them
     // descending); a file named "disabled" inside the mod folder turns it off (the launcher's Mods page).
     std::vector<fs::path> mods;
