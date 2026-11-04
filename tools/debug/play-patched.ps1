@@ -13,7 +13,8 @@
 # -HdTextures links texture_pack\ScoobyHD into Play\texture_replacements (if not staged there) and sets [video] texture_replacements =
 # true for this run only; both go back when the game closes (only that Config line: settings changed in game stay).
 # The human is playing, so sound is on at 5% for the run ([audio] volume = 0.05, muted = false); those two lines go back
-# the same way when the game closes.
+# the same way when the game closes. Rumble is off for the run too ([controller] rumble = false, no switch), and its line
+# goes back the same way.
 # Removal also runs on a build failure or Ctrl+C. If the window is closed instead, run with -Remove.
 #   ... play-patched.ps1 -Remove [-Patch ...]  # just take the patches out
 #   ... play-patched.ps1 -NoBuild [-HdTextures] # play the build already in Play\ (e.g. from texhunt\build-devmenu.ps1)
@@ -43,72 +44,6 @@ function Git-Apply([string[]]$GitArgs) {
 $config = Join-Path $root 'Play\UserData\Config.toml'
 $packLink = Join-Path $root 'Play\texture_replacements\ScoobyHD'
 
-$added = @{}  # what Set-ConfigLine added: section -> the text it put before that section's header; '' = the file
-
-# Sets $Key in [$Section] of Config.toml to $Line ($null = remove the line); returns the line it replaced ($null if
-# none). A new line goes at the end of its section; a missing section is added at the end of the file (no Config.toml
-# yet = start one). Putting the old lines back takes out again what was added: a section added here once it is empty,
-# the file once it is empty (the game then writes its defaults on the next start).
-function Set-ConfigLine([string]$Section, [string]$Key, $Line) {
-    $bom = $false
-    $text = ''
-    if (Test-Path -LiteralPath $config) {
-        $bytes = [IO.File]::ReadAllBytes($config)
-        $bom = $bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
-        $text = [IO.File]::ReadAllText($config)
-    } elseif ($null -ne $Line) {
-        $added[''] = $true
-    }
-    $nl = if ($text.Contains("`r`n") -or -not $text) { "`r`n" } else { "`n" }
-    $old = $null
-    $head = [regex]::Match($text, '(?m)^\[' + [regex]::Escape($Section) + '\][ \t]*(\r?\n|\z)')
-    if ($head.Success) {
-        $start = $head.Index + $head.Length
-        $next = [regex]::Match($text.Substring($start), '(?m)^\[')
-        $end = if ($next.Success) { $start + $next.Index } else { $text.Length }
-        $body = $text.Substring($start, $end - $start)
-        $m = [regex]::Match($body, '(?m)^' + [regex]::Escape($Key) + '[ \t]*=[^\r\n]*(\r?\n)?')
-        if ($m.Success) {
-            $old = $m.Value.TrimEnd("`r", "`n")
-            $pre = $body.Substring(0, $m.Index)
-            if ($null -ne $Line) {
-                $pre += $Line + $m.Value.Substring($old.Length)
-            } elseif (-not $m.Groups[1].Success) {
-                # it was the last line, with no newline: drop the newline before it (the header's, if it was the first)
-                if ($pre) { $pre = $pre -replace '\r?\n\z', '' } else { $start -= $head.Groups[1].Length }
-            }
-            $body = $pre + $body.Substring($m.Index + $m.Length)
-        } elseif ($null -ne $Line) {
-            $content = $body.TrimEnd("`r", "`n")
-            $body = if ($content) { $content + $nl + $Line + $body.Substring($content.Length) }
-                    elseif (-not $head.Groups[1].Value) { $nl + $Line }  # the header is the file's last line, no newline
-                    else { $Line + $nl + $body }
-        }
-        if ($null -eq $Line -and -not $body.Trim() -and $added.ContainsKey($Section)) {
-            $before = $text.Substring(0, $head.Index)
-            $gap = $added[$Section]
-            if ($end -eq $text.Length -and $before.EndsWith($gap)) { $before = $before.Substring(0, $before.Length - $gap.Length) }
-            $text = $before + $text.Substring($end)
-            $added.Remove($Section)
-        } else {
-            $text = $text.Substring(0, $start) + $body + $text.Substring($end)
-        }
-    } elseif ($null -ne $Line) {
-        $gap = ''
-        if ($text -and -not $text.EndsWith("`n")) { $gap += $nl }
-        if ($text) { $gap += $nl }
-        $text += $gap + "[$Section]" + $nl + $Line + $nl
-        $added[$Section] = $gap
-    }
-    if (-not $text.Trim() -and $added.ContainsKey('')) {
-        Remove-Item -LiteralPath $config -ErrorAction SilentlyContinue
-        $added.Remove('')
-    } else {
-        [IO.File]::WriteAllText($config, $text, (New-Object Text.UTF8Encoding($bom)))
-    }
-    return $old
-}
-
 function Build([switch]$Translate) {
     $buildArgs = @('-ExecutionPolicy', 'Bypass', '-File', (Join-Path $root 'tools\build-no100f.ps1'), '-SkipTools')
     if (-not $Translate) { $buildArgs += '-SkipTranslate' }
@@ -137,6 +72,7 @@ $applied = New-Object System.Collections.Generic.List[object]
 $builtInDevmenu = $LASTEXITCODE -eq 0
 $hdOld = $null; $hdSet = $false; $linked = $false; $locked = $false
 $soundOld = @{}; $soundSet = $false
+$rumbleOld = $null; $rumbleSet = $false
 try {
     if ($HdTextures) {
         $pack = Join-Path $root 'texture_pack\ScoobyHD'
@@ -146,15 +82,19 @@ try {
             New-Item -ItemType Junction -Path $packLink -Target $pack | Out-Null
             $linked = $true
         }
-        $hdOld = Set-ConfigLine 'video' 'texture_replacements' 'texture_replacements = true'
+        $hdOld = Set-ConfigLine $config 'video' 'texture_replacements' 'texture_replacements = true'
         $hdSet = $true
         "hd        texture_pack\ScoobyHD on for this run"
     }
     # The human is playing: sound on at 5% for this run (AGENTS.md rule); the old lines go back when the game closes.
     $soundSet = $true
-    $soundOld['volume'] = Set-ConfigLine 'audio' 'volume' 'volume = 0.05'
-    $soundOld['muted'] = Set-ConfigLine 'audio' 'muted' 'muted = false'
+    $soundOld['volume'] = Set-ConfigLine $config 'audio' 'volume' 'volume = 0.05'
+    $soundOld['muted'] = Set-ConfigLine $config 'audio' 'muted' 'muted = false'
     "sound     on at 5% for this run"
+    # Rumble: always off in test runs (AGENTS.md rule), even here; the old line goes back when the game closes.
+    $rumbleOld = Set-ConfigLine $config 'controller' 'rumble' 'rumble = false'
+    $rumbleSet = $true
+    "rumble    off for this run"
     foreach ($p in $files) {
         if ($NoBuild) { break }
         # The dev menu is part of the game since it was built in (NO100F_DEV_TOOLS above switches it on).
@@ -182,15 +122,19 @@ try {
     "closed    exit code $($game.ExitCode)"
 } finally {
     if ($locked) { Exit-GameLock $root }
-    if ($hdSet) { Set-ConfigLine 'video' 'texture_replacements' $hdOld | Out-Null }
+    if ($rumbleSet) {
+        Set-ConfigLine $config 'controller' 'rumble' $rumbleOld | Out-Null
+        "rumble    setting put back"
+    }
     if ($linked) { [IO.Directory]::Delete($packLink, $false) }  # the junction only, not the pack
     if ($hdSet -or $linked) { "hd        texture pack setting and link put back" }
     if ($soundSet) {
         foreach ($k in @('muted', 'volume')) {
-            if ($soundOld.ContainsKey($k)) { Set-ConfigLine 'audio' $k $soundOld[$k] | Out-Null }
+            if ($soundOld.ContainsKey($k)) { Set-ConfigLine $config 'audio' $k $soundOld[$k] | Out-Null }
         }
         "sound     volume and mute settings put back"
     }
+    if ($hdSet) { Set-ConfigLine $config 'video' 'texture_replacements' $hdOld | Out-Null }
     if ($Keep) {
         if ($applied.Count) { "kept      $($applied.Name -join ', ') (-Keep). Remove later with -Remove" }
     } else {

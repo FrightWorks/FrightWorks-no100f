@@ -1,7 +1,9 @@
 # Starts Play\FrightWorks Game.exe, waits, saves a PNG of the game window only (PrintWindow, no desktop input), stops it.
 # Usage: capture-window.ps1 [-Seconds 20] [-Out <png>] [-Every N]   (-Every: a shot every N s as <out>-<s>s.png)
+# Rumble is off for the run; Play\UserData\Config.toml comes back byte for byte.
 param([int]$Seconds = 20, [string]$Out = '', [int]$Every = 0)
 $root = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'debug\kit-common.ps1')  # rumble off for the run
 if (-not $Out) { $Out = Join-Path $root 'autotest\window.png' }
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -27,8 +29,6 @@ public static class Win {
 "@
 [Win]::SetProcessDPIAware() | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $root 'autotest') | Out-Null
-$p = Start-Process (Join-Path $root 'Play\FrightWorks Game.exe') -WorkingDirectory (Join-Path $root 'Play') -PassThru `
-    -RedirectStandardOutput "$Out.log" -RedirectStandardError "$Out.err.log"
 function Shot([string]$file) {
     $p.Refresh()
     $h = [Win]::FindFor([uint32]$p.Id)
@@ -42,13 +42,22 @@ function Shot([string]$file) {
     $bmp.Save($file, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
     "saved $file ($($r.R)x$($r.B))"
 }
-if ($Every -gt 0) {
-    for ($t = $Every; $t -le $Seconds -and -not $p.HasExited; $t += $Every) {
-        Start-Sleep -Seconds $Every
-        Shot ([IO.Path]::ChangeExtension($Out, $null).TrimEnd('.') + "-$($t)s.png")
+$cfg = Join-Path $root 'Play\UserData\Config.toml'
+$userCfg = Set-RumbleOffForRun $cfg
+$p = $null
+try {
+    $p = Start-Process (Join-Path $root 'Play\FrightWorks Game.exe') -WorkingDirectory (Join-Path $root 'Play') -PassThru `
+        -RedirectStandardOutput "$Out.log" -RedirectStandardError "$Out.err.log"
+    if ($Every -gt 0) {
+        for ($t = $Every; $t -le $Seconds -and -not $p.HasExited; $t += $Every) {
+            Start-Sleep -Seconds $Every
+            Shot ([IO.Path]::ChangeExtension($Out, $null).TrimEnd('.') + "-$($t)s.png")
+        }
+    } else {
+        Start-Sleep -Seconds $Seconds
+        Shot $Out
     }
-} else {
-    Start-Sleep -Seconds $Seconds
-    Shot $Out
+} finally {
+    if ($p -and -not $p.HasExited) { $p.Kill(); $p.WaitForExit(5000) | Out-Null }
+    Restore-ConfigBytes $cfg $userCfg
 }
-if (-not $p.HasExited) { $p.Kill() }

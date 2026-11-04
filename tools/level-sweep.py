@@ -4,7 +4,7 @@ a mod), skip its opening cutscene, run it, then save a window screenshot and the
     python tools/level-sweep.py [--levels h001,c003] [--seconds 30] [--workers 7]
 
 Output: autotest/level-sweep-<time>/ with REPORT.md, results.json, shots/<level>.png and logs/<level>.err.log.
-Each worker runs its own copy of Play/ (so the per-level mod and the settings don't collide), windowed 1280x720.
+Each worker runs its own copy of Play/ (so the per-level mod and the settings don't collide), windowed 1280x720, rumble off.
 """
 import argparse, json, os, re, shutil, subprocess, sys, threading, time
 from pathlib import Path
@@ -31,7 +31,8 @@ def make_worker(base: Path, n: int) -> Path:
     dvd = str(ROOT / "Disc" / "DATA").replace("\\", "\\\\")
     (w / "UserData" / "Config.toml").write_text(
         f"[paths]\ndvd_root = '{dvd}'\n\n[video]\ndisplay_mode = \"windowed\"\nwindow_width = 1280\nwindow_height = 720\n"
-        "resolution_multiplier = 1.5\naspect_mode = 2\nskip_intro = true\nframe_interpolation_fps = 120\n", encoding="utf-8")
+        "resolution_multiplier = 1.5\naspect_mode = 2\nskip_intro = true\nframe_interpolation_fps = 120\n\n"
+        "[controller]\nrumble = false\n", encoding="utf-8")
     return w
 
 

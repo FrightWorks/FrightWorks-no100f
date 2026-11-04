@@ -13,6 +13,7 @@
 # sound muted unless -Sound), not the user's own. Sound: [audio] volume = 0.05 and muted = true; -Sound (the human is
 # testing or playing it, or an audio bug/enhancement) writes muted = false, so the game plays at 5%. Mute and volume are
 # SDL output gain only: AUDIO_RAW_DUMP captures are the same either way.
+# Rumble: always off ([controller] rumble = false), with no switch to turn it on.
 # start/prepare first save the user's setup (Play\UserData\Config.toml and any *.controller files, where aurora keeps
 # F10 controller remaps) to tools\debug\local\user-setup\, unless a saved copy is already there (a test is
 # running, or one didn't finish: the copy there is still the user's). stop and restore put it back, delete the copy and
@@ -184,6 +185,9 @@ texture_replacements = $hd
 [audio]
 volume = 0.05
 muted = $muted
+
+[controller]
+rumble = false
 "@ | Set-Content -LiteralPath (Join-Path $play 'UserData\Config.toml') -Encoding utf8
 
     Write-Host "sound: $(if ($Sound) { 'on at 5% (-Sound)' } else { 'muted (-Sound: on at 5%)' })"
