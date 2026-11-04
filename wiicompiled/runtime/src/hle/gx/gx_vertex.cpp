@@ -190,9 +190,9 @@ extern "C" void GX__SetArray_8016e1c4(uint32_t a, uint32_t b, uint32_t s) { GX__
 // Texture Coordinate Generation
 // ============================================================================
 
-bool SpmAuroraDlRecording();
+bool GxAuroraDlRecording();
 extern "C" void GX__SetNumTexGens_8016e5a4(uint32_t n) {
-    { static int k = 0; if (SpmAuroraDlRecording() && k++ < 6000) RT_LOGF(RT_TAG_GX, "[spmrec] texgens %u\n", n); }
+    { static int k = 0; if (GxAuroraDlRecording() && k++ < 6000) RT_LOGF(RT_TAG_GX, "[gxrec] texgens %u\n", n); }
     GXSetNumTexGens((u8)n);
 }
 // NO100F: the game's own SDK function runs (gxData dirty state is flushed by its __GXSetDirtyState)
@@ -277,36 +277,36 @@ void ServiceDeferredTimingDuringGxWork() {
 }
 }
 
-uint32_t SpmPresentedFrames();
-static int32_t SpmDumpTarget() {
+uint32_t GxPresentedFrames();
+static int32_t GxDumpTarget() {
     static int32_t target = [] { std::ifstream in("drawdump.txt"); int32_t f = -1; in >> f; return f; }();
     return target;
 }
-bool SpmDumpFrame() {
-    const int32_t t = SpmDumpTarget();
+bool GxDumpFrame() {
+    const int32_t t = GxDumpTarget();
     if (t < 0) return false;
-    const uint32_t f = SpmPresentedFrames();
+    const uint32_t f = GxPresentedFrames();
     return f >= static_cast<uint32_t>(t) && f <= static_cast<uint32_t>(t) + 1;
 }
 // SPM bring-up: drawdump.txt beside the exe holds a frame number; that frame's GXBegin calls are logged.
-static void SpmDumpBegin(uint32_t t, uint32_t vf, uint32_t nv) {
+static void GxDumpBegin(uint32_t t, uint32_t vf, uint32_t nv) {
     static int32_t target = [] {
         std::ifstream in("drawdump.txt"); int32_t f = -1; in >> f; return f;
     }();
     if (target < 0) return;
-    const uint32_t frame = SpmPresentedFrames();
+    const uint32_t frame = GxPresentedFrames();
     if (frame < static_cast<uint32_t>(target) || frame > static_cast<uint32_t>(target) + 1) return;
     static int n = 0;
     if (n++ > 400) return;
     const auto& d = g_hleGxState.vtxDesc;
     RT_LOGF(RT_TAG_GX, "[drawdump] f%u begin prim 0x%02X fmt %u n %u desc pos%u nrm%u c0%u c1%u t0%u t1%u pnmi%u dl%d\n", frame, t, vf, nv,
             d[GX_VA_POS], d[GX_VA_NRM], d[GX_VA_CLR0], d[GX_VA_CLR1], d[GX_VA_TEX0], d[GX_VA_TEX1], d[GX_VA_PNMTXIDX],
-            SpmAuroraDlRecording() ? 1 : 0);
+            GxAuroraDlRecording() ? 1 : 0);
 }
 
 extern "C" void GX__Begin_8016f0f0(uint32_t t, uint32_t vf, uint32_t nv) {
-    SpmDumpBegin(t, vf, nv);
-    SpmRecordRawVertexDisplayList();
+    GxDumpBegin(t, vf, nv);
+    GxRecordRawVertexDisplayList();
     if(IsDisplayListActive()){
         WriteDisplayListData((u8)(t|vf), 1);
         WriteDisplayListData((u16)nv, 2);

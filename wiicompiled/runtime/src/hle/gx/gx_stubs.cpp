@@ -31,12 +31,12 @@ extern "C" void GX__SetDrawSync_8016e9fc(uint32_t token) { GX__SetDrawSync_8016e
 // 100 ms; no PE is emulated and __peReg was 0, so every wait timed out (3.5 s frames when the Blooper's
 // offscreen NPCs draw, ta2_02). Draws are consumed in order here, so the token is reached at once: point
 // __peReg at a RAM block and store the token in its token register (+0xE).
-extern "C" void SPM_GXSetDrawSync(uint32_t token) {
-    constexpr uint32_t kSpmPeRegPtrAddr = 0x80279F30u;  // __peReg (SPM: r13-0x6FB0 in sysWaitDrawSync)
-    constexpr uint32_t kSpmPeRegBlock = 0x80002F00u;    // low-memory debugger area; no exception vectors are installed
+extern "C" void Gc_GXSetDrawSync(uint32_t token) {
+    constexpr uint32_t kGxPeRegPtrAddr = 0x80279F30u;  // __peReg (SPM: r13-0x6FB0 in sysWaitDrawSync)
+    constexpr uint32_t kGxPeRegBlock = 0x80002F00u;    // low-memory debugger area; no exception vectors are installed
     try {
-        Memory::Write32(kSpmPeRegPtrAddr, kSpmPeRegBlock);
-        Memory::Write16(kSpmPeRegBlock + 0xEu, static_cast<uint16_t>(token));
+        Memory::Write32(kGxPeRegPtrAddr, kGxPeRegBlock);
+        Memory::Write16(kGxPeRegBlock + 0xEu, static_cast<uint16_t>(token));
     } catch (const ::Memory::AccessViolation&) {}
 }
 
@@ -119,7 +119,7 @@ extern "C" void GX__SetCopyClamp_8016f618(uint32_t c) {
 PPC_NATIVE_OVERRIDE_VOID(800FE944, GX__SetCopyClamp_8016f618, (uint32_t c), (c));
 
 extern "C" void GX__ClearBoundingBox_8016fecc() {
-    SpmBBoxClear();
+    GxBBoxClear();
     GXClearBoundingBox();
     try {
         const uint32_t gd = Memory::Read32(kGXDataPtrAddr);
@@ -129,9 +129,9 @@ extern "C" void GX__ClearBoundingBox_8016fecc() {
 PPC_NATIVE_OVERRIDE_VOID(800ff040, GX__ClearBoundingBox_8016fecc, (), ());
 
 // GXReadBoundingBox (SPM 0x8028E26C, this SDK's order: left, top, right, bottom).
-extern "C" void GX__ReadBoundingBox_SPM(uint32_t leftPtr, uint32_t topPtr, uint32_t rightPtr, uint32_t bottomPtr) {
+extern "C" void GX__ReadBoundingBox_Gc(uint32_t leftPtr, uint32_t topPtr, uint32_t rightPtr, uint32_t bottomPtr) {
     uint16_t l = 0, t = 0, r = 0, b = 0;
-    SpmBBoxRead(l, t, r, b);
+    GxBBoxRead(l, t, r, b);
     {   // union with Aurora's CPU-projected box, which also sees display-list and FIFO draws
         u16 al = 1023, ar = 0, at = 1023, ab = 0;
         ::GXReadBoundingBox(&al, &ar, &at, &ab);
@@ -140,7 +140,7 @@ extern "C" void GX__ReadBoundingBox_SPM(uint32_t leftPtr, uint32_t topPtr, uint3
             else { l = std::min<uint16_t>(l, al); r = std::max<uint16_t>(r, ar); t = std::min<uint16_t>(t, at); b = std::max<uint16_t>(b, ab); }
         }
     }
-    { static int n = 0; if (n++ < 40) RT_LOGF(RT_TAG_GX, "[spmbbox] read l=%u t=%u r=%u b=%u\n", l, t, r, b); }
+    { static int n = 0; if (n++ < 40) RT_LOGF(RT_TAG_GX, "[gxbbox] read l=%u t=%u r=%u b=%u\n", l, t, r, b); }
     try {
         if (leftPtr) Memory::Write16(leftPtr, l);
         if (topPtr) Memory::Write16(topPtr, t);

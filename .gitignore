@@ -6,7 +6,6 @@
 /autotest/
 /build-logs/
 /dist/
-/_runtime_spm_backup/
 /Play/*
 !/Play/portable.txt
 !/Play/Run with log.cmd

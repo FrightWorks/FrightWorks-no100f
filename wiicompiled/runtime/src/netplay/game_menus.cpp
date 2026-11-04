@@ -116,13 +116,13 @@ int FileSelectRawCursor() {
     return static_cast<int>(cursor);
 }
 
-// NSMBW_DUMP_STATES=2B5,2C6: every state machine field (a pointer to a StateID, which names
+// NO100F_DUMP_STATES=2B5,2C6: every state machine field (a pointer to a StateID, which names
 // itself through the string pointer at +4) in those objects, logged when it changes (finding
 // which field says a menu is open).
 std::string DumpStates() {
     static const std::vector<uint16_t> wanted = [] {
         std::vector<uint16_t> list;
-        if (const char* value = std::getenv("NSMBW_DUMP_STATES")) {
+        if (const char* value = std::getenv("NO100F_DUMP_STATES")) {
             for (const char* c = value; *c != 0;) {
                 char* end = nullptr;
                 const unsigned long v = std::strtoul(c, &end, 16);
@@ -166,11 +166,11 @@ std::string DumpStates() {
     return text;
 }
 
-// NSMBW_DUMP_OBJ=<profile>: log the words of that object's first 0x800 bytes that change (finding
+// NO100F_DUMP_OBJ=<profile>: log the words of that object's first 0x800 bytes that change (finding
 // fields such as a menu's cursor).
 void DumpObjectChanges() {
     static const int profile = [] {
-        const char* value = std::getenv("NSMBW_DUMP_OBJ");
+        const char* value = std::getenv("NO100F_DUMP_OBJ");
         return value != nullptr ? static_cast<int>(std::strtol(value, nullptr, 16)) : -1;
     }();
     if (profile < 0) {

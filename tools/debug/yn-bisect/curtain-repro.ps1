@@ -43,7 +43,7 @@ $script = "0:A:1,$SettleMs`:STICK_LEFT:$WalkMs"
 if ($BackMs -gt 0) {
     $script += ",$backStart`:STICK_DOWN:$BackMs"
 }
-$env:NSMBW_INPUT_SCRIPT = $script
+$env:NO100F_INPUT_SCRIPT = $script
 $env:NO100F_GPU_OWNER = '1'
 $env:NO100F_GPU_OWNER_FILE = (Join-Path $root 'autotest\manual\curtain-owner-repro.jsonl')
 # Log only after landing (~frame 350+) so event IDs stay usable for live skips.

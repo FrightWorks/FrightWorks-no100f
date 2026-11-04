@@ -144,8 +144,8 @@ static class DataImport
         }
         if (!paths.Portable)
         {
-            var nsmbw = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MarioWiiSaveData");
-            if (IsThisGamesConfig(Path.Combine(nsmbw, "Config.toml"))) candidates.Add(Make(nsmbw, nsmbw));
+            var oldData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MarioWiiSaveData");
+            if (IsThisGamesConfig(Path.Combine(oldData, "Config.toml"))) candidates.Add(Make(oldData, oldData));
         }
         return candidates.Where(c => !SameFolder(c.UserData, paths.UserData))
                          .OrderByDescending(c => LastUsed(c.UserData)).FirstOrDefault();

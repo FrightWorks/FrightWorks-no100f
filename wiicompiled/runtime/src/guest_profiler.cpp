@@ -1,4 +1,4 @@
-// NSMBW_PROFILE=<start s>:<length s> (Windows): a sampling profiler for the game thread. From
+// NO100F_PROFILE=<start s>:<length s> (Windows): a sampling profiler for the game thread. From
 // <start> seconds after the first presented frame, for <length> seconds, the thread that presents
 // frames is suspended about a thousand times a second and its instruction pointer recorded. At the
 // end, samples are mapped back to the translated guest function whose code they fall in (by each
@@ -220,7 +220,7 @@ void OnFramePresented() {
         return;
     }
     started = true;
-    const char* value = std::getenv("NSMBW_PROFILE");
+    const char* value = std::getenv("NO100F_PROFILE");
     // SPM: also read "<start>:<length>" from profile.txt beside the executable (the test loop's switch).
     static char fileValue[64] = {};
     if (value == nullptr) {

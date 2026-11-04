@@ -1,8 +1,8 @@
 // gx_lighting.cpp - Lighting and Channel Control
 #include "gx_internal.h"
 #include "runtime_log.h"
-extern "C" unsigned g_spmAudit[8];  // aurora command_processor (SPM diagnostics)
-bool SpmAuroraDlRecording();  // gx_init.cpp: material lists are recorded at map load
+extern "C" unsigned g_gxAudit[8];  // aurora command_processor (SPM diagnostics)
+bool GxAuroraDlRecording();  // gx_init.cpp: material lists are recorded at map load
 
 #include <cstdio>
 #include <cstdlib>
@@ -80,7 +80,7 @@ PPC_NATIVE_OVERRIDE_VOID(8000111C, GX__LoadLightObjImm_80170320, (uint32_t la, u
 extern "C" void GX__SetChanAmbColor_8017039c(uint32_t c, uint32_t cp) {
     EnsureAuroraFrameActive();
     GXColor color = DecodeGxColor(Memory::Read32(cp));
-    { static int n = 0; if (n++ < 60) RT_LOGF(RT_TAG_GX, "[spmchan] amb ch %u %08X\n", c, Memory::Read32(cp)); }
+    { static int n = 0; if (n++ < 60) RT_LOGF(RT_TAG_GX, "[gxchan] amb ch %u %08X\n", c, Memory::Read32(cp)); }
     GXSetChanAmbColor((GXChannelID)c, color);
 }
 PPC_NATIVE_OVERRIDE_VOID(800FF474, GX__SetChanAmbColor_8017039c, (uint32_t c, uint32_t cp), (c, cp));
@@ -88,7 +88,7 @@ PPC_NATIVE_OVERRIDE_VOID(800FF474, GX__SetChanAmbColor_8017039c, (uint32_t c, ui
 extern "C" void GX__SetChanMatColor_80170474(uint32_t c, uint32_t cp) {
     EnsureAuroraFrameActive();
     GXColor color = DecodeGxColor(Memory::Read32(cp));
-    { static int n = 0; if (n++ < 60) RT_LOGF(RT_TAG_GX, "[spmchan] mat ch %u %08X\n", c, Memory::Read32(cp)); }
+    { static int n = 0; if (n++ < 60) RT_LOGF(RT_TAG_GX, "[gxchan] mat ch %u %08X\n", c, Memory::Read32(cp)); }
     GXSetChanMatColor((GXChannelID)c, color);
 }
 PPC_NATIVE_OVERRIDE_VOID(800FF5DC, GX__SetChanMatColor_80170474, (uint32_t c, uint32_t cp), (c, cp));
@@ -98,15 +98,15 @@ extern "C" void GX__SetNumChans_8017054c(uint32_t n) { GXSetNumChans((u8)n); }
 // PPC_NATIVE_OVERRIDE_VOID(800FF744, GX__SetNumChans_8017054c, (uint32_t n), (n));
 
 extern "C" void GX__SetChanCtrl_80170570(uint32_t ch, uint32_t en, uint32_t as, uint32_t ms, uint32_t lm, uint32_t df, uint32_t af) {
-    static const bool noLight = std::getenv("SPM_NOLIGHT") != nullptr;  // diagnostic: draw unlit to test lighting as the cause of black map geometry
+    static const bool noLight = std::getenv("NO100F_NOLIGHT") != nullptr;  // diagnostic: draw unlit to test lighting as the cause of black map geometry
     if (noLight) en = 0;
     { static int n = 0; const CpuContext* x = TryGetCpuContext();
-      if ((en | as | ms | lm) != 0 && n++ < 20) RT_LOGF(RT_TAG_GX, "[spmchan] ctrl ch %u en %u amb %u mat %u lights %02x diff %u attn %u lr %08X\n", ch, en, as, ms, lm, df, af, x ? x->lr : 0);
+      if ((en | as | ms | lm) != 0 && n++ < 20) RT_LOGF(RT_TAG_GX, "[gxchan] ctrl ch %u en %u amb %u mat %u lights %02x diff %u attn %u lr %08X\n", ch, en, as, ms, lm, df, af, x ? x->lr : 0);
       // mapSetMaterial (lr 0x8008A6AC): name the material being set up, with the renderer's draw counter for matching
       if (x && x->lr == 0x8008A6ACu && ch == 0) {
           static int m = 0;
-          static const bool matLog = std::getenv("SPM_DL_HEX") != nullptr;  // diagnostic: names the material lists as they are recorded
-          if (matLog && SpmAuroraDlRecording() && m++ < 3000) {
+          static const bool matLog = std::getenv("NO100F_DL_HEX") != nullptr;  // diagnostic: names the material lists as they are recorded
+          if (matLog && GxAuroraDlRecording() && m++ < 3000) {
               std::string names;
               auto readStr = [](uint32_t s) {
                   std::string str;
@@ -122,7 +122,7 @@ extern "C" void GX__SetChanCtrl_80170570(uint32_t ch, uint32_t en, uint32_t as, 
                   if (s.empty()) { uint32_t q = 0; if (Memory::TryRead32(p, q) && Memory::Contains(q, 8)) { uint32_t q2 = 0; if (Memory::TryRead32(q, q2)) s = readStr(q2); } }  // struct -> name ptr
                   if (!s.empty()) names += " r" + std::to_string(r) + "=" + s;
               }
-              RT_LOGF(RT_TAG_GX, "[spmmat] draw %u%s\n", g_spmAudit[0], names.c_str());
+              RT_LOGF(RT_TAG_GX, "[gxmat] draw %u%s\n", g_gxAudit[0], names.c_str());
           }
       } }
     GXSetChanCtrl((GXChannelID)ch, en!=0, (GXColorSrc)as, (GXColorSrc)ms, lm, (GXDiffuseFn)df, (GXAttnFn)af);
