@@ -1,4 +1,4 @@
-// gx_extra.cpp - GX entry points New Super Mario Bros. Wii calls that Mario Kart Wii never did.
+// gx_extra.cpp - GX entry points that have no other home in hle/gx.
 #include "gx_internal.h"
 #include "runtime_log.h"
 
@@ -15,7 +15,6 @@ void LogOnce(bool& logged, const char* what)
 } // namespace
 
 // GXGetCullMode(GXCullMode* mode): Aurora holds the mode GXSetCullMode (gx_pixel.cpp) forwards to it.
-// NSMBW reads it while building its warning and message layouts.
 extern "C" void GX__GetCullMode_801c5890(uint32_t modePtr) {
     GXCullMode mode = GX_CULL_NONE;
     GXGetCullMode(&mode);

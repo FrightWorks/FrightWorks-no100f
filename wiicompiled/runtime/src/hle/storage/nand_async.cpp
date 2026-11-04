@@ -437,7 +437,7 @@ extern "C" int32_t NANDSafeOpen_HLE(uint32_t pathPtr, uint32_t fileInfoPtr, uint
     Memory::Write8(fileInfoPtr + 0x8a, NAND_OPEN_FLAG_SAFE_OPEN);
     return NAND_RESULT_OK;
 }
-// NSMBW's newer SDK writes saves through NANDSimpleSafeOpen(path, info, accType, buf, length) - a thin
+// A newer SDK writes saves through NANDSimpleSafeOpen(path, info, accType, buf, length) - a thin
 // wrapper (r8=0, r9=1) around the internal nandSafeOpen. Same arguments and meaning as NANDSafeOpen:
 // write through a scratch copy, commit on close.
 
@@ -477,13 +477,13 @@ extern "C" int32_t NANDSafeClose_HLE(uint32_t fileInfoPtr) {
                                                           : NAND_OPEN_FLAG_SAFE_CLOSED_ASYNC);
     return NAND_RESULT_OK;
 }
-// NSMBW: NANDSimpleSafeClose(info) - wrapper (r4=1) around the internal nandSafeClose; commits the
+// NANDSimpleSafeClose(info) - wrapper (r4=1) around the internal nandSafeClose; commits the
 // scratch copy opened by NANDSimpleSafeOpen above.
 
 // ---------------------------------------------------------------------------------------------
-// SPM (R8PE01): nandmgr.c drives saves through these public async entry points, which NSMBW never
-// linked. Translated, they go through IOS_*Async IPC that the runtime does not complete, so the
-// boot-time NAND check (seq_logo stage 7) waited forever.
+// Saves can go through these public async entry points.
+// Translated, they go through IOS_*Async IPC that the runtime does not complete, so the
+// boot-time NAND check waited forever.
 extern "C" int32_t NANDCheck_HLE(uint32_t blockSize, uint32_t blockCount, uint32_t outResults);
 extern "C" int32_t NANDCreate_HLE(uint32_t pathPtr, uint32_t perm, uint32_t attr);
 extern "C" int32_t NANDDelete_HLE(uint32_t pathPtr);
@@ -502,7 +502,7 @@ NAND_ASYNC_FWD_BODY(NANDCheckAsync_HLE, NANDCheck_HLE,
     (uint32_t blockSize, uint32_t blockCount, uint32_t outResults, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (blockSize, blockCount, outResults))
 
-// NANDChangeDirAsync: SPM only changes to its own home (data) directory, which is where the HLE
+// NANDChangeDirAsync: only a change to the game's own home (data) directory is expected, which is where the HLE
 // already resolves relative paths, so this reports success.
 // shortcut: other directories are not tracked; add a current-dir state if a game changes elsewhere.
 static int32_t NANDChangeDir_Gc(uint32_t pathPtr) {

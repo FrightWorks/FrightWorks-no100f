@@ -9,7 +9,7 @@
 
 struct ImDrawList;
 
-// Draws New Super Mario Bros. Wii's own menu graphics on top of the game, so the network-play menus
+// Draws the game's own menu graphics on top of the game, so the network-play menus
 // look like the rest of the game: nw4r layouts (BRLYT) with their TPL textures and BRFNT fonts,
 // read from the player's disc at run time and drawn through ImGui. Covers what the game's menu
 // layouts use - picture, text, window and null panes; textures interpolated between a material's

@@ -27,11 +27,11 @@ using namespace GxStream;
 using GxCpDecode::ApplyCpRegWrite;
 using GxCpDecode::SameVtxAttrFmt;
 
-// Small display lists dominate the in-race call count. Cache them as well, but
+// Small display lists dominate the per-frame call count. Cache them as well, but
 // cap both individual entries and aggregate copied command bytes so malformed
 // guest input cannot turn this optimization into unbounded host allocation.
 constexpr uint32_t kDlScanCacheMaxEntryBytes = 64u * 1024u;
-// SPM gn3_12 calls ~10k distinct lists per frame; at 8192 the cache cleared itself every frame.
+// A heavy map calls ~10k distinct lists per frame; at 8192 the cache cleared itself every frame.
 constexpr size_t kDlScanCacheMaxEntries = 65536;
 constexpr size_t kDlScanCacheMaxStoredBytes = 32u * 1024u * 1024u;
 
@@ -1292,12 +1292,12 @@ static bool ApplyAuroraIndexedXFArraysForDisplayList(const std::array<uint32_t, 
 
 } // namespace
 
-extern "C" unsigned g_gxAudit[8];  // aurora command_processor (SPM diagnostics)
+extern "C" unsigned g_gxAudit[8];  // aurora command_processor (Diagnostic)
 extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
     GxGuestWrite::NotifyWrite(addr, size);
 }
 
-// SPM records each list into one scratch buffer and copies it elsewhere, so a list Aurora encoded is
+// A game can record each list into one scratch buffer and copies it elsewhere, so a list Aurora encoded is
 // recognized by content: walk the register commands until a GX_LOAD_AURORA (0x50) command shows up.
 // A draw or an unknown byte ends the walk (those lists keep the runtime's own path).
 [[maybe_unused]] static bool ListHasAuroraCommand(const uint8_t* data, uint32_t n) {
@@ -1386,7 +1386,7 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
             GXMarkFrameWork();
             GXCallDisplayList(list, nbytes);
             // The republish is required even for register-only lists (verified by
-            // experiment: dropping it corrupts in-race geometry decode). It is
+            // experiment: dropping it corrupts geometry decode). It is
             // instead memoized inside SyncAppliedVtxStateFromHleReal, so a run of
             // register-only lists between draws pays for at most one mirror copy.
             SyncAppliedVtxStateFromHleReal();

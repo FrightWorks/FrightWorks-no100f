@@ -56,7 +56,7 @@ bool is_offscreen() noexcept;
 // --- Constants ---
 constexpr uint32_t kGXDataPtrAddr = 0x80001FFCu;     // NO100F: pointer to the shadow block below (unused exception-vector RAM)
 constexpr uint32_t kShadowGXDataAddr = 0x80002000u;  // runtime-only gxData shadow (0x600 bytes); the game's gxData is 0x8026C5A0
-constexpr uint32_t kDlFifoAddr = 0x80002700;        // NO100F: runtime scratch (NSMBW 0x80521E70 is game heap here)
+constexpr uint32_t kDlFifoAddr = 0x80002700;        // NO100F: runtime scratch
 constexpr uint32_t kDlWritePtrAddr = kDlFifoAddr + 0x14;
 constexpr uint32_t kDlCountAddr = kDlFifoAddr + 0x1C;
 constexpr uint32_t kDlWrapFlagOffset = 0x20;

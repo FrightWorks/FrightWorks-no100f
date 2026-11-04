@@ -3,9 +3,9 @@
 #include <filesystem>
 #include <string>
 
-// The player's own copy of New Super Mario Bros. Wii, extracted with Dolphin ("Extract Entire Disc"):
-// a folder holding files/ and sys/. This port runs only the USA disc, revision 1 (SMNE01 rev 1);
-// other revisions place the game's code elsewhere.
+// The player's own copy of the game, extracted with Dolphin ("Extract Entire Disc"):
+// a folder holding files/ and sys/. This port runs only the disc its addresses come from;
+// other discs place the game's code elsewhere.
 namespace GameFolder {
 
 // The extracted game at `path` (or its DATA subfolder); empty when there is none.

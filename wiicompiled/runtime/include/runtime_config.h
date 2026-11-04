@@ -59,12 +59,12 @@ struct RuntimeUserConfig {
     std::optional<bool> recordAudio;     // NO100F [game] record_audio: F3 videos (dev tools) include the game's sound
     std::optional<bool> captureOverlay;  // NO100F [game] capture_overlay: F2/F3 captures show the F8/F10 menus (dev tools)
     std::optional<uint32_t> msaa;
-    std::optional<bool> spinningCoins;  // NSMBW: [video] spinning_coins, animated tiles
-    std::optional<bool> frameGraph;     // NSMBW: [video] frame_graph, frame times under the FPS counter
+    std::optional<bool> spinningCoins;  // [video] spinning_coins, animated tiles
+    std::optional<bool> frameGraph;     // [video] frame_graph, frame times under the FPS counter
     std::optional<bool> hdr;             // [video] hdr: scRGB HDR output (startup only)
     std::optional<float> hdrPaperWhiteNits;
     std::optional<float> hdrPeakNits;
-    std::optional<bool> vsync;          // NSMBW: [video] vsync, presents wait for the display (Windows)
+    std::optional<bool> vsync;          // [video] vsync, presents wait for the display (Windows)
     std::optional<uint32_t> disabledPostProcessingPaths;
     std::optional<float> audioVolume;
     std::optional<float> audioMusicVolume;
@@ -96,14 +96,14 @@ struct RuntimeUserConfig {
     std::optional<bool> networkEnabled;
     std::optional<bool> discordPresenceEnabled;
     // The application ID of the WiiCompiled Discord application. This is only
-    // used by the base product; Retro Rewind supplies its own ID through the
+    // used by the base product; a mod supplies its own ID through the
     // standard Dolphin /dev/dolphin interface.
     std::optional<std::string> discordClientId;
     std::optional<std::string> nandRoot;
     std::optional<std::string> dvdRoot;
     // [paths] saves_dir: where the saves go instead of the default (SavesDirectory).
     std::optional<std::string> savesDir;
-    // The one canonical Retro Rewind installation, owned and updated by the frontend. Setup records
+    // The one canonical mod installation, owned and updated by the frontend. Setup records
     // it here instead of copying the pack, so an asset-only update is visible on the next launch.
     std::optional<std::string> modInstallRoot;
     std::vector<std::string> overlayRoots;
@@ -119,7 +119,7 @@ struct RuntimeUserConfig {
     std::array<std::optional<std::string>, 2> xboxButtons;
     std::optional<int32_t> muteHotkey;
     std::map<std::string, std::string> controllerExpressions;
-    // NSMBW: [keyboard] action = "comma-separated SDL scancode names" (keybinds.h).
+    // [keyboard] action = "comma-separated SDL scancode names" (keybinds.h).
     std::map<std::string, std::string> keyboardBindings;
     std::map<std::string, std::string> gamepadBindings;  // [gamepad]: type + per-action overrides
 };
@@ -1327,7 +1327,7 @@ inline std::string CaptureDirectoryLabel(bool videos) {
     return videos ? "Videos\\FrightWorks\\" : "Pictures\\FrightWorks\\";
 }
 
-// NSMBW: a game folder for this run only, not saved (a "game" folder beside the program, so each
+// A game folder for this run only, not saved (a "game" folder beside the program, so each
 // install plays its own game with its own saves).
 inline void UseDvdRootForThisRun(const std::filesystem::path& path) {
     Mutable().dvdRoot = PathToUtf8(path);
@@ -1340,7 +1340,7 @@ inline bool SetDvdRoot(const std::filesystem::path& path) {
     return WriteSetting("paths", "dvd_root", FormatString(value));
 }
 
-/// The canonical Retro Rewind installation the frontend owns, or "" when none is recorded.
+/// The canonical mod installation the frontend owns, or "" when none is recorded.
 inline std::string ModInstallRoot(std::string fallback = "") {
     return Get().modInstallRoot.value_or(std::move(fallback));
 }

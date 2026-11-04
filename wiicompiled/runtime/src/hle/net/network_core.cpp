@@ -68,7 +68,7 @@ bool StartsWith(std::string_view text, std::string_view prefix) {
     return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
 }
 
-// No host rewriting here: the Retro-WFC payload already redirects Nintendo
+// No host rewriting here: a mod's payload redirects Nintendo
 // hostnames at its own resolver hooks before the name reaches this HLE.
 
 std::vector<IoVector> ReadVectors(uint32_t vectorPtr, uint32_t count) {

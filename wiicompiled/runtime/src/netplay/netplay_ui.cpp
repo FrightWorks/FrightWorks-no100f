@@ -225,7 +225,7 @@ struct Assets {
     GameLayout::Layout yesNo;
     GameLayout::Layout cursor;
     std::shared_ptr<GameLayout::Font> message;
-    std::shared_ptr<GameLayout::Font> mario;
+    std::shared_ptr<GameLayout::Font> title;
 };
 
 Assets& GetAssets() {
@@ -235,7 +235,7 @@ Assets& GetAssets() {
         assets.yesNo.Load("/Layout/yesnoWindow/yesnoWindow.arc");
         assets.cursor.Load("/Layout/select_cursor/select_cursor.arc");
         assets.message = GameLayout::LoadFont("mj2d00_MessageFont_32_I4.brfnt");
-        assets.mario = GameLayout::LoadFont("mj2d01_marioFont_64_IA4.brfnt");
+        assets.title = GameLayout::LoadFont("mj2d01_marioFont_64_IA4.brfnt");
     }
     return assets;
 }
@@ -324,13 +324,13 @@ void Text(const Canvas& c, const std::string& text, float x, float y, float size
     GameLayout::DrawText(c.list, c.view, *a.message, t, x, y, size, color, color, c.alpha, originH, 1);
 }
 
-// A title in the game's Mario font (yellow to orange), like "Select Players".
+// A title in the game's title font (yellow to orange), like "Select Players".
 void Title(const Canvas& c, const std::string& text, float x, float y, float size = 44.0f) {
     Assets& a = GetAssets();
-    if (!GameLayout::FontReady(a.mario.get())) {
+    if (!GameLayout::FontReady(a.title.get())) {
         return;
     }
-    GameLayout::DrawText(c.list, c.view, *a.mario, Utf16(text), x, y, size, 0xFFFF00FFu, 0xFF8C00FFu, c.alpha, 1, 1);
+    GameLayout::DrawText(c.list, c.view, *a.title, Utf16(text), x, y, size, 0xFFFF00FFu, 0xFF8C00FFu, c.alpha, 1, 1);
 }
 
 float Pulse(int frame) {
@@ -1618,7 +1618,7 @@ void DumpProfiles() {
 // +0xE/+0xF, all from 0)
 // while the map fades out to the course-in scene, which reads it.
 void Warp() {
-    // SPM uses seqSetSeq; NSMBW startGameInfo writes would overwrite SPM instructions.
+    // Not implemented for this game.
 }
 
 // NO100F_DUMP_LAYOUT=<arc>;<arc>...: log every pane's position in those layouts once (finding

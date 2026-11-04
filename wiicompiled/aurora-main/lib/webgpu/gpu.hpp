@@ -79,7 +79,7 @@ void shutdown();
 void fail_if_device_lost() noexcept;
 void release_surface() noexcept;
 bool refresh_surface(bool recreate = true);
-// NSMBW: V-Sync (Fifo) on or off; the change is applied by take_vsync_change at a frame boundary.
+// V-Sync (Fifo) on or off; the change is applied by take_vsync_change at a frame boundary.
 // HDR output for the next device setup (startup only).
 void request_hdr(bool enabled, float paperWhiteNits, float peakNits) noexcept;
 void request_vsync(bool enabled) noexcept;

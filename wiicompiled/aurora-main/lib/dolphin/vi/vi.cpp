@@ -37,7 +37,7 @@ Vec2<uint32_t> render_mode_size_locked() noexcept {
     return {640, 528};
   }
   // GX has a fixed 640x528 EFB workspace. Games can configure a narrower visible framebuffer, but
-  // effects such as MKW's DOF use the remaining EFB area as scratch.
+  // effects such as depth of field can use the remaining EFB area as scratch.
   return {std::max<uint32_t>(g_renderMode->fbWidth, 640), std::max<uint32_t>(g_renderMode->efbHeight, 528)};
 }
 

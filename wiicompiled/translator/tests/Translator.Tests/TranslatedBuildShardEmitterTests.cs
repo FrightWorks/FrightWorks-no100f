@@ -223,7 +223,7 @@ public sealed class TranslatedBuildShardEmitterTests
                   {"Start":2147504128,"End":2147504132,"Name":"func_80005000"}
                 ]}
                 """);
-            // Retro Rewind resolves 0x80005000 to its own translation, so that
+            // The mod resolves 0x80005000 to its own translation, so that
             // winner is not profile-invariant even inside one shard.
             var resolvedPath = Path.Combine(root, "resolved_dispatch_profile.json");
             Write(resolvedPath, """

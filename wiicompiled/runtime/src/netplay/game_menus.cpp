@@ -23,7 +23,7 @@ constexpr uint32_t kSelectPlayerCursor = 0x26C;
 constexpr uint32_t kFileSelectState = 0x238;
 constexpr uint32_t kFileSelectCursor = 0x2A4;
 
-// dSelectPlayer_c::StateID_* (d_basesNP .bss, fixed by the pre-linked layout).
+// State IDs of the "Select Players" screen (fixed addresses).
 constexpr uint32_t kSpStartWait = 0x809953C0u;
 constexpr uint32_t kSpOnStage = 0x80995400u;
 constexpr uint32_t kSpInfoOnStage = 0x80995440u;
@@ -32,13 +32,13 @@ constexpr uint32_t kSpSelect = 0x809954C0u;
 constexpr uint32_t kSpMultiSelect = 0x80995500u;
 constexpr uint32_t kSpButtonAnime = 0x80995540u;
 constexpr uint32_t kSpExit = 0x80995580u;
-// dCourseSelectMenu_c's and Pausewindow_c's current StateID (it names itself at +4).
+// The pause menus' current state ID (it names itself at +4).
 constexpr uint32_t kPauseMenuState = 0x234;
-// dFileSelect_c::StateID_SelectWait.
+// State ID of the file select's wait state.
 constexpr uint32_t kFsSelectWait = 0x80992050u;
 
 uint32_t Find(uint16_t profile) {
-    // SPM has no NSMBW fManager/profile tree; never expose unrelated objects to pane writers.
+    // No object tree is mapped for this game; never expose unrelated objects to pane writers.
     (void)profile;
     return 0;
 }
@@ -272,7 +272,7 @@ uint32_t SelectCursorObject() {
 }
 
 uint16_t CurrentScene() {
-    return 0xFFFF;  // SPM seqdrv is not NSMBW's dScene profile ID.
+    return 0xFFFF;  // no scene ID is mapped for this game
 
 }
 

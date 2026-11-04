@@ -93,7 +93,7 @@ sealed class GcDisc : IDisposable
 
     public void Dispose() => disc.Dispose();
 
-    // ---- containers (from the Super Paper Mario launcher's WiiDisc) ----
+    // ---- containers ----
     abstract class Container : IDisposable
     {
         protected readonly FileStream File;

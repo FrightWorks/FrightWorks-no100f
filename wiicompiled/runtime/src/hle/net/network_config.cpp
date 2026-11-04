@@ -107,7 +107,7 @@ int32_t HandleKdIoctl(uint32_t cmd, uint32_t inBuf, uint32_t inLen, uint32_t out
         WriteReturn(outBuf, outLen, 0);
         return 0;
     case 0x03: // resume scheduler
-        // MKW performs a suspend/user-ID/resume initialization cycle after its
+        // The guest performs a suspend/user-ID/resume initialization cycle after its
         // first boot-time try-suspend probe. The next probe still observes the
         // scheduler transition as pending; later requests are operational.
         if (g_kdBootProbeSeen && g_kdTrySuspendPhase == KdTrySuspendPhase::Boot) {
@@ -133,7 +133,7 @@ int32_t HandleKdIoctl(uint32_t cmd, uint32_t inBuf, uint32_t inLen, uint32_t out
     case 0x02: // try suspend scheduler
         // Our synchronous IOS bridge reuses the reply buffer, so acknowledging
         // this like Dolphin does (unchanged output) leaks cmd 3's zero result
-        // into MKW's post-resume probe and makes the SDK panic. Preserve the
+        // into the guest's post-resume probe and makes the SDK panic. Preserve the
         // two pending startup probes, then report success once ready.
         if (g_kdTrySuspendPhase == KdTrySuspendPhase::Boot) {
             g_kdBootProbeSeen = true;

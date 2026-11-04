@@ -72,7 +72,7 @@ extern "C" uint32_t SCGetEuRgb60Mode_HLE()
 
 extern "C" uint32_t SCGetProductArea_HLE()
 {
-    return LookupProductRegion(0x804BA998u, 5, 13,  // SC area table {code, "JPN"...} (NSMBW)
+    return LookupProductRegion(0x804BA998u, 5, 13,  // SC area table {code, "JPN"...}
                                RuntimeConsoleIdentity::Current().area);
 }
 
@@ -90,13 +90,13 @@ extern "C" uint32_t SCGetProductSN_HLE(uint32_t serialAddress)
 
 extern "C" uint32_t SCGetProductGameRegion_HLE()
 {
-    return LookupProductRegion(0x804BA9E0u, 4, 4,  // SC game-region table {code, "JP"...} (NSMBW)
+    return LookupProductRegion(0x804BA9E0u, 4, 4,  // SC game-region table {code, "JP"...}
                                RuntimeConsoleIdentity::Current().gameRegion);
 }
 
 
-// These stubs make the game think all titles are installed; otherwise it checks title ID
-// 0x00010004524d4350 ("RMCP", Mario Kart Wii PAL) and reports error code 5.
+// These stubs make the game think all titles are installed; otherwise it checks a
+// title ID and reports error code 5.
 
 // 0x801AE4A0 -> OS__IsTitleInstalled(titleIdHi, titleIdLo)
 // Returns: 1 = installed, 0 = not installed
