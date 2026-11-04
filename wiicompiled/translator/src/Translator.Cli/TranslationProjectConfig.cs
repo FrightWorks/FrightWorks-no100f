@@ -125,11 +125,6 @@ internal sealed class TranslationProjectConfig
                 ParseOptionalUInt32(profileDto.ModuleGuestBase, $"profiles.{name}.module_guest_base"),
                 ParseOptionalUInt32(profileDto.ModuleLinkBase, $"profiles.{name}.module_link_base"),
                 ResolveOptionalPath(workspaceRoot, profileDto.Output),
-                profileDto.EnableRetroWfc ?? false,
-                profileDto.RetroWfcPayload,
-                ParseOptionalUInt32(
-                    profileDto.RetroWfcLegacyBootstrapHook,
-                    $"profiles.{name}.retro_wfc_legacy_bootstrap_hook"),
                 profileDto.RequiresGameId,
                 NormalizeHash(profileDto.RequiresDolSha256),
                 ResolveRiivolution(profileDto.Riivolution, name));
@@ -177,10 +172,6 @@ internal sealed class TranslationProjectConfig
             !string.Equals(profile.RequiresDolSha256, FileSha256(Inputs.Dol.Path), StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException($"Profile '{profile.Name}' is not compatible with this DOL hash.");
-        }
-        if (profile.EnableRetroWfc && string.IsNullOrWhiteSpace(profile.RetroWfcPayload))
-        {
-            throw new InvalidDataException($"Profile '{profile.Name}' enables Retro WFC but has no payload.");
         }
     }
 
@@ -436,9 +427,6 @@ internal sealed class TranslationProjectConfig
         public string? ModuleGuestBase { get; init; }
         public string? ModuleLinkBase { get; init; }
         public string? Output { get; init; }
-        public bool? EnableRetroWfc { get; init; }
-        public string? RetroWfcPayload { get; init; }
-        public string? RetroWfcLegacyBootstrapHook { get; init; }
         public string? RequiresGameId { get; init; }
         public string? RequiresDolSha256 { get; init; }
         public RiivolutionDto? Riivolution { get; init; }
@@ -491,9 +479,6 @@ internal sealed record ProjectProfile(
     uint? ModuleGuestBase,
     uint? ModuleLinkBase,
     string? Output,
-    bool EnableRetroWfc,
-    string? RetroWfcPayload,
-    uint? RetroWfcLegacyBootstrapHook,
     string? RequiresGameId,
     string? RequiresDolSha256,
     ProjectRiivolution? Riivolution);

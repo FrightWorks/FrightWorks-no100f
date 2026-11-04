@@ -45,9 +45,6 @@ extern "C" uint32_t OSSetFontEncode_HLE_801b00f0(uint32_t encode)
     }
     return previous;
 }
-#if 0  // SCOOBY: OSSetFontEncode: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001350, OSSetFontEncode_HLE_801b00f0, uint32_t, (uint32_t encode), (encode));
-#endif
 
 // OSInitFont (NSMBW 0x801B0D60) and OSLoadFont (0x801B0480) decode the console's system font, which
 // __OSReadROM fetches from the IPL ROM over EXI. That data belongs to the console, not the disc, so
@@ -61,9 +58,6 @@ extern "C" uint32_t OSInitFont_HLE_801b0d60(uint32_t fontData)
     (void)fontData;
     return 0;
 }
-#if 0  // SPM: OSInitFont: name not in SPM
-PPC_NATIVE_OVERRIDE(80001354, OSInitFont_HLE_801b0d60, uint32_t, (uint32_t fontData), (fontData));
-#endif
 
 extern "C" uint32_t OSLoadFont_HLE_801b0480(uint32_t fontData, uint32_t temp)
 {

@@ -34,10 +34,6 @@ Frame SampleLocal() {
             continue;
         }
         NetplayUi::FilterGameInput(chan, remote.sample);
-        // The startup cover waits for A or 2 from any remote, controller or keyboard mapping.
-        if (settings_overlay::StartupScreenVisible() && (remote.sample.hold & (0x0800u | 0x0100u)) != 0) {
-            settings_overlay::NotifyStrapInputAccepted();
-        }
         if (blocked) {
             // The settings overlay owns input: buttons and sticks at rest, the remote still there.
             const WiiRemoteInput::KpadSample held = remote.sample;

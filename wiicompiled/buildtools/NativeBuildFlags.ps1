@@ -91,45 +91,6 @@ function Get-MkwBuildSafePath([string]$Path, [string]$Kind, [string]$MarkerFile)
         'letters, digits and spaces, or make a safe junction location available.')
 }
 
-function Get-MkwProjectPins([string]$ProjectFile) {
-    <#
-    The Mario Kart Wii facts pinned by projects/mkwii/recomp.yml (game identity, clean input
-    digests, translation entry point, Retro-WFC endpoint), read from one place instead of being
-    restated; Test-PinnedFacts.ps1 checks the copies that can't read YAML (C++ header, C#
-    constants) against these values. Parsing is literal, not a YAML dependency, since the file is
-    machine-written with a fixed shape.
-    #>
-    Assert-File $ProjectFile 'Translation project file'
-    $pins = [ordered]@{
-        GameId = ''; DolSha256 = ''; RelSha256 = ''; EntryPoint = ''; RetroWfcPayloadUri = ''
-    }
-    $section = ''
-    $inputKey = ''
-    foreach ($raw in [IO.File]::ReadAllLines($ProjectFile)) {
-        $line = ($raw -replace '#.*$', '')
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        if ($line -match '^([A-Za-z0-9_]+):') { $section = $Matches[1]; $inputKey = ''; continue }
-        if ($section -eq 'inputs' -and $line -match '^\s{2}([A-Za-z0-9_]+):\s*$') { $inputKey = $Matches[1]; continue }
-        if ($section -eq 'project' -and $line -match '^\s*game_id:\s*(\S+)\s*$') {
-            $pins.GameId = $Matches[1]
-        } elseif ($section -eq 'inputs' -and $line -match '^\s*sha256:\s*([0-9a-fA-F]{64})\s*$') {
-            if ($inputKey -eq 'dol') { $pins.DolSha256 = $Matches[1].ToLowerInvariant() }
-            elseif ($inputKey -eq 'rel') { $pins.RelSha256 = $Matches[1].ToLowerInvariant() }
-        } elseif ($section -eq 'translation' -and $pins.EntryPoint -eq '' -and
-                  $line -match '^\s*-\s*(0[xX][0-9a-fA-F]+)\s*$') {
-            $pins.EntryPoint = $Matches[1].ToLowerInvariant()
-        } elseif ($line -match '^\s*retro_wfc_payload:\s*(\S+)\s*$') {
-            $pins.RetroWfcPayloadUri = $Matches[1]
-        }
-    }
-    foreach ($name in @($pins.Keys)) {
-        if ([string]::IsNullOrWhiteSpace($pins[$name])) {
-            throw "$ProjectFile does not pin $name; the project file is not the shape this build expects."
-        }
-    }
-    return $pins
-}
-
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments, [string]$Description,
     [string]$LogPrefix = 'MKWCBUILD', [string]$StepId = '', [bool]$WaitForProcessTree = $true) {
     <#

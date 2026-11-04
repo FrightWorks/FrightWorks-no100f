@@ -1141,9 +1141,6 @@ extern "C" int32_t DVDReadPrio_8015E834(uint32_t fileInfoPtr, uint32_t bufferPtr
 
     return static_cast<int32_t>(uLength);
 }
-#if 0  // SCOOBY: DVDReadPrio: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001434, DVDReadPrio_8015E834, int32_t, (uint32_t f, uint32_t b, int32_t l, int32_t o, int32_t p), (f, b, l, o, p));
-#endif
 
 // 0x801CAA30 -> DVDReadAsyncPrio (internal)
 // HLE: perform synchronous read and invoke callback immediately.
@@ -1241,9 +1238,6 @@ extern "C" int32_t DVDLowInit_80164848() {
     DVDInit_8015EA1C(); 
     return 1;
 }
-#if 0  // SCOOBY: DVDLowInit: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001438, DVDLowInit_80164848, int32_t, (), ());
-#endif
 
 extern "C" int32_t DVDLowInquiry_80165A30(uint32_t cmdBlockPtr, uint32_t callback)
 {
@@ -1395,21 +1389,12 @@ PPC_NATIVE_OVERRIDE(8010E2EC, DVDLowRead_80166330, int32_t, (uint32_t b, uint32_
 extern "C" int32_t DVDLowUnencryptedRead_80165708(uint32_t b, uint32_t l, uint32_t o, uint32_t c) {
     return DVDLowRead_80166330(b, l, o, c);
 }
-#if 0  // SCOOBY: DVDLowUnencryptedRead: name not in Scooby
-PPC_NATIVE_OVERRIDE(8000143C, DVDLowUnencryptedRead_80165708, int32_t, (uint32_t b, uint32_t l, uint32_t o, uint32_t c), (b, l, o, c));
-#endif
 
 // ============================================================================
 // Other Necessary Stubs
 // ============================================================================
 
 extern "C" int32_t DVDCheckDevice_801643FC() { return 1; } // Ready
-#if 0  // SPM: __DVDCheckDevice: name not in SPM
-PPC_NATIVE_OVERRIDE(80001440, DVDCheckDevice_801643FC, int32_t, (), ());
-#endif
 
 extern "C" int32_t DVDLowClearCoverInterrupt_80166964(uint32_t cb) { return 1; }
-#if 0  // SCOOBY: DVDLowClearCoverInterrupt: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001444, DVDLowClearCoverInterrupt_80166964, int32_t, (uint32_t cb), (cb));
-#endif
 

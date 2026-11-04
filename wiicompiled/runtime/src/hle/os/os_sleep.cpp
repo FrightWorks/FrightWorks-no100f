@@ -348,11 +348,6 @@ extern "C" void OS__SleepTicks_HLE_801aaca8(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-#if 0  // NSMBW: OSSleepTicks is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801aaca8: no NSMBW symbol at this address
-REGISTER_NATIVE_FUNCTION(0x8000152C, OS__SleepTicks_HLE_801aaca8);
-#endif
-#endif
 
 namespace {
 // OSSleepThread must reach SelectThread with the scheduler-disable count at zero, or the thread

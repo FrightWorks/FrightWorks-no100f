@@ -69,9 +69,6 @@ extern "C" void GX__SetVtxDescv_8016d608(uint32_t la) {
         p+=8;
     }
 }
-#if 0  // SCOOBY: GXSetVtxDescv: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000127c, GX__SetVtxDescv_8016d608, (uint32_t la), (la));
-#endif
 
 extern "C" void GX__GetVtxDesc_8016d9f0(uint32_t a, uint32_t tp) {
     GXAttrType type = GX_NONE;
@@ -83,9 +80,6 @@ extern "C" void GX__GetVtxDesc_8016d9f0(uint32_t a, uint32_t tp) {
         Memory::Write32(tp, static_cast<uint32_t>(type));
     }
 }
-#if 0  // SCOOBY: GXGetVtxDesc: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001280, GX__GetVtxDesc_8016d9f0, (uint32_t a, uint32_t tp), (a, tp));
-#endif
 
 extern "C" void GX__GetVtxDescv_8016dba4(uint32_t la) {
     if (!la) {
@@ -103,9 +97,6 @@ extern "C" void GX__GetVtxDescv_8016dba4(uint32_t la) {
     p += 8;
     Memory::Write32(p, GX_VA_NULL);
 }
-#if 0  // SCOOBY: GXGetVtxDescv: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001284, GX__GetVtxDescv_8016dba4, (uint32_t la), (la));
-#endif
 
 // ============================================================================
 // Vertex Attribute Format
@@ -160,9 +151,6 @@ extern "C" void GX__GetVtxAttrFmt_8016e04c(uint32_t vf, uint32_t a, uint32_t cp,
         Memory::Write8(fp, fmt.frac);
     }
 }
-#if 0  // SCOOBY: GXGetVtxAttrFmt: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001290, GX__GetVtxAttrFmt_8016e04c, (uint32_t vf, uint32_t a, uint32_t cp, uint32_t tp, uint32_t fp), (vf, a, cp, tp, fp));
-#endif
 
 extern "C" void GX__GetVtxAttrFmtv_8016e2b8(uint32_t vf, uint32_t la) {
     if (!la) {
@@ -183,9 +171,6 @@ extern "C" void GX__GetVtxAttrFmtv_8016e2b8(uint32_t vf, uint32_t la) {
     }
     Memory::Write32(p, GX_VA_NULL);
 }
-#if 0  // SCOOBY: GXGetVtxAttrFmtv: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001294, GX__GetVtxAttrFmtv_8016e2b8, (uint32_t vf, uint32_t la), (vf, la));
-#endif
 
 // ============================================================================
 // Vertex Arrays
@@ -200,9 +185,6 @@ PPC_NATIVE_OVERRIDE_VOID(800fd914, GX__SetArray_8016e32c, (uint32_t a, uint32_t 
 // Switch-artifact entry point for the same SDK function; forwards rather than
 // repeating the body.
 extern "C" void GX__SetArray_8016e1c4(uint32_t a, uint32_t b, uint32_t s) { GX__SetArray_8016e32c(a, b, s); }
-#if 0  // NSMBW: MKW switch-artifact alias of GXSetArray (0x8016e1c4); NSMBW's map has no such split
-PPC_NATIVE_OVERRIDE_VOID(80001298, GX__SetArray_8016e1c4, (uint32_t a, uint32_t b, uint32_t s), (a, b, s));
-#endif
 
 // ============================================================================
 // Texture Coordinate Generation
@@ -341,14 +323,8 @@ extern "C" void GX__Begin_8016f0f0(uint32_t t, uint32_t vf, uint32_t nv) {
 // PPC_NATIVE_OVERRIDE_VOID(800FE2A4, GX__Begin_8016f0f0, (uint32_t t, uint32_t vf, uint32_t nv), (t, vf, nv));
 
 extern "C" void GX__End_80044b30() { g_hleGxState.inBegin=false; GXEnd(); }
-#if 0  // SPM: GXEnd: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(800012b4, GX__End_80044b30, (), ());  // NSMBW out-of-line GXEnd copy #1 (blr)
-#endif
 
 extern "C" void GX__End_80048c30() { GX__End_80044b30(); }
-#if 0  // SPM: GXEnd: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(800012b8, GX__End_80048c30, (), ());  // NSMBW out-of-line GXEnd copy #2 (blr)
-#endif
 
 extern "C" void GX__DrawSphere_80172a30(uint32_t numMajor, uint32_t numMinor) {
     constexpr uint32_t kAttrCount = 26;
@@ -453,6 +429,3 @@ extern "C" void GX__DrawSphere_80172a30(uint32_t numMajor, uint32_t numMinor) {
         GX__SetVtxAttrFmt_8016dc68(GX_VTXFMT3, attr, static_cast<uint32_t>(fmt.cnt), static_cast<uint32_t>(fmt.type), fmt.frac);
     }
 }
-#if 0  // SCOOBY: GXDrawSphere: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800012bc, GX__DrawSphere_80172a30, (uint32_t numMajor, uint32_t numMinor), (numMajor, numMinor));
-#endif

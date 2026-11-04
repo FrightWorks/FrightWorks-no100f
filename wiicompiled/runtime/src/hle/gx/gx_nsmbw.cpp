@@ -23,9 +23,6 @@ extern "C" void GX__GetCullMode_801c5890(uint32_t modePtr) {
         Memory::Write32(modePtr, static_cast<uint32_t>(mode));
     }
 }
-#if 0  // SCOOBY: GXGetCullMode: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001130, GX__GetCullMode_801c5890, (uint32_t modePtr), (modePtr));
-#endif
 
 // GXAbortFrame asks the GPU to drop the frame in flight. Aurora submits whole frames and has nothing
 // half-finished to abandon, so there is nothing to do.
