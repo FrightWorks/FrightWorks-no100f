@@ -108,8 +108,8 @@ static IosVector ReadIosVector(uint32_t vectorPtr, uint32_t index) {
     return ReadIoVector(vectorPtr, index);
 }
 
-static uint64_t CurrentMkwTitleId() {
-    uint32_t low = CurrentMkwTitleIdLo();
+static uint64_t CurrentGameTitleId() {
+    uint32_t low = CurrentGameTitleIdLo();
     return (static_cast<uint64_t>(kNandTitleIdHi) << 32) | low;
 }
 
@@ -426,20 +426,12 @@ extern "C" int32_t NAND_IOS_Open_HLE(uint32_t pathPtr, uint32_t mode) {
     int32_t fd = AllocateFd(hostPath, file, mode);
     return fd;
 }
-#if 0  // SCOOBY: IOS_Open: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014EC, NAND_IOS_Open_HLE, int32_t, (uint32_t pathPtr, uint32_t mode), (pathPtr, mode));
-#endif
 
 extern "C" void NAND_IOS_OpenBody_HLE_801938FC(CpuContext* ctx) {
     const int32_t result = NAND_IOS_Open_HLE(ctx->gpr[3], ctx->gpr[4]);
     ctx->gpr[3] = static_cast<uint32_t>(result);
     ctx->gpr[1] = ctx->gpr[1] + 32u;
 }
-#if 0  // NSMBW: NAND_IOS_OpenBody is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801938fc: no NSMBW symbol at this address
-REGISTER_NATIVE_FUNCTION_AS(0x800014F0, NAND_IOS_OpenBody_HLE_801938FC, "NAND_IOS_OpenBody_HLE_801938FC");
-#endif
-#endif
 
 extern "C" int32_t NAND_IOS_Close_HLE(uint32_t fd) {
     if (fd == ISFS_DEV_FD) {
@@ -468,9 +460,6 @@ extern "C" int32_t NAND_IOS_Close_HLE(uint32_t fd) {
     CloseFd(fd);
     return ISFS_OK;
 }
-#if 0  // SCOOBY: IOS_Close: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014F4, NAND_IOS_Close_HLE, int32_t, (uint32_t fd), (fd));
-#endif
 
 extern "C" int32_t NAND_IOS_Read_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t length) {
     auto* handle = GetHandle(fd);
@@ -494,9 +483,6 @@ extern "C" int32_t NAND_IOS_Read_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t l
     
     return static_cast<int32_t>(bytesRead);
 }
-#if 0  // SCOOBY: IOS_Read: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014f8, NAND_IOS_Read_HLE, int32_t, (uint32_t fd, uint32_t bufferPtr, uint32_t length), (fd, bufferPtr, length));
-#endif
 
 extern "C" int32_t NAND_IOS_Write_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t length) {
     auto* handle = GetHandle(fd);
@@ -521,9 +507,6 @@ extern "C" int32_t NAND_IOS_Write_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t 
     
     return static_cast<int32_t>(bytesWritten);
 }
-#if 0  // SCOOBY: IOS_Write: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014fc, NAND_IOS_Write_HLE, int32_t, (uint32_t fd, uint32_t bufferPtr, uint32_t length), (fd, bufferPtr, length));
-#endif
 
 extern "C" int32_t NAND_IOS_Seek_HLE(uint32_t fd, int32_t offset, int32_t whence) {
     auto* handle = GetHandle(fd);
@@ -540,9 +523,6 @@ extern "C" int32_t NAND_IOS_Seek_HLE(uint32_t fd, int32_t offset, int32_t whence
     handle->position = static_cast<uint32_t>(std::ftell(handle->file));
     return static_cast<int32_t>(handle->position);
 }
-#if 0  // SPM: IOS_Seek: name not in SPM
-PPC_NATIVE_OVERRIDE(80001500, NAND_IOS_Seek_HLE, int32_t, (uint32_t fd, int32_t offset, int32_t whence), (fd, offset, whence));
-#endif
 
 // ============================================================================
 // IOS_Ioctl HLE - Handles filesystem commands
@@ -831,9 +811,6 @@ extern "C" void NAND_IOS_Ioctl_Entry_HLE(CpuContext* ctx) {
     ctx->gpr[3] = static_cast<uint32_t>(
         NAND_IOS_Ioctl_HLE(fd, cmd, inBufPtr, inLen, outBufPtr, outLen));
 }
-#if 0  // SCOOBY: IOS_Ioctl: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001504, NAND_IOS_Ioctl_Entry_HLE, (CpuContext* ctx), (ctx));
-#endif
 
 // ============================================================================
 // ISFS_OpenLib - Initialize ISFS
@@ -847,9 +824,8 @@ static bool g_isfsInitialized = false;
 // load-bearing and must not be "tidied". Names come from the RVL IPC/ISFS
 // sources; only the naming changed here, never a value.
 namespace {
-// SPM (R8PE01) ISFS/IPC globals as negative r13 offsets, read from SPM's own ISFS_OpenLib
-// (0x80293C70) and IPCGetBufferLo/Hi (0x802950E8/E0). The NSMBW offsets used before landed
-// in SPM's .sdata2 and overwrote a map-blend constant with "/dev/fs" (black backgrounds).
+// ISFS/IPC globals as negative r13 offsets (ISFS_OpenLib, IPCGetBufferLo/Hi). A wrong offset can land
+// in .sdata2 and overwrite a constant with "/dev/fs" (black backgrounds).
 constexpr uint32_t kIsfsFdSda1Offset = 0x7B60u;          // __fsFd
 constexpr uint32_t kIpcBufferLoSda1Offset = 0x6F24u;     // IPCBufferLo
 constexpr uint32_t kIpcBufferHiSda1Offset = 0x6F20u;     // IPCBufferHi
@@ -880,7 +856,7 @@ int32_t ISFS_OpenLib_Initialize(CpuContext* ctx) {
     char titleId[32];
     std::snprintf(titleId, sizeof(titleId), "%08x", kNandTitleIdHi);
     char gameId[32];
-    std::snprintf(gameId, sizeof(gameId), "%08x", CurrentMkwTitleIdLo());
+    std::snprintf(gameId, sizeof(gameId), "%08x", CurrentGameTitleIdLo());
     CreateDirectoryPath(GetNandBasePath() / "title" / titleId / gameId / "data");
 
     if (!ctx) {
@@ -899,7 +875,7 @@ int32_t ISFS_OpenLib_Initialize(CpuContext* ctx) {
     const uint32_t isfsHeapBaseGlobal = r13 - kIsfsHeapBaseSda1Offset;
     const uint32_t firstCallGlobal = r13 - kIsfsFirstCallSda1Offset;
 
-    // Mirrors SPM's ISFS_OpenLib, with IOS_Open("/dev/fs") replaced by the HLE fd.
+    // Mirrors ISFS_OpenLib, with IOS_Open("/dev/fs") replaced by the HLE fd.
     const bool firstCall = Memory::Read32(firstCallGlobal) != 0;
     if (firstCall) {
         Memory::Write32(ipcArenaLoGlobal, Memory::Read32(r13 - kIpcBufferLoSda1Offset));
@@ -940,9 +916,6 @@ extern "C" void ISFS_OpenLib_HLE_80169BCC(CpuContext* ctx) {
     ctx->gpr[3] = static_cast<uint32_t>(ISFS_OpenLib_Initialize(ctx));
 }
 
-#if 0  // SCOOBY: ISFS_OpenLib: name not in Scooby
-REGISTER_NATIVE_FUNCTION_AS(0x80001508, ISFS_OpenLib_HLE_80169BCC, "ISFS_OpenLib_HLE_80169BCC");
-#endif
 
 // ============================================================================
 // IOS_Ioctlv HLE - Vector Ioctl for complex ISFS operations
@@ -1085,7 +1058,7 @@ extern "C" int32_t NAND_IOS_Ioctlv_HLE(
                 if (out.size < 8 || out.address == 0 || !Memory::Contains(out.address, 8)) {
                     return ISFS_EINVAL;
                 }
-                const uint64_t titleId = CurrentMkwTitleId();
+                const uint64_t titleId = CurrentGameTitleId();
                 Memory::Write32(out.address, static_cast<uint32_t>(titleId >> 32));
                 Memory::Write32(out.address + 4u, static_cast<uint32_t>(titleId));
                 return ISFS_OK;
@@ -1104,7 +1077,7 @@ extern "C" int32_t NAND_IOS_Ioctlv_HLE(
                 const uint8_t* input = Memory::GetPointer(in.address, in.size);
                 WiiEsCrypto::EcSignature signature{};
                 WiiEsCrypto::EccCert cert{};
-                WiiEsCrypto::Sign(CurrentMkwTitleId(), input, in.size, signature, cert);
+                WiiEsCrypto::Sign(CurrentGameTitleId(), input, in.size, signature, cert);
                 if (!WriteGuestBytes(sigOut.address, sigOut.size, signature.data(), signature.size()) ||
                     !WriteGuestBytes(certOut.address, certOut.size, cert.data(), cert.size())) {
                     return ISFS_EINVAL;
@@ -1141,6 +1114,3 @@ extern "C" void NAND_IOS_Ioctlv_Entry_HLE(CpuContext* ctx) {
     ctx->gpr[3] = static_cast<uint32_t>(
         NAND_IOS_Ioctlv_HLE(fd, cmd, numIn, numOut, vectorPtr));
 }
-#if 0  // SCOOBY: IOS_Ioctlv: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000150C, NAND_IOS_Ioctlv_Entry_HLE, (CpuContext* ctx), (ctx));
-#endif

@@ -10,7 +10,7 @@ public class OverlayFunctionBuilderTests
     [Fact]
     public void BuildAndWriteAppliesModuleAndBaseOverlayPatches()
     {
-        var tempRoot = Path.Combine(Path.GetTempPath(), "mkw_overlay_test_" + Guid.NewGuid().ToString("N"));
+        var tempRoot = Path.Combine(Path.GetTempPath(), "recomp_overlay_test_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
@@ -41,7 +41,7 @@ public class OverlayFunctionBuilderTests
             var manifest = new BaseManifest(
                 "test",
                 1,
-                "RMCP01",
+                "TEST01",
                 "P",
                 "",
                 0,

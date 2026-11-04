@@ -209,7 +209,7 @@ extern "C" uint32_t PAD__Init_HLE()
 {
     return PADInit() ? 1u : 0u;
 }
-// Scooby-Doo! Unmasked (GameCube): PADInit is the game's pad API.
+// GameCube: PADInit is the game's pad API.
 PPC_NATIVE_OVERRIDE(800012CC, PAD__Init_HLE, uint32_t, (), ());
 
 // PADRead: gathers every GameCube pad source for the frame and writes the statuses to guest memory.
@@ -293,21 +293,21 @@ extern "C" uint32_t PAD__Read_HLE(uint32_t statusPtr)
 
     return rumbleMask;
 }
-// Scooby-Doo! Unmasked (GameCube): PADRead is the game's pad API.
+// GameCube: PADRead is the game's pad API.
 PPC_NATIVE_OVERRIDE(8010CEE0, PAD__Read_HLE, uint32_t, (uint32_t statusPtr), (statusPtr));
 
 extern "C" uint32_t PAD__Reset_HLE(uint32_t mask)
 {
     return PADReset(mask) ? 1u : 0u;
 }
-// Scooby-Doo! Unmasked (GameCube): PADReset is the game's pad API.
+// GameCube: PADReset is the game's pad API.
 PPC_NATIVE_OVERRIDE(8010CACC, PAD__Reset_HLE, uint32_t, (uint32_t mask), (mask));
 
 extern "C" uint32_t PAD__Recalibrate_HLE(uint32_t mask)
 {
     return PADRecalibrate(mask) ? 1u : 0u;
 }
-// Scooby-Doo! Unmasked (GameCube): PADRecalibrate is the game's pad API.
+// GameCube: PADRecalibrate is the game's pad API.
 PPC_NATIVE_OVERRIDE(8010CBCC, PAD__Recalibrate_HLE, uint32_t, (uint32_t mask), (mask));
 
 extern "C" void PAD__ControlMotor_HLE(int32_t chan, uint32_t command)
@@ -317,5 +317,5 @@ extern "C" void PAD__ControlMotor_HLE(int32_t chan, uint32_t command)
     }
     PADControlMotor(chan, command);
 }
-// Scooby-Doo! Unmasked (GameCube): PADControlMotor is the game's pad API.
+// GameCube: PADControlMotor is the game's pad API.
 PPC_NATIVE_OVERRIDE_VOID(8010D28C, PAD__ControlMotor_HLE, (int32_t chan, uint32_t command), (chan, command));

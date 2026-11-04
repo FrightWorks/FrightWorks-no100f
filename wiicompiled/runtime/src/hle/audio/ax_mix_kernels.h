@@ -11,9 +11,9 @@
 
 #if defined(__AVX2__)
 #include <immintrin.h>
-#define MKW_AX_MIX_AVX2 1
+#define RECOMP_AX_MIX_AVX2 1
 #else
-#define MKW_AX_MIX_AVX2 0
+#define RECOMP_AX_MIX_AVX2 0
 #endif
 
 namespace AxMixKernels {
@@ -47,7 +47,7 @@ inline uint16_t MixAddRampScalar(int32_t* out, const int16_t* input, uint32_t co
     return volume;
 }
 
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
 inline uint16_t MixAddRampAvx2(int32_t* out, const int16_t* input, uint32_t count,
                                uint16_t volume, uint16_t delta, int16_t& dpop) {
     uint32_t i = 0;
@@ -101,7 +101,7 @@ inline uint16_t MixAddRampAvx2(int32_t* out, const int16_t* input, uint32_t coun
 
 inline uint16_t MixAddRamp(int32_t* out, const int16_t* input, uint32_t count,
                            uint16_t volume, uint16_t delta, int16_t& dpop) {
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
     return MixAddRampAvx2(out, input, count, volume, delta, dpop);
 #else
     return MixAddRampScalar(out, input, count, volume, delta, dpop);
@@ -124,7 +124,7 @@ inline uint16_t ScaleRampScalar(int16_t* samples, uint32_t count, uint16_t volum
     return volume;
 }
 
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
 inline uint16_t ScaleRampAvx2(int16_t* samples, uint32_t count, uint16_t volume,
                               uint16_t delta) {
     uint32_t i = 0;
@@ -164,7 +164,7 @@ inline uint16_t ScaleRampAvx2(int16_t* samples, uint32_t count, uint16_t volume,
 
 inline uint16_t ScaleRamp(int16_t* samples, uint32_t count, uint16_t volume,
                           uint16_t delta) {
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
     return ScaleRampAvx2(samples, count, volume, delta);
 #else
     return ScaleRampScalar(samples, count, volume, delta);
@@ -184,7 +184,7 @@ inline void MixAccumRamp32Scalar(int32_t* dst, const int32_t* src, const uint16_
     }
 }
 
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
 inline void MixAccumRamp32Avx2(int32_t* dst, const int32_t* src, const uint16_t* ramp,
                                uint32_t count) {
     uint32_t i = 0;
@@ -216,7 +216,7 @@ inline void MixAccumRamp32Avx2(int32_t* dst, const int32_t* src, const uint16_t*
 
 inline void MixAccumRamp32(int32_t* dst, const int32_t* src, const uint16_t* ramp,
                            uint32_t count) {
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
     MixAccumRamp32Avx2(dst, src, ramp, count);
 #else
     MixAccumRamp32Scalar(dst, src, ramp, count);
@@ -239,7 +239,7 @@ inline void LoadBigEndian32Scalar(int32_t* dst, const uint8_t* src, size_t count
     }
 }
 
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
 inline __m256i ByteSwapMask32() {
     return _mm256_setr_epi8(3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12,
                             3, 2, 1, 0, 7, 6, 5, 4, 11, 10, 9, 8, 15, 14, 13, 12);
@@ -271,7 +271,7 @@ inline void LoadBigEndian32Avx2(int32_t* dst, const uint8_t* src, size_t count) 
 #endif
 
 inline void StoreBigEndian32(uint8_t* dst, const int32_t* src, size_t count) {
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
     StoreBigEndian32Avx2(dst, src, count);
 #else
     StoreBigEndian32Scalar(dst, src, count);
@@ -279,7 +279,7 @@ inline void StoreBigEndian32(uint8_t* dst, const int32_t* src, size_t count) {
 }
 
 inline void LoadBigEndian32(int32_t* dst, const uint8_t* src, size_t count) {
-#if MKW_AX_MIX_AVX2
+#if RECOMP_AX_MIX_AVX2
     LoadBigEndian32Avx2(dst, src, count);
 #else
     LoadBigEndian32Scalar(dst, src, count);

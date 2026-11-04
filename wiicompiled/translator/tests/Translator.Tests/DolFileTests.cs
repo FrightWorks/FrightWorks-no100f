@@ -43,7 +43,7 @@ public class DolFileTests
     }
 
     [Fact]
-    public void MkwOutlineEffectConstantLivesInInitializedSdata2DespiteDolHeaderBssOverlap()
+    public void RecompOutlineEffectConstantLivesInInitializedSdata2DespiteDolHeaderBssOverlap()
     {
         var dol = DolFile.Load(DolPath);
         var sdata2 = dol.Sections.Single(s => s.Name == ".sdata2");

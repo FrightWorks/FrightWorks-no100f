@@ -124,58 +124,26 @@ bool NandProcessPendingCallbacks(CpuContext* cpu, int maxToProcess) {
 NAND_ASYNC_FWD_BODY(NANDOpenAsync_HLE, NANDOpen_HLE,
     (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, fileInfoPtr, mode))
-#if 0  // SCOOBY: NANDOpenAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(8000148C, NANDOpenAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, fileInfoPtr, mode, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDCloseAsync_HLE, NANDClose_HLE,
     (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr))
-#if 0  // SCOOBY: NANDCloseAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001490, NANDCloseAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY_OKZERO(NANDReadAsync_HLE, NANDRead_HLE,
     (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, bufferPtr, length))
-#if 0  // SCOOBY: NANDReadAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001494, NANDReadAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, bufferPtr, length, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY_OKZERO(NANDWriteAsync_HLE, NANDWrite_HLE,
     (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, bufferPtr, length))
-#if 0  // SCOOBY: NANDWriteAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001498, NANDWriteAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, bufferPtr, length, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY_OKZERO(NANDSeekAsync_HLE, NANDSeek_HLE,
     (uint32_t fileInfoPtr, int32_t offset, int32_t whence, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, offset, whence))
-#if 0  // SCOOBY: NANDSeekAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(8000149C, NANDSeekAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, int32_t offset, int32_t whence, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, offset, whence, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDGetLengthAsync_HLE, NANDGetLength_HLE,
     (uint32_t fileInfoPtr, uint32_t outLengthPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr, outLengthPtr))
-#if 0  // NSMBW: NANDGetLengthAsync is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019c048: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800014A0, NANDGetLengthAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t outLengthPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, outLengthPtr, callbackPtr, commandBlockPtr));
-#endif
-#endif
 
 // The private/safe variants forward to the same synchronous library; only
 // NANDPrivateSafeOpen has its own implementation.
@@ -187,80 +155,35 @@ extern "C" int32_t NANDGetType_HLE(uint32_t pathPtr, uint32_t outTypePtr);
 NAND_ASYNC_FWD_BODY(NANDPrivateOpenAsync_HLE, NANDOpen_HLE,
     (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, fileInfoPtr, mode))
-#if 0  // SCOOBY: NANDPrivateOpenAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014A4, NANDPrivateOpenAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, fileInfoPtr, mode, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateSafeOpenAsync_HLE, NANDSafeOpen_HLE,
     (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize,
      uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize))
-#if 0  // NSMBW: NANDPrivateSafeOpenAsync is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019d104: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800014A8, NANDPrivateSafeOpenAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize,
-     uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize, callbackPtr, commandBlockPtr));
-#endif
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDSafeCloseAsync_HLE, NANDSafeClose_HLE,
     (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (fileInfoPtr))
-#if 0  // NSMBW: NANDSafeCloseAsync is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019d720: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800014AC, NANDSafeCloseAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, callbackPtr, commandBlockPtr));
-#endif
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateCreateAsync_HLE, NANDCreate_HLE,
     (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, perm, attr))
-#if 0  // SCOOBY: NANDPrivateCreateAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014B0, NANDPrivateCreateAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, perm, attr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateCreateDirAsync_HLE, NANDCreateDir_HLE,
     (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, perm, attr))
-#if 0  // SCOOBY: NANDPrivateCreateDirAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014B4, NANDPrivateCreateDirAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, perm, attr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateDeleteAsync_HLE, NANDDelete_HLE,
     (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr))
-#if 0  // SCOOBY: NANDPrivateDeleteAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014B8, NANDPrivateDeleteAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateGetStatusAsync_HLE, NANDGetStatus_HLE,
     (uint32_t pathPtr, uint32_t statusPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, statusPtr))
-#if 0  // SCOOBY: NANDPrivateGetStatusAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014BC, NANDPrivateGetStatusAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t statusPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, statusPtr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDPrivateGetTypeAsync_HLE, NANDGetType_HLE,
     (uint32_t pathPtr, uint32_t outTypePtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, outTypePtr))
-#if 0  // SCOOBY: NANDPrivateGetTypeAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014C0, NANDPrivateGetTypeAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t outTypePtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, outTypePtr, callbackPtr, commandBlockPtr));
-#endif
 
 // NANDSafeOpen/NANDSafeClose crash-safe file replacement, mirroring console semantics (nandSafeOpen
 // @ 0x8019CB80, nandSafeClose @ 0x8019CF30): write modes copy the original to a same-volume scratch
@@ -514,21 +437,9 @@ extern "C" int32_t NANDSafeOpen_HLE(uint32_t pathPtr, uint32_t fileInfoPtr, uint
     Memory::Write8(fileInfoPtr + 0x8a, NAND_OPEN_FLAG_SAFE_OPEN);
     return NAND_RESULT_OK;
 }
-#if 0  // NSMBW: NANDSafeOpen is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019cb74: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800014C4, NANDSafeOpen_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize),
-    (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize));
-#endif
-#endif
-// NSMBW's newer SDK writes saves through NANDSimpleSafeOpen(path, info, accType, buf, length) - a thin
+// A newer SDK writes saves through NANDSimpleSafeOpen(path, info, accType, buf, length) - a thin
 // wrapper (r8=0, r9=1) around the internal nandSafeOpen. Same arguments and meaning as NANDSafeOpen:
 // write through a scratch copy, commit on close.
-#if 0  // SPM: NANDSimpleSafeOpen: name not in SPM
-PPC_NATIVE_OVERRIDE(800014C8, NANDSafeOpen_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize),
-    (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize));
-#endif
 
 extern "C" int32_t NANDSafeClose_HLE(uint32_t fileInfoPtr) {
     if (!fileInfoPtr) {
@@ -566,77 +477,38 @@ extern "C" int32_t NANDSafeClose_HLE(uint32_t fileInfoPtr) {
                                                           : NAND_OPEN_FLAG_SAFE_CLOSED_ASYNC);
     return NAND_RESULT_OK;
 }
-#if 0  // NSMBW: NANDSafeClose is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019cf28: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800014CC, NANDSafeClose_HLE, int32_t, (uint32_t fileInfoPtr), (fileInfoPtr));
-#endif
-#endif
-// NSMBW: NANDSimpleSafeClose(info) - wrapper (r4=1) around the internal nandSafeClose; commits the
+// NANDSimpleSafeClose(info) - wrapper (r4=1) around the internal nandSafeClose; commits the
 // scratch copy opened by NANDSimpleSafeOpen above.
-#if 0  // SPM: NANDSimpleSafeClose: name not in SPM
-PPC_NATIVE_OVERRIDE(800014D0, NANDSafeClose_HLE, int32_t, (uint32_t fileInfoPtr), (fileInfoPtr));
-#endif
 
 // ---------------------------------------------------------------------------------------------
-// SPM (R8PE01): nandmgr.c drives saves through these public async entry points, which NSMBW never
-// linked. Translated, they go through IOS_*Async IPC that the runtime does not complete, so the
-// boot-time NAND check (seq_logo stage 7) waited forever.
+// Saves can go through these public async entry points.
+// Translated, they go through IOS_*Async IPC that the runtime does not complete, so the
+// boot-time NAND check waited forever.
 extern "C" int32_t NANDCheck_HLE(uint32_t blockSize, uint32_t blockCount, uint32_t outResults);
 extern "C" int32_t NANDCreate_HLE(uint32_t pathPtr, uint32_t perm, uint32_t attr);
 extern "C" int32_t NANDDelete_HLE(uint32_t pathPtr);
 
-#if 0  // SCOOBY: NANDSafeCloseAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014D4, NANDSafeCloseAsync_HLE, int32_t,
-    (uint32_t fileInfoPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (fileInfoPtr, callbackPtr, commandBlockPtr));
-#endif
 
-#if 0  // SCOOBY: NANDSafeOpenAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014D8, NANDPrivateSafeOpenAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode, uint32_t tempBufferPtr, uint32_t tempBufferSize,
-     uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, fileInfoPtr, mode, tempBufferPtr, tempBufferSize, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDCreateAsync_HLE, NANDCreate_HLE,
     (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr, perm, attr))
-#if 0  // SCOOBY: NANDCreateAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014DC, NANDCreateAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t perm, uint32_t attr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, perm, attr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDDeleteAsync_HLE, NANDDelete_HLE,
     (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr))
-#if 0  // SCOOBY: NANDDeleteAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014E0, NANDDeleteAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, callbackPtr, commandBlockPtr));
-#endif
 
 NAND_ASYNC_FWD_BODY(NANDCheckAsync_HLE, NANDCheck_HLE,
     (uint32_t blockSize, uint32_t blockCount, uint32_t outResults, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (blockSize, blockCount, outResults))
-#if 0  // SCOOBY: NANDCheckAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014E4, NANDCheckAsync_HLE, int32_t,
-    (uint32_t blockSize, uint32_t blockCount, uint32_t outResults, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (blockSize, blockCount, outResults, callbackPtr, commandBlockPtr));
-#endif
 
-// NANDChangeDirAsync: SPM only changes to its own home (data) directory, which is where the HLE
+// NANDChangeDirAsync: only a change to the game's own home (data) directory is expected, which is where the HLE
 // already resolves relative paths, so this reports success.
 // shortcut: other directories are not tracked; add a current-dir state if a game changes elsewhere.
-static int32_t NANDChangeDir_SPM(uint32_t pathPtr) {
+static int32_t NANDChangeDir_Gc(uint32_t pathPtr) {
     (void)pathPtr;
     return NAND_RESULT_OK;
 }
-NAND_ASYNC_FWD_BODY(NANDChangeDirAsync_HLE, NANDChangeDir_SPM,
+NAND_ASYNC_FWD_BODY(NANDChangeDirAsync_HLE, NANDChangeDir_Gc,
     (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr))
-#if 0  // SCOOBY: NANDChangeDirAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014E8, NANDChangeDirAsync_HLE, int32_t,
-    (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
-    (pathPtr, callbackPtr, commandBlockPtr));
-#endif

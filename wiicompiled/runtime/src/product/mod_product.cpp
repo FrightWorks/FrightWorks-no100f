@@ -4,8 +4,8 @@ namespace RuntimeProduct {
 
 const Descriptor& Active() noexcept {
     static constexpr Descriptor descriptor{
-        Kind::RetroRewind,
-        "Retro Rewind",
+        Kind::ModProduct,
+        "Mod",
     };
     return descriptor;
 }

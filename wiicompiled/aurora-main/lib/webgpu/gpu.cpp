@@ -86,7 +86,7 @@ static std::array<char, 256> g_deviceLostMessage{};
 static std::atomic_bool g_initialized{false};
 
 // AURORA_GFX_FLAGS: comma-separated graphics debugging switches, read at device creation. On Android
-// the runtime fills it from `adb shell setprop debug.nsmbw.gfx ...`.
+// the runtime fills it from `adb shell setprop debug.no100f.gfx ...`.
 //   validate   keep Dawn's validation and log its errors instead of aborting on them
 //   robust     keep Dawn's bounds checks on buffer and texture access
 //   nobc       do not enable BC texture compression
@@ -216,7 +216,7 @@ RenderTargetSize clamp_frame_buffer_size(uint32_t width, uint32_t height) noexce
   return {budgeted.width, budgeted.height};
 }
 
-// NSMBW: V-Sync (Fifo) is a setting, off by default. Off, the guest paces itself and presents never
+// V-Sync (Fifo) is a setting, off by default. Off, the guest paces itself and presents never
 // wait (Immediate, else Mailbox). On, the runtime runs the game's VI clock at a whole fraction of the
 // display's refresh (runtime/src/hle/vi.cpp), so presents land one per k vblanks and never queue up.
 std::atomic<bool> g_vsyncEnabled{false};
@@ -1079,7 +1079,7 @@ void serialize_pipeline_caches() noexcept {
     performIdleTasks(&g_device);
   }
 #elif defined(WEBGPU_DAWN)
-  // NSMBW: Android links Dawn statically, so call it directly. Without this the monolithic
+  // Android links Dawn statically, so call it directly. Without this the monolithic
   // VkPipelineCache was never written there and every launch recompiled every pipeline in the
   // driver (773 pipelines, ~16 s on an Adreno 710) despite the blob cache hitting.
   if (!g_device || g_backendType != wgpu::BackendType::Vulkan) {

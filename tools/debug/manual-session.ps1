@@ -110,7 +110,7 @@ function Restore-UserSetup {
 function Stop-AutomationLeftovers {
     $patterns = @(
         '_verify_playground', '_verify_fix', '_repro_multi', '_probe_i001',
-        'level-sweep', 'verify-playground', 'verify-fix', 'NSMBW_INPUT_SCRIPT'
+        'level-sweep', 'verify-playground', 'verify-fix', 'NO100F_INPUT_SCRIPT'
     )
     Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
         $cmd = $_.CommandLine
@@ -292,8 +292,8 @@ switch ($Command) {
         Write-PlayConfig -bootLevel $Boot -unlockAllPowerups:([bool]$AllPowerups)
         # Inherit caller env into the game process (Start-Process default). Log selected diags if set.
         foreach ($name in @(
-                'SPM_TEX_NOCACHE', 'NSMBW_NO_TEXMEMO', 'SPM_FLAT_TEST', 'NSMBW_NO_MERGE',
-                'NSMBW_INPUT_SCRIPT', 'NSMBW_SCRIPT_REMOTES',
+                'NO100F_TEX_NOCACHE', 'NO100F_NO_TEXMEMO', 'NO100F_FLAT_TEST', 'NO100F_NO_MERGE',
+                'NO100F_INPUT_SCRIPT', 'NO100F_SCRIPT_REMOTES',
                 'NO100F_IDX_CHECK', 'NO100F_CURTAIN_TRACE', 'NO100F_TAIL_SKIP', 'NO100F_VTX_IDX', 'NO100F_SKIP_LINES',
                 'NO100F_SKIP_DEEP_IDX', 'NO100F_SKIP_CURTAIN_PANEL', 'NO100F_SKIP_CURTAIN_HEM',
                 'NO100F_DROP_DEGEN_IDX', 'NO100F_GPU_OWNER', 'NO100F_GPU_OWNER_FILE',

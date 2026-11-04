@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Velopack;
 using Velopack.Sources;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // New versions. The installed game (Velopack, from the installer) updates itself from the project's GitHub Releases:
 // the launcher asks at start (MainForm), downloads the full or delta package and restarts into the new version. The

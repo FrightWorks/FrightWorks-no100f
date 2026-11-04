@@ -33,7 +33,7 @@ struct Settings {
 const Settings& GetSettings() {
     static const Settings settings = [] {
         Settings parsed;
-        if (const char* hash = std::getenv("NSMBW_DET_HASH"); hash != nullptr && *hash != '\0') {
+        if (const char* hash = std::getenv("NO100F_DET_HASH"); hash != nullptr && *hash != '\0') {
             std::string text(hash);
             // "<file>:<every>", but a Windows drive letter's colon is part of the path.
             const size_t colon = text.rfind(':');
@@ -50,7 +50,7 @@ const Settings& GetSettings() {
                 parsed.hashFile = RuntimeConfigFile::ApplicationDataDirectory() / parsed.hashFile;
             }
         }
-        if (const char* dump = std::getenv("NSMBW_DET_DUMP"); dump != nullptr && *dump != '\0') {
+        if (const char* dump = std::getenv("NO100F_DET_DUMP"); dump != nullptr && *dump != '\0') {
             for (const char* p = dump; *p != '\0';) {
                 char* end = nullptr;
                 const unsigned long retrace = std::strtoul(p, &end, 10);

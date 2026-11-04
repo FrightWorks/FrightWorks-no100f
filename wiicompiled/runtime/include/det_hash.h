@@ -5,12 +5,12 @@
 // Determinism diagnostics for the lockstep mode (det_clock.h): fingerprints of guest memory taken at
 // VI retraces, so two runs, or two devices, can be compared frame by frame.
 //
-//   NSMBW_DET_HASH=<file>[:<every>]   append "<retrace> <ticks> <mem1> <mem2>" every <every>
+//   NO100F_DET_HASH=<file>[:<every>]   append "<retrace> <ticks> <mem1> <mem2>" every <every>
 //                                      retraces (default 60) to <file>
-//   NSMBW_DET_DUMP=<retrace>[,...]    write mem1/mem2 images at those retraces next to the hash file
+//   NO100F_DET_DUMP=<retrace>[,...]    write mem1/mem2 images at those retraces next to the hash file
 //                                      (or in the log directory), for diffing two runs
 //
-// On Android the variables come from the debug.nsmbw.dethash / debug.nsmbw.detdump properties.
+// On Android the variables come from the debug.no100f.dethash / debug.no100f.detdump properties.
 namespace DetHash {
 
 // XXH3 of MEM1 (24 MiB) and the 64 MiB of MEM2 the game can use.

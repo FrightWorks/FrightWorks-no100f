@@ -17,7 +17,7 @@ namespace {
 // daWmMap_c::m_instance and its active dWmConnect_c (one per sub-map, picked by +0x338C): 192
 // dPnt_c of 0x54 bytes from +4, each {+0 vtable, +4 name, +0xC pos, +0x18 six neighbours by
 // Direction3D_e (up, down, front, back, left, right: dWmConnect_c::__connect), +0x4C its index}.
-// Names: "W501" courses, "W5S0" start, "W5T0" tower, "W5K0" Toad house...; "F"/"K" points only
+// Names: "W501" courses, "W5S0" start, "W5T0" tower, "W5K0" house...; "F"/"K" points only
 // shape the paths between them.
 constexpr uint32_t kMapInstance = 0x8042A18Cu;
 constexpr uint32_t kMapSubIndex = 0x338C;

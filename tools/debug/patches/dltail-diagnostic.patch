@@ -1,8 +1,8 @@
 diff --git a/wiicompiled/runtime/src/hle/gx/gx_dl.cpp b/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
-index d0689bb..6e49a4f 100644
+index 531ed49..182647f 100644
 --- a/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
 +++ b/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
-@@ -1354,6 +1354,7 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
+@@ -1343,6 +1343,7 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
              }
          }
          if (s_skipNext) { s_skipNext = false; return; }
@@ -11,7 +11,7 @@ index d0689bb..6e49a4f 100644
          {  // NO100F diagnostic: guest lists holding a draw whose vertices run past the list (env NO100F_DL_CHECK)
              static const bool dlCheck = std::getenv("NO100F_DL_CHECK") != nullptr;
 diff --git a/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp b/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp
-index 26eb176..a8f1fc4 100644
+index 2fb255b..2f1ba54 100644
 --- a/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp
 +++ b/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp
 @@ -55,9 +55,11 @@ PPC_NATIVE_OVERRIDE_VOID(801022C8, No100f_GXBeginDisplayList, (uint32_t list, ui
@@ -131,10 +131,10 @@ index 6df3885..2a82e36 100644
      g_dlRecordState.base = listAddr;
      g_dlRecordState.size = sizeBytes;
 diff --git a/wiicompiled/runtime/src/hle/gx/gx_internal.h b/wiicompiled/runtime/src/hle/gx/gx_internal.h
-index 6d4afe6..35384b4 100644
+index babd7a4..1d69a4e 100644
 --- a/wiicompiled/runtime/src/hle/gx/gx_internal.h
 +++ b/wiicompiled/runtime/src/hle/gx/gx_internal.h
-@@ -309,6 +309,11 @@ void SpmBBoxPosition(const float* p, int count);
+@@ -309,6 +309,11 @@ void GxBBoxPosition(const float* p, int count);
  // Flushes the shadow cursor/count back into guest memory and stops recording.
  void EndDisplayListRecording();
  

@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>FrightWorks</AssemblyName>
-    <RootNamespace>ScoobyReMasked</RootNamespace>
+    <RootNamespace>FrightWorks</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <Version>1.1.1</Version>
     <Product>FrightWorks: Night of 100 Frights</Product>
@@ -21,11 +21,11 @@
     <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="art\mansion.png" LogicalName="ScoobyReMasked.mansion.png" />
-    <EmbeddedResource Include="art\mansion.json" LogicalName="ScoobyReMasked.mansion.json" />
-    <EmbeddedResource Include="art\dog.png" LogicalName="ScoobyReMasked.dog.png" />
-    <EmbeddedResource Include="art\ghost.png" LogicalName="ScoobyReMasked.ghost.png" />
-    <EmbeddedResource Include="fonts\LuckiestGuy-Regular.ttf" LogicalName="ScoobyReMasked.LuckiestGuy-Regular.ttf" />
+    <EmbeddedResource Include="art\mansion.png" LogicalName="FrightWorks.mansion.png" />
+    <EmbeddedResource Include="art\mansion.json" LogicalName="FrightWorks.mansion.json" />
+    <EmbeddedResource Include="art\dog.png" LogicalName="FrightWorks.dog.png" />
+    <EmbeddedResource Include="art\ghost.png" LogicalName="FrightWorks.ghost.png" />
+    <EmbeddedResource Include="fonts\LuckiestGuy-Regular.ttf" LogicalName="FrightWorks.LuckiestGuy-Regular.ttf" />
   </ItemGroup>
   <!-- The build ID (footer pill) goes in InformationalVersion: the game's own rules and text, from
        wiicompiled/runtime/cmake/build_info.cmake (release = clean checkout at tag v<Version>: just the version, else

@@ -120,7 +120,7 @@ public sealed partial class CxxLinearCodeGenerator
             if (!inFunction && string.Equals(line, functionDecl, StringComparison.Ordinal))
             {
                 rewritten.AppendLine("template <bool gqr_entry_profile>");
-                rewritten.AppendLine($"MKW_PPC_NO_INLINE static void {implementationName}({parameters})");
+                rewritten.AppendLine($"RECOMP_PPC_NO_INLINE static void {implementationName}({parameters})");
                 pendingFunctionOpen = true;
                 continue;
             }

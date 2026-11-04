@@ -46,7 +46,7 @@ public sealed class CanonicalIrStore : ICanonicalIrProvider
 
 internal static class CanonicalIrBinaryCodec
 {
-    private static readonly byte[] Magic = "MKWSSA01"u8.ToArray();
+    private static readonly byte[] Magic = "RCMPSSA1"u8.ToArray();
 
     private enum Op : byte
     {

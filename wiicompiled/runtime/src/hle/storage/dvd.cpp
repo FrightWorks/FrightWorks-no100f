@@ -58,7 +58,7 @@ static fs::path g_dvdRoot;
 static std::once_flag g_dvdRootOnce;
 
 static uint32_t CurrentDiscGameCode() {
-    return RuntimeHle::CurrentGameCode(0x52385045u); // SMNE (NSMBW) fallback
+    return RuntimeHle::CurrentGameCode(0x52385045u); // fallback
 }
 
 // ============================================================================
@@ -81,7 +81,7 @@ static uint32_t CurrentDiscGameCode() {
 
 struct DVDFileEntry {
     fs::path hostPath;
-    std::string dvdPath;  // Virtual Wii path (e.g., "/Race/Course.szs")
+    std::string dvdPath;  // Virtual Wii path (e.g., "/dir/file.bin")
     uint32_t size;
     uint32_t discOffsetWords = 0;
     bool isDirectory = false;
@@ -261,7 +261,7 @@ static bool IsDvdDataRoot(const fs::path& path) {
         details += HostPathText(path);
     }
     details += "\n\nSet [paths] dvd_root in Config.toml to your Scooby-Doo! Night of 100 Frights "
-               "(R8PE01 revision 0), extracted with Dolphin's Extract Entire Disc.";
+               "(GIHE78), extracted with Dolphin's Extract Entire Disc.";
     FailDvd("dvd_root", "DVD data is unavailable", details);
 }
 
@@ -297,8 +297,8 @@ static fs::path ResolveDvdMappedHostPath(const std::string& dvdPath, const fs::p
 }
 
 // DVD*Async completions are queued and run from the scheduler's callback drain, as the DI interrupt
-// does on hardware. Calling them inside DVDReadAsync re-entered SPM's chunked loaders (fontmgrInit ->
-// DVDMgrRead: the callback issues the next chunk before the caller has advanced its offset) without end.
+// does on hardware. Calling them inside DVDReadAsync re-entered chunked loaders
+// (the callback issues the next chunk before the caller has advanced its offset) without end.
 struct PendingDvdCallback { uint32_t callbackPtr; int32_t result; uint32_t commandBlock; };
 static std::mutex g_pendingDvdCallbackMutex;
 static std::deque<PendingDvdCallback> g_pendingDvdCallbacks;
@@ -880,7 +880,7 @@ static void BuildAndPublishRuntimeFst() {
               << image.bytes.size() << " bytes) at 0x" << std::hex << fstAddress
               << " inside the boot-time MEM2 reservation" << std::dec << std::endl;
 
-    if (const char* dumpPath = std::getenv("MKW_DUMP_FST")) {
+    if (const char* dumpPath = std::getenv("NO100F_DUMP_FST")) {
         std::ofstream dump(dumpPath, std::ios::binary);
         dump.write(reinterpret_cast<const char*>(image.bytes.data()),
                    static_cast<std::streamsize>(image.bytes.size()));
@@ -927,8 +927,8 @@ static void CompleteDvdCancelState()
 
     // These are the SDK DVD globals used by DVDCancelAll/__DVDPrepareReset.
     // The actual drive work is HLE'd, so complete pending cancel/reset waits.
-    // NO100F: Canceling/ResumeFromHere/PausingFlag/Prepared/executing were Unmasked addresses (inside NO100F's
-    // .sdata2) and are not written. They start zeroed in .sbss; shortcut: map them if DVDCancelAll/reset is used.
+    // NO100F: Canceling/ResumeFromHere/PausingFlag/Prepared/executing are not written (the addresses this code
+    // had are inside NO100F's .sdata2). They start zeroed in .sbss; shortcut: map them if DVDCancelAll/reset is used.
 }
 
 // 0x801CAD30 -> DVDInit
@@ -952,7 +952,7 @@ extern "C" void DVDInit_8015EA1C()
     // 2. (dvdContexts[4] are Wii DVD-over-IOS state; not in this SDK.)
 
     // 3. Set Low Memory Globals (The "Magic" Identification)
-    // This tells the game "Yes, I am Mario Kart Wii"
+    // This tells the game which disc it is running from
     uint32_t diskHeader = 0x80000000;
     Memory::Write32(diskHeader + 0x00, CurrentDiscGameCode());
     Memory::Write16(diskHeader + 0x04, 0x3738);     // '78' (THQ)
@@ -967,12 +967,12 @@ extern "C" void DVDInit_8015EA1C()
     ScanDirectory(rootPath / "sys", "/sys/");
 
     const auto& overlays = RuntimeRiivolution::Overlays();
-    if (overlays.empty() && RuntimeProduct::IsRetroRewind()) {
-        RT_LOG(RT_TAG_DVD) << "WARNING: no Retro Rewind overlay root was found. "
-                     "File replacements (menu archives, karts, drivers, courses) will not apply "
+    if (overlays.empty() && RuntimeProduct::IsModProduct()) {
+        RT_LOG(RT_TAG_DVD) << "WARNING: no mod overlay root was found. "
+                     "File replacements will not apply "
                      "and the game will look and play like the unmodded disc. Set "
                      "[paths] retro_rewind_root in Config.toml "
-                     "with the RetroRewind6 folder."
+                     "with the mod's folder."
                   << std::endl;
     }
     // RegisterFileEntry lets the last registration win, so apply the roots in
@@ -1059,7 +1059,7 @@ extern "C" int32_t DVDReadPrio_8015E834(uint32_t fileInfoPtr, uint32_t bufferPtr
     }
 
     const DVDFileEntry& entry = g_fileEntries[extent->entryIndex];
-    {  // SPM bring-up: which disc files the game reads (first chunk of each)
+    {  // Bring-up: which disc files the game reads (first chunk of each)
         static int n = 0;
         if (offset == 0 && n++ < 400) RT_LOGF(RT_TAG_RUNTIME, "[dvdread] %s len %d\n", HostPathText(entry.hostPath).c_str(), length);
         static const bool traceAll = std::getenv("NO100F_TRACE_DVD") != nullptr;  // diagnostic: every read
@@ -1141,9 +1141,6 @@ extern "C" int32_t DVDReadPrio_8015E834(uint32_t fileInfoPtr, uint32_t bufferPtr
 
     return static_cast<int32_t>(uLength);
 }
-#if 0  // SCOOBY: DVDReadPrio: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001434, DVDReadPrio_8015E834, int32_t, (uint32_t f, uint32_t b, int32_t l, int32_t o, int32_t p), (f, b, l, o, p));
-#endif
 
 // 0x801CAA30 -> DVDReadAsyncPrio (internal)
 // HLE: perform synchronous read and invoke callback immediately.
@@ -1241,9 +1238,6 @@ extern "C" int32_t DVDLowInit_80164848() {
     DVDInit_8015EA1C(); 
     return 1;
 }
-#if 0  // SCOOBY: DVDLowInit: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001438, DVDLowInit_80164848, int32_t, (), ());
-#endif
 
 extern "C" int32_t DVDLowInquiry_80165A30(uint32_t cmdBlockPtr, uint32_t callback)
 {
@@ -1271,7 +1265,7 @@ extern "C" int32_t DVDLowReadDiskID_80164AAC(uint32_t diskIdPtr, uint32_t callba
 PPC_NATIVE_OVERRIDE(8010E644, DVDLowReadDiskID_80164AAC, int32_t, (uint32_t p, uint32_t c), (p, c));
 
 // ----------------------------------------------------------------------------
-// GameCube SDK (Scooby-Doo! Unmasked): requests not covered above would reach the drive state machine
+// GameCube SDK: requests not covered above would reach the drive state machine
 // (stateReady/stateBusy), which polls the DI registers. Complete them on the spot like the read HLE does.
 // ----------------------------------------------------------------------------
 static void CompleteGcCommandBlock(uint32_t block, uint32_t transferred, uint32_t callback)
@@ -1395,21 +1389,12 @@ PPC_NATIVE_OVERRIDE(8010E2EC, DVDLowRead_80166330, int32_t, (uint32_t b, uint32_
 extern "C" int32_t DVDLowUnencryptedRead_80165708(uint32_t b, uint32_t l, uint32_t o, uint32_t c) {
     return DVDLowRead_80166330(b, l, o, c);
 }
-#if 0  // SCOOBY: DVDLowUnencryptedRead: name not in Scooby
-PPC_NATIVE_OVERRIDE(8000143C, DVDLowUnencryptedRead_80165708, int32_t, (uint32_t b, uint32_t l, uint32_t o, uint32_t c), (b, l, o, c));
-#endif
 
 // ============================================================================
 // Other Necessary Stubs
 // ============================================================================
 
 extern "C" int32_t DVDCheckDevice_801643FC() { return 1; } // Ready
-#if 0  // SPM: __DVDCheckDevice: name not in SPM
-PPC_NATIVE_OVERRIDE(80001440, DVDCheckDevice_801643FC, int32_t, (), ());
-#endif
 
 extern "C" int32_t DVDLowClearCoverInterrupt_80166964(uint32_t cb) { return 1; }
-#if 0  // SCOOBY: DVDLowClearCoverInterrupt: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001444, DVDLowClearCoverInterrupt_80166964, int32_t, (uint32_t cb), (cb));
-#endif
 

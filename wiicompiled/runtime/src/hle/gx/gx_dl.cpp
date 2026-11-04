@@ -1,4 +1,4 @@
-extern "C" void aurora_spm_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3);
+extern "C" void aurora_gx_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3);
 #include "gx_internal.h"
 #include "runtime_log.h"
 #include "gx_stream_common.h"
@@ -27,11 +27,11 @@ using namespace GxStream;
 using GxCpDecode::ApplyCpRegWrite;
 using GxCpDecode::SameVtxAttrFmt;
 
-// Small display lists dominate the in-race call count. Cache them as well, but
+// Small display lists dominate the per-frame call count. Cache them as well, but
 // cap both individual entries and aggregate copied command bytes so malformed
 // guest input cannot turn this optimization into unbounded host allocation.
 constexpr uint32_t kDlScanCacheMaxEntryBytes = 64u * 1024u;
-// SPM gn3_12 calls ~10k distinct lists per frame; at 8192 the cache cleared itself every frame.
+// A heavy map calls ~10k distinct lists per frame; at 8192 the cache cleared itself every frame.
 constexpr size_t kDlScanCacheMaxEntries = 65536;
 constexpr size_t kDlScanCacheMaxStoredBytes = 32u * 1024u * 1024u;
 
@@ -1292,13 +1292,12 @@ static bool ApplyAuroraIndexedXFArraysForDisplayList(const std::array<uint32_t, 
 
 } // namespace
 
-extern "C" unsigned g_spmAudit[8];  // aurora command_processor (SPM diagnostics)
-extern "C" int g_spmSweepDump;
+extern "C" unsigned g_gxAudit[8];  // aurora command_processor (Diagnostic)
 extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
     GxGuestWrite::NotifyWrite(addr, size);
 }
 
-// SPM records each list into one scratch buffer and copies it elsewhere, so a list Aurora encoded is
+// A game can record each list into one scratch buffer and copies it elsewhere, so a list Aurora encoded is
 // recognized by content: walk the register commands until a GX_LOAD_AURORA (0x50) command shows up.
 // A draw or an unknown byte ends the walk (those lists keep the runtime's own path).
 [[maybe_unused]] static bool ListHasAuroraCommand(const uint8_t* data, uint32_t n) {
@@ -1327,29 +1326,15 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
 
 extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes) {
     if (nbytes == 0 || listAddr == 0) return;
-    static const int s_skipId = std::getenv("SPM_SKIP_MATDL") ? std::atoi(std::getenv("SPM_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>
+    static const int s_skipId = std::getenv("NO100F_SKIP_MATDL") ? std::atoi(std::getenv("NO100F_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>
     static bool s_skipNext = false;
     try {
         const uint8_t* list = static_cast<const uint8_t*>(GuestToHostPtr(listAddr, nbytes));
         if (!list) return;
         if (const uint8_t* hostDl = nullptr; true) {
             uint32_t hostSize = 0;
-            if (SpmHostDisplayList(list, nbytes, hostDl, hostSize)) {
+            if (GxHostDisplayList(list, nbytes, hostDl, hostSize)) {
                 s_skipNext = s_skipId >= 0 && ((uint32_t(list[8]) << 24) | (uint32_t(list[9]) << 16) | (uint32_t(list[10]) << 8) | list[11]) == uint32_t(s_skipId);
-                { static int k = 0;
-                  if (g_spmSweepDump && k++ < 6000) {
-                      // name the MapObj being drawn (spm-headers MapObj: +0 flag0, +4 flag4, +8 blendMode, +0xC joint -> name, +0x10 colour)
-                      std::string obj;
-                      if (const CpuContext* x = TryGetCpuContext()) for (int r = 24; r <= 31; ++r) {
-                          const uint32_t o = x->gpr[r]; uint32_t j = 0, n = 0;
-                          if (!Memory::Contains(o, 0x144) || !Memory::TryRead32(o + 0xC, j) || !Memory::Contains(j, 4) || !Memory::TryRead32(j, n) || !Memory::Contains(n, 16)) continue;
-                          std::string nm; for (int c = 0; c < 31; ++c) { const char ch = char(Memory::Read8(n + c)); if (!ch) break; if (ch < 0x20 || ch > 0x7e) { nm.clear(); break; } nm += ch; }
-                          if (nm.size() < 2) continue;
-                          char b[160]; std::snprintf(b, sizeof b, " r%d %s f0 %08X f4 %08X bm %u col %08X", r, nm.c_str(), Memory::Read32(o), Memory::Read32(o + 4), Memory::Read8(o + 8), Memory::Read32(o + 0x10));
-                          obj = b; break;
-                      }
-                      RT_LOGF(RT_TAG_GX, "[spmcall] draw %u id %u addr %08X%s\n", g_spmAudit[0], (uint32_t(list[8]) << 24) | (uint32_t(list[9]) << 16) | (uint32_t(list[10]) << 8) | list[11], listAddr, obj.c_str());
-                  } }
                 g_boundTexMaps.fill(BoundTexInfo{});
                 EnsureAuroraFrameActive();
                 GXMarkFrameWork();
@@ -1393,7 +1378,7 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
         const bool auroraList = ListHasAuroraCommand(list, nbytes);
         if (auroraList) g_boundTexMaps.fill(BoundTexInfo{});
         { static int s_callLog = 0;
-          if (s_callLog++ < 60) RT_LOGF(RT_TAG_GX, "[spmdl] call 0x%08X %u bytes aurora=%d\n", listAddr, nbytes, auroraList ? 1 : 0); }  // the list rebinds textures behind the cache
+          if (s_callLog++ < 60) RT_LOGF(RT_TAG_GX, "[gxdl] call 0x%08X %u bytes aurora=%d\n", listAddr, nbytes, auroraList ? 1 : 0); }  // the list rebinds textures behind the cache
         const bool mayContainDraw = auroraList ? false
             : (cached != nullptr) ? cached->mayContainDraw : DisplayListMayContainDraw(list, nbytes);
         if (!mayContainDraw) {
@@ -1401,7 +1386,7 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
             GXMarkFrameWork();
             GXCallDisplayList(list, nbytes);
             // The republish is required even for register-only lists (verified by
-            // experiment: dropping it corrupts in-race geometry decode). It is
+            // experiment: dropping it corrupts geometry decode). It is
             // instead memoized inside SyncAppliedVtxStateFromHleReal, so a run of
             // register-only lists between draws pays for at most one mirror copy.
             SyncAppliedVtxStateFromHleReal();
@@ -1590,9 +1575,6 @@ extern "C" void nw4r__lyt__detail__DrawQuad_800847c0(CpuContext* ctx) {
     EmitLytDrawQuad(ctx->gpr[3], ctx->gpr[4], static_cast<int32_t>(ctx->gpr[5]), ctx->gpr[6], colorPtr);
 }
 
-#if 0  // SPM: DrawQuad__Q34nw4r3lyt6detailFRCQ34nw4r4math4VEC2RCQ34nw4r3lyt4SizeUcPA4_CQ34nw4r4math4VEC2PCQ34nw4r2ut5Color: name not in SPM
-REGISTER_NATIVE_FUNCTION(0x80001514, nw4r__lyt__detail__DrawQuad_800847c0);  // NSMBW: DrawQuad(VEC2&, Size&, u8, VEC2[4]*, Color*)
-#endif
 
 extern "C" void nw4r__lyt__detail__DrawQuad_80084d20(CpuContext* ctx) {
     uint32_t colors[4];
@@ -1610,6 +1592,3 @@ extern "C" void nw4r__lyt__detail__DrawQuad_80084d20(CpuContext* ctx) {
     EmitLytDrawQuad(ctx->gpr[3], ctx->gpr[4], static_cast<int32_t>(ctx->gpr[5]), ctx->gpr[6], colorPtr);
 }
 
-#if 0  // SPM: DrawQuad__Q34nw4r3lyt6detailFRCQ34nw4r4math4VEC2RCQ34nw4r3lyt4SizeUcPA4_CQ34nw4r4math4VEC2PCQ34nw4r2ut5ColorUc: name not in SPM
-REGISTER_NATIVE_FUNCTION(0x80001518, nw4r__lyt__detail__DrawQuad_80084d20);  // NSMBW: DrawQuad(..., Color*, u8 alpha)
-#endif

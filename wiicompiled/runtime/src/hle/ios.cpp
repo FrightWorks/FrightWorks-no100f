@@ -110,9 +110,6 @@ extern "C" void IOS_IoctlAsync_80194158(CpuContext* ctx)
     const int32_t result = NAND_IOS_Ioctl_HLE(fd, cmd, inBuf, inLen, outBuf, outLen);
     CompleteAsync(ctx, callback, result, callbackArg); // Success
 }
-#if 0  // SCOOBY: IOS_IoctlAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001014, IOS_IoctlAsync_80194158, (CpuContext* ctx), (ctx));
-#endif
 
 // 0x80224B50 -> IOS_OpenAsync
 extern "C" void IOS_OpenAsync_HLE(CpuContext* ctx) {
@@ -130,9 +127,6 @@ extern "C" void IOS_OpenAsync_HLE(CpuContext* ctx) {
     const int32_t result = NAND_IOS_Open_HLE(pathPtr, mode);
     CompleteAsync(ctx, callback, result, callbackArg); // Queued successfully
 }
-#if 0  // SCOOBY: IOS_OpenAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001018, IOS_OpenAsync_HLE, (CpuContext* ctx), (ctx));
-#endif
 
 // 0x80224DA0 -> IOS_CloseAsync
 extern "C" void IOS_CloseAsync_HLE(CpuContext* ctx) {
@@ -147,25 +141,16 @@ extern "C" void IOS_CloseAsync_HLE(CpuContext* ctx) {
     const int32_t result = NAND_IOS_Close_HLE(fd);
     CompleteAsync(ctx, callback, result, callbackArg);
 }
-#if 0  // SCOOBY: IOS_CloseAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000101C, IOS_CloseAsync_HLE, (CpuContext* ctx), (ctx));
-#endif
 
 // 0x80224F10 -> IOS_ReadAsync
 extern "C" void IOS_ReadAsync_HLE(CpuContext* ctx) {
     IosBufferAsync(ctx, NAND_IOS_Read_HLE);
 }
-#if 0  // SCOOBY: IOS_ReadAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001020, IOS_ReadAsync_HLE, (CpuContext* ctx), (ctx));
-#endif
 
 // 0x80225120 -> IOS_WriteAsync
 extern "C" void IOS_WriteAsync_HLE(CpuContext* ctx) {
     IosBufferAsync(ctx, NAND_IOS_Write_HLE);
 }
-#if 0  // SCOOBY: IOS_WriteAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001024, IOS_WriteAsync_HLE, (CpuContext* ctx), (ctx));
-#endif
 
 // 0x80225330 -> IOS_SeekAsync
 extern "C" void IOS_SeekAsync_HLE(CpuContext* ctx) {
@@ -177,9 +162,6 @@ extern "C" void IOS_SeekAsync_HLE(CpuContext* ctx) {
     const int32_t result = NAND_IOS_Seek_HLE(fd, offset, whence);
     CompleteAsync(ctx, callback, result, callbackArg);
 }
-#if 0  // SCOOBY: IOS_SeekAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001028, IOS_SeekAsync_HLE, (CpuContext* ctx), (ctx));
-#endif
 
 // 0x802258B0 -> IOS_IoctlvAsync
 extern "C" void IOS_IoctlvAsync_HLE(CpuContext* ctx)
@@ -204,6 +186,3 @@ extern "C" void IOS_IoctlvAsync_HLE(CpuContext* ctx)
     const int32_t result = NAND_IOS_Ioctlv_HLE(fd, cmd, numIn, numOut, vectorPtr);
     CompleteAsync(ctx, callback, result, callbackArg);
 }
-#if 0  // SCOOBY: IOS_IoctlvAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000102C, IOS_IoctlvAsync_HLE, (CpuContext* ctx), (ctx));
-#endif

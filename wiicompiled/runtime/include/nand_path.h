@@ -57,8 +57,8 @@ inline std::filesystem::path ResolveConfiguredPath(const std::string& value) {
     return RuntimeConfigFile::ResolveRelativeToConfig(value);
 }
 
-// NSMBW: which game folder this is, as a fingerprint of its files (relative path and size of each),
-// so a mod of the game (New Super Mario Bros. Wii 2 - The Next Levels...) is told apart from the
+// Which game folder this is, as a fingerprint of its files (relative path and size of each),
+// so a mod of the game is told apart from the
 // original. Empty when there is no readable game folder.
 inline std::string GameSaveKey() {
     const std::filesystem::path root = RuntimeConfigFile::ResolvedDvdRoot();

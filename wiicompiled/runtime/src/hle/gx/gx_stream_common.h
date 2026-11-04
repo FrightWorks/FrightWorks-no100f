@@ -23,7 +23,7 @@ constexpr uint8_t GX_VAT_MASK_CMD    = 0x07;
 
 constexpr uint8_t GX_DRAW_QUADS_CMD          = 0x80;
 // 0x88 is the second quad opcode (GX_DRAW_QUADS_2). Real hardware treats it as
-// GX_QUADS as well, and MKW's nw4r shape lists do emit it.
+// GX_QUADS as well, and nw4r shape lists do emit it.
 constexpr uint8_t GX_DRAW_QUADS_2_CMD        = 0x88;
 constexpr uint8_t GX_DRAW_TRIANGLES_CMD      = 0x90;
 constexpr uint8_t GX_DRAW_TRIANGLE_STRIP_CMD = 0x98;

@@ -60,7 +60,7 @@ extern "C" void PPC_Ecowx(uint32_t addr, uint32_t value);
 extern "C" void PPC_TrapWord(uint32_t trapOptions, uint32_t lhs, uint32_t rhs);
 extern "C" uint32_t PPC_Cntlzw(uint32_t value);
 
-MKW_PPC_FORCE_INLINE uint32_t PPC_CntlzwInline(uint32_t value)
+RECOMP_PPC_FORCE_INLINE uint32_t PPC_CntlzwInline(uint32_t value)
 {
     return value == 0 ? 32u : static_cast<uint32_t>(__builtin_clz(value));
 }

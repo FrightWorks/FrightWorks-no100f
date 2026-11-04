@@ -56,7 +56,7 @@ bool is_offscreen() noexcept;
 // --- Constants ---
 constexpr uint32_t kGXDataPtrAddr = 0x80001FFCu;     // NO100F: pointer to the shadow block below (unused exception-vector RAM)
 constexpr uint32_t kShadowGXDataAddr = 0x80002000u;  // runtime-only gxData shadow (0x600 bytes); the game's gxData is 0x8026C5A0
-constexpr uint32_t kDlFifoAddr = 0x80002700;        // NO100F: runtime scratch (NSMBW 0x80521E70 is game heap here)
+constexpr uint32_t kDlFifoAddr = 0x80002700;        // NO100F: runtime scratch
 constexpr uint32_t kDlWritePtrAddr = kDlFifoAddr + 0x14;
 constexpr uint32_t kDlCountAddr = kDlFifoAddr + 0x1C;
 constexpr uint32_t kDlWrapFlagOffset = 0x20;
@@ -298,14 +298,14 @@ inline bool IsDisplayListActive() noexcept { return g_dlRecordState.active; }
 void BeginDisplayListRecording(uint32_t listAddr, uint32_t sizeBytes);
 void RegisterAuroraDisplayList(uint32_t addr, uint32_t size);
 bool IsAuroraDisplayList(uint32_t addr, uint32_t size);
-bool SpmHostDisplayList(const uint8_t* list, uint32_t n, const uint8_t*& data, uint32_t& size);
-bool SpmAuroraDlRecording();
-void SpmRecordRawVertexDisplayList();
-bool SpmDumpFrame();
-void SpmBBoxClear();
-void SpmBBoxRead(uint16_t& l, uint16_t& t, uint16_t& r, uint16_t& b);
-void SpmBBoxVertexMatrix(uint32_t index);
-void SpmBBoxPosition(const float* p, int count);
+bool GxHostDisplayList(const uint8_t* list, uint32_t n, const uint8_t*& data, uint32_t& size);
+bool GxAuroraDlRecording();
+void GxRecordRawVertexDisplayList();
+bool GxDumpFrame();
+void GxBBoxClear();
+void GxBBoxRead(uint16_t& l, uint16_t& t, uint16_t& r, uint16_t& b);
+void GxBBoxVertexMatrix(uint32_t index);
+void GxBBoxPosition(const float* p, int count);
 // Flushes the shadow cursor/count back into guest memory and stops recording.
 void EndDisplayListRecording();
 

@@ -804,7 +804,7 @@ void begin_frame_interpolation() noexcept {
   // Normally empty (finalize swapped and recycled); an aborted frame can leave
   // entries behind, whose matrix blocks go back to the pool here.
   recycle_transform_entries(s_currentFrameTransforms);
-  // Keep buckets, nodes and capacities across frames so a stable race scene does not
+  // Keep buckets, nodes and capacities across frames so a stable scene does not
   // pay thousands of small allocations every frame.
   clear_index_map_keep_nodes(s_previousTransformIndices, s_previousFrameTransforms.size());
   clear_index_map_keep_nodes(s_previousStableTransformIndices, s_previousFrameTransforms.size());

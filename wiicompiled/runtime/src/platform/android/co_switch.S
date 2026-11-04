@@ -6,9 +6,9 @@
 // pointer. Leaf-only: it never calls C++.
     .text
     .p2align 2
-    .globl mkw_co_switch
-    .type mkw_co_switch, %function
-mkw_co_switch:
+    .globl recomp_co_switch
+    .type recomp_co_switch, %function
+recomp_co_switch:
     sub sp, sp, #240
     stp x19, x20, [sp, #16]
     stp x21, x22, [sp, #32]
@@ -37,29 +37,29 @@ mkw_co_switch:
     ldp q14, q15, [sp, #208]
     add sp, sp, #240
     ret
-    .size mkw_co_switch, . - mkw_co_switch
+    .size recomp_co_switch, . - recomp_co_switch
 
-// Creates a frame compatible with mkw_co_switch and returns its saved SP.
+// Creates a frame compatible with recomp_co_switch and returns its saved SP.
 // x0 = one-past-end stack pointer, x1 = entry(void*), x2 = entry argument.
-    .globl mkw_co_init
-    .type mkw_co_init, %function
-mkw_co_init:
+    .globl recomp_co_init
+    .type recomp_co_init, %function
+recomp_co_init:
     bic x0, x0, #0xf
     sub x0, x0, #240
     str x1, [x0, #16]      // x19: entry
     str x2, [x0, #24]      // x20: argument
     str xzr, [x0, #96]     // x29
-    adrp x3, mkw_co_entry_trampoline
-    add x3, x3, :lo12:mkw_co_entry_trampoline
+    adrp x3, recomp_co_entry_trampoline
+    add x3, x3, :lo12:recomp_co_entry_trampoline
     str x3, [x0, #104]     // x30: first switch "returns" into the trampoline
     ret
-    .size mkw_co_init, . - mkw_co_init
+    .size recomp_co_init, . - recomp_co_init
 
-    .type mkw_co_entry_trampoline, %function
-mkw_co_entry_trampoline:
+    .type recomp_co_entry_trampoline, %function
+recomp_co_entry_trampoline:
     mov x0, x20
     blr x19
     brk #0
-    .size mkw_co_entry_trampoline, . - mkw_co_entry_trampoline
+    .size recomp_co_entry_trampoline, . - recomp_co_entry_trampoline
 
     .section .note.GNU-stack, "", %progbits

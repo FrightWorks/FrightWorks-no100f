@@ -14,7 +14,7 @@ function Assert-Directory([string]$Path, [string]$Description) {
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) { throw "$Description is missing: $Path" }
 }
 
-function Get-MkwFileSha256([string]$Path) {
+function Get-RecompFileSha256([string]$Path) {
     <#
     Lower-case SHA-256 of one file. -LiteralPath is required: Get-FileHash treats a positional
     path as a wildcard, so an install directory containing [, ] or * would hash the wrong file.
@@ -22,7 +22,7 @@ function Get-MkwFileSha256([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
-function Get-MkwToolchainPath([string]$ToolchainRoot) {
+function Get-RecompToolchainPath([string]$ToolchainRoot) {
     <#
     The scrubbed PATH a bundled-toolchain build runs with. The bundled toolchain must be the only
     one visible, or an ambient Visual Studio/MSYS install on PATH could pull in its own headers,
@@ -40,7 +40,7 @@ function Get-MkwToolchainPath([string]$ToolchainRoot) {
     ) -join ';')
 }
 
-function Get-MkwBuildSafePath([string]$Path, [string]$Kind, [string]$MarkerFile) {
+function Get-RecompBuildSafePath([string]$Path, [string]$Kind, [string]$MarkerFile) {
     <#
     The Windows native build passes workspace paths through CMake, Ninja response files and
     clang, which do not all interpret quotes the same way. Keep those paths plain even when the
@@ -80,7 +80,7 @@ function Get-MkwBuildSafePath([string]$Path, [string]$Kind, [string]$MarkerFile)
                 New-Item -ItemType Junction -Path $link -Target $full -ErrorAction Stop | Out-Null
             }
             Assert-File (Join-Path $link $MarkerFile) "$Kind junction marker"
-            Write-Host "MKWCBUILD: Building the $Kind through $link, because $full contains characters the native build cannot quote reliably"
+            Write-Host "RECOMPBUILD: Building the $Kind through $link, because $full contains characters the native build cannot quote reliably"
             return $link
         } catch {
             $failures += "$link ($($_.Exception.Message))"
@@ -91,47 +91,8 @@ function Get-MkwBuildSafePath([string]$Path, [string]$Kind, [string]$MarkerFile)
         'letters, digits and spaces, or make a safe junction location available.')
 }
 
-function Get-MkwProjectPins([string]$ProjectFile) {
-    <#
-    The Mario Kart Wii facts pinned by projects/mkwii/recomp.yml (game identity, clean input
-    digests, translation entry point, Retro-WFC endpoint), read from one place instead of being
-    restated; Test-PinnedFacts.ps1 checks the copies that can't read YAML (C++ header, C#
-    constants) against these values. Parsing is literal, not a YAML dependency, since the file is
-    machine-written with a fixed shape.
-    #>
-    Assert-File $ProjectFile 'Translation project file'
-    $pins = [ordered]@{
-        GameId = ''; DolSha256 = ''; RelSha256 = ''; EntryPoint = ''; RetroWfcPayloadUri = ''
-    }
-    $section = ''
-    $inputKey = ''
-    foreach ($raw in [IO.File]::ReadAllLines($ProjectFile)) {
-        $line = ($raw -replace '#.*$', '')
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        if ($line -match '^([A-Za-z0-9_]+):') { $section = $Matches[1]; $inputKey = ''; continue }
-        if ($section -eq 'inputs' -and $line -match '^\s{2}([A-Za-z0-9_]+):\s*$') { $inputKey = $Matches[1]; continue }
-        if ($section -eq 'project' -and $line -match '^\s*game_id:\s*(\S+)\s*$') {
-            $pins.GameId = $Matches[1]
-        } elseif ($section -eq 'inputs' -and $line -match '^\s*sha256:\s*([0-9a-fA-F]{64})\s*$') {
-            if ($inputKey -eq 'dol') { $pins.DolSha256 = $Matches[1].ToLowerInvariant() }
-            elseif ($inputKey -eq 'rel') { $pins.RelSha256 = $Matches[1].ToLowerInvariant() }
-        } elseif ($section -eq 'translation' -and $pins.EntryPoint -eq '' -and
-                  $line -match '^\s*-\s*(0[xX][0-9a-fA-F]+)\s*$') {
-            $pins.EntryPoint = $Matches[1].ToLowerInvariant()
-        } elseif ($line -match '^\s*retro_wfc_payload:\s*(\S+)\s*$') {
-            $pins.RetroWfcPayloadUri = $Matches[1]
-        }
-    }
-    foreach ($name in @($pins.Keys)) {
-        if ([string]::IsNullOrWhiteSpace($pins[$name])) {
-            throw "$ProjectFile does not pin $name; the project file is not the shape this build expects."
-        }
-    }
-    return $pins
-}
-
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments, [string]$Description,
-    [string]$LogPrefix = 'MKWCBUILD', [string]$StepId = '', [bool]$WaitForProcessTree = $true) {
+    [string]$LogPrefix = 'RECOMPBUILD', [string]$StepId = '', [bool]$WaitForProcessTree = $true) {
     <#
     Runs a build tool and turns a non-zero exit code into a described failure. By default,
     Start-Process -Wait waits for the whole process tree, since a .NET single-file bundle host may
@@ -159,11 +120,11 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments, [string]$Descri
     if ($exitCode -ne 0) { throw "$Description failed with exit code $exitCode." }
 }
 
-function Get-MkwNativeFixedConfigureFlags {
+function Get-RecompNativeFixedConfigureFlags {
     <#
     The path-independent half of the configure command line, identical on every machine, which is
     what makes one precompiled aurora/third-party package valid for all users. Path-bearing
-    arguments are added separately by Get-MkwNativeConfigureArguments and excluded from the fingerprint.
+    arguments are added separately by Get-RecompNativeConfigureArguments and excluded from the fingerprint.
     #>
     return @(
         '-DCMAKE_BUILD_TYPE=Release',
@@ -174,12 +135,12 @@ function Get-MkwNativeFixedConfigureFlags {
     )
 }
 
-function Get-MkwNativeFlagFingerprint {
+function Get-RecompNativeFlagFingerprint {
     <#
     .SYNOPSIS
     SHA-256 over the canonical flag list, used to reject a stale package.
     #>
-    $canonical = (Get-MkwNativeFixedConfigureFlags) -join "`n"
+    $canonical = (Get-RecompNativeFixedConfigureFlags) -join "`n"
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
         $bytes = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical))
@@ -187,7 +148,7 @@ function Get-MkwNativeFlagFingerprint {
     return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
 
-function Get-MkwDawnRuntimeSha256([string]$DependenciesDirectory) {
+function Get-RecompDawnRuntimeSha256([string]$DependenciesDirectory) {
     <#
     SHA-256 of the pinned Dawn runtime the prebuilt aurora must match. The precompiled aurora
     archives are compiled and linked against the pinned dawn_prebuilt tree's headers/import
@@ -199,10 +160,10 @@ function Get-MkwDawnRuntimeSha256([string]$DependenciesDirectory) {
     if ([string]::IsNullOrWhiteSpace($DependenciesDirectory)) { return '' }
     $runtime = Join-Path $DependenciesDirectory 'dawn_prebuilt\bin\webgpu_dawn.dll'
     if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) { return '' }
-    return Get-MkwFileSha256 $runtime
+    return Get-RecompFileSha256 $runtime
 }
 
-function Get-MkwThirdPartySourceFingerprint([string]$ThirdPartyDirectory) {
+function Get-RecompThirdPartySourceFingerprint([string]$ThirdPartyDirectory) {
     <#
     SHA-256 over runtime/third_party, the vendored sources behind the prebuilt package. The
     precompiled Crypto++ archive is linked while first-party TUs compile against the same headers,
@@ -220,7 +181,7 @@ function Get-MkwThirdPartySourceFingerprint([string]$ThirdPartyDirectory) {
         $builder = [Text.StringBuilder]::new()
         foreach ($file in $files) {
             $relative = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
-            $content = Get-MkwFileSha256 $file.FullName
+            $content = Get-RecompFileSha256 $file.FullName
             [void]$builder.Append($relative).Append(' ').Append($content).Append("`n")
         }
         $bytes = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($builder.ToString()))
@@ -228,7 +189,7 @@ function Get-MkwThirdPartySourceFingerprint([string]$ThirdPartyDirectory) {
     return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
 
-function Get-MkwAuroraSourceFingerprint([string]$AuroraDirectory) {
+function Get-RecompAuroraSourceFingerprint([string]$AuroraDirectory) {
     <#
     SHA-256 over the aurora sources the precompiled archives were harvested from. The compiler,
     flag, and Dawn digests only prove the package agrees with its target environment; none notice
@@ -258,7 +219,7 @@ function Get-MkwAuroraSourceFingerprint([string]$AuroraDirectory) {
         $builder = [Text.StringBuilder]::new()
         foreach ($file in $files) {
             $relative = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
-            $content = Get-MkwFileSha256 $file.FullName
+            $content = Get-RecompFileSha256 $file.FullName
             [void]$builder.Append($relative).Append(' ').Append($content).Append("`n")
         }
         $bytes = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($builder.ToString()))
@@ -266,11 +227,11 @@ function Get-MkwAuroraSourceFingerprint([string]$AuroraDirectory) {
     return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
 }
 
-function ConvertTo-MkwCMakePath([string]$Path) {
+function ConvertTo-RecompCMakePath([string]$Path) {
     return [IO.Path]::GetFullPath($Path).Replace('\', '/')
 }
 
-function Get-MkwNativeConfigureArguments {
+function Get-RecompNativeConfigureArguments {
     <# The complete `cmake` configure argument list for a local runtime build. #>
     [CmdletBinding()]
     param(
@@ -286,21 +247,21 @@ function Get-MkwNativeConfigureArguments {
     )
 
     $arguments = @(
-        '-S', (ConvertTo-MkwCMakePath $SourceDirectory),
-        '-B', (ConvertTo-MkwCMakePath $BuildDirectory),
+        '-S', (ConvertTo-RecompCMakePath $SourceDirectory),
+        '-B', (ConvertTo-RecompCMakePath $BuildDirectory),
         '-G', 'Ninja',
-        "-DCMAKE_MAKE_PROGRAM=$(ConvertTo-MkwCMakePath $Ninja)",
-        "-DCMAKE_C_COMPILER=$(ConvertTo-MkwCMakePath $CCompiler)",
-        "-DCMAKE_CXX_COMPILER=$(ConvertTo-MkwCMakePath $CxxCompiler)",
-        "-DCMAKE_RC_COMPILER=$(ConvertTo-MkwCMakePath $ResourceCompiler)"
+        "-DCMAKE_MAKE_PROGRAM=$(ConvertTo-RecompCMakePath $Ninja)",
+        "-DCMAKE_C_COMPILER=$(ConvertTo-RecompCMakePath $CCompiler)",
+        "-DCMAKE_CXX_COMPILER=$(ConvertTo-RecompCMakePath $CxxCompiler)",
+        "-DCMAKE_RC_COMPILER=$(ConvertTo-RecompCMakePath $ResourceCompiler)"
     )
-    $arguments += Get-MkwNativeFixedConfigureFlags
+    $arguments += Get-RecompNativeFixedConfigureFlags
 
     if (-not [string]::IsNullOrWhiteSpace($DependenciesDirectory) -and
         (Test-Path -LiteralPath $DependenciesDirectory -PathType Container)) {
         $cppWinRt = Join-Path $DependenciesDirectory 'cppwinrt'
         if (Test-Path -LiteralPath (Join-Path $cppWinRt 'winrt\base.h') -PathType Leaf) {
-            $arguments += "-DMKW_CPPWINRT_INCLUDE_DIR=$(ConvertTo-MkwCMakePath $cppWinRt)"
+            $arguments += "-DRECOMP_CPPWINRT_INCLUDE_DIR=$(ConvertTo-RecompCMakePath $cppWinRt)"
         }
         foreach ($directory in Get-ChildItem -LiteralPath $DependenciesDirectory -Directory) {
             # native_prebuilt holds compiled output, not a FetchContent source tree.
@@ -308,12 +269,12 @@ function Get-MkwNativeConfigureArguments {
             # FetchContent uppercases the declared name but preserves punctuation
             # (for example abseil-cpp -> FETCHCONTENT_SOURCE_DIR_ABSEIL-CPP).
             $name = $directory.Name.ToUpperInvariant()
-            $arguments += "-DFETCHCONTENT_SOURCE_DIR_$name=$(ConvertTo-MkwCMakePath $directory.FullName)"
+            $arguments += "-DFETCHCONTENT_SOURCE_DIR_$name=$(ConvertTo-RecompCMakePath $directory.FullName)"
         }
     }
 
     if (-not [string]::IsNullOrWhiteSpace($NativePrebuiltDirectory)) {
-        $arguments += "-DMKW_NATIVE_PREBUILT_DIR=$(ConvertTo-MkwCMakePath $NativePrebuiltDirectory)"
+        $arguments += "-DRECOMP_NATIVE_PREBUILT_DIR=$(ConvertTo-RecompCMakePath $NativePrebuiltDirectory)"
     }
 
     $arguments += $AdditionalArguments

@@ -31,18 +31,18 @@ constexpr uint32_t kMailReset = kTaskMailToDsp | 0x0002u;
 constexpr size_t kResamplingCoefficientCount = 0x800;
 constexpr uint32_t kMailContinue = kTaskMailToDsp | 0x0003u;
 constexpr uint32_t kAxSamplesPerFrame = 96u;
-// G5DE78 runs the GameCube AX ucode (Dolphin AX.cpp): its own command IDs, AXPBGc and 5 ms frames, voice
+// The game runs the GameCube AX ucode (Dolphin AX.cpp): its own command IDs, AXPBGc and 5 ms frames, voice
 // samples in ARAM. The Wii AX path (AXWii.cpp port) stays for reference but is never dispatched.
 constexpr bool kGameCubeAx = true;
 constexpr uint32_t kGcAxSamplesPerFrame = 160u;  // 32 samples per ms, 5 ms
 constexpr uint32_t kGcAramMask = (16u << 20) - 1u;
 constexpr uint32_t kAxDspTaskAddr = 0x80257038u;  // NO100F    // __AXDSPTask: DSPTaskInfo passed to DSPAddTask by __AXOutInitDSP
 constexpr uint32_t kDspInitializedAddr = 0x80271250u;    // __DSP_init_flag (NO100F r13-0x7030, DSPInit)
-constexpr uint32_t kDspAssertPendingAddr = 0x80271258u;  // __DSP_rude_task_pending (NSMBW)
-constexpr uint32_t kDspAssertTaskAddr = 0x8027125Cu;     // __DSP_rude_task (NSMBW)
-constexpr uint32_t kDspCurrentTaskAddr = 0x80271264u;    // __DSP_last_task (offset-matched to MKW) (NSMBW)
-constexpr uint32_t kDspFirstTaskAddr = 0x80271268u;      // __DSP_first_task (NSMBW)
-constexpr uint32_t kDspRunningTaskAddr = 0x8027126Cu;    // __DSP_curr_task (offset-matched to MKW) (NSMBW)
+constexpr uint32_t kDspAssertPendingAddr = 0x80271258u;  // __DSP_rude_task_pending
+constexpr uint32_t kDspAssertTaskAddr = 0x8027125Cu;     // __DSP_rude_task
+constexpr uint32_t kDspCurrentTaskAddr = 0x80271264u;    // __DSP_last_task (offset-matched)
+constexpr uint32_t kDspFirstTaskAddr = 0x80271268u;      // __DSP_first_task
+constexpr uint32_t kDspRunningTaskAddr = 0x8027126Cu;    // __DSP_curr_task (offset-matched)
 constexpr uint32_t kAxIramMmemAddr = 0x801DB0C0u;   // axDspSlave microcode (NO100F __AXOutInitDSP)
 constexpr uint32_t kAxDramMmemAddr = 0x80257088u;   // __AXDramImage (NO100F)
 constexpr uint32_t kAxDramLength = 64u;

@@ -10,7 +10,7 @@
 // FOV, so records can only widen horizontal FOV. Solving for k = surfaceAspect/(16:9): record
 // width = base*max(k,1), gScreenScaleY = max(1/k,1), giving Hor+ above 16:9 and Vert+ below it
 // without cropping either axis. Verified bit-exact against the reference Gecko patch at 2560x1080.
-namespace MkwDynamicAspect {
+namespace RecompDynamicAspect {
 
 inline constexpr float kPresentationAspect169 = 16.0f / 9.0f;
 inline constexpr float kEggFramebufferWidth = 608.0f;
@@ -18,7 +18,7 @@ inline constexpr uint32_t kEggScreenHeight = 456u;
 inline constexpr uint32_t kEggRecordWidth43 = 608u;
 inline constexpr uint32_t kEggRecordWidth169 = 832u;
 // Guard against a degenerate window turning the world inside out: 6.0 is a
-// ~145 degree vertical FOV at MKW's stock 45 degree base, past which the
+// ~145 degree vertical FOV at a 45 degree base, past which the
 // 10.0 near plane and the game's own culling stop behaving.
 inline constexpr float kMaxVerticalExpansion =
     aurora::render_size_limits::kMaxDynamicPortraitExpansion;
@@ -65,4 +65,4 @@ inline float EggHorizontalScale(uint32_t recordWidth) noexcept {
     return kEggFramebufferWidth / static_cast<float>(std::max(recordWidth, 1u));
 }
 
-} // namespace MkwDynamicAspect
+} // namespace RecompDynamicAspect

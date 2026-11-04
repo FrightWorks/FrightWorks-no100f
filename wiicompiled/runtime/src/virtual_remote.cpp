@@ -120,7 +120,7 @@ Intent KeyboardIntent() {
     return intent;
 }
 
-// Gamepads. Scooby-Doo! Unmasked is single-player, so every connected gamepad (not a real Wii Remote, which
+// Gamepads. The game is single-player, so every connected gamepad (not a real Wii Remote, which
 // reaches the game through KPAD) drives player 1 alongside the keyboard; there is no port to pick.
 // The pad's type (SDL_GetGamepadType) picks the default layout; Config.toml [gamepad] <type>_<action>
 // (xbox_jump = "a,b", types xbox / playstation / nintendo, actions in Keybinds order) replaces one
@@ -138,7 +138,7 @@ enum PadStyle { kXbox, kPlayStation, kNintendo, kPadStyleCount };
 
 // Defaults per style, in Keybinds order: the same jobs the GameCube-pad route gave each position
 // (bottom = 2/jump, left and right = 1, top = A, start = +, back/LB/LT = -, RB/RT = shake, right
-// stick = tilt). Nintendo pads jump with both B and A (bottom and right), like Mario games there.
+// stick = tilt). Nintendo pads jump with both B and A (bottom and right).
 constexpr const char* kPadStyleNames[kPadStyleCount] = {"xbox", "playstation", "nintendo"};
 constexpr const char* kPadDefaults[Keybinds::kActionCount][kPadStyleCount] = {
     {"lefty-,dpup", "lefty-,dpup", "lefty-,dpup"},

@@ -3,7 +3,7 @@
 #include <iterator>
 #include <string>
 
-// Who made FrightWorks, as the game shows it (startup cover, F10 About, the pill on the game's credits).
+// Who made FrightWorks, as the game shows it (F10 About, the pill on the game's credits).
 namespace no100f_credits {
 
 inline constexpr const char* kAuthor = "Loneranger419";

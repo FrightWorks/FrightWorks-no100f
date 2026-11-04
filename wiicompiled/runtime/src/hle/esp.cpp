@@ -1,6 +1,6 @@
 // ESP HLE Stubs
 // ESP functions communicate with /dev/es to get title information.
-// We stub these to return Mario Kart Wii's title ID directly.
+// We stub these to return the game's title ID directly.
 
 #include "hle_stubs.h"
 #include "memory.h"
@@ -11,8 +11,8 @@
 #include <cstdlib>
 #include <cctype>
 
-static constexpr uint32_t MKW_TITLE_ID_HI = 0x00010000;  // NSMBW disc title 00010000-52385045 (tmd.bin); name kept
-static constexpr uint32_t MKW_TITLE_ID_LO = 0x52385045; // "SMNE" fallback
+static constexpr uint32_t GAME_TITLE_ID_HI = 0x00010000;  // fallback title ID
+static constexpr uint32_t GAME_TITLE_ID_LO = 0x52385045; // fallback
 
 static bool IsValidEspTitleCode(uint32_t code) {
     for (int shift = 24; shift >= 0; shift -= 8) {
@@ -32,7 +32,7 @@ static uint32_t CurrentTitleIdLo() {
         }
     }
 
-    return MKW_TITLE_ID_LO;
+    return GAME_TITLE_ID_LO;
 }
 
 // The guest asked for its title ID or data directory through a pointer we cannot
@@ -54,9 +54,6 @@ extern "C" int32_t ESP_InitLib_stub(void)
 {
     return 0;
 }
-#if 0  // SPM: ESP_InitLib: name not in SPM
-PPC_NATIVE_OVERRIDE(80001004, ESP_InitLib_stub, int32_t, (void), ());
-#endif
 
 // 0x801D6290 -> ESP_CloseLib  
 // Closes /dev/es. No-op for us.
@@ -64,9 +61,6 @@ extern "C" int32_t ESP_CloseLib_stub(void)
 {
     return 0;
 }
-#if 0  // SPM: ESP_CloseLib: name not in SPM
-PPC_NATIVE_OVERRIDE(80001008, ESP_CloseLib_stub, int32_t, (void), ());
-#endif
 
 // 0x801d66e0 -> ESP_GetTitleId
 // Gets the 64-bit title ID. param_1 is pointer to 8 bytes.
@@ -80,13 +74,10 @@ extern "C" int32_t ESP_GetTitleId_stub(uint32_t outPtr)
     }
 
     // Write title ID (big-endian)
-    Memory::Write32(outPtr, MKW_TITLE_ID_HI);
+    Memory::Write32(outPtr, GAME_TITLE_ID_HI);
     Memory::Write32(outPtr + 4, CurrentTitleIdLo());
     return 0;
 }
-#if 0  // SPM: ESP_GetTitleId: name not in SPM
-PPC_NATIVE_OVERRIDE(8000100c, ESP_GetTitleId_stub, int32_t, (uint32_t outPtr), (outPtr));
-#endif
 
 // 0x801D6640 -> ESP_GetDataDir(titleHi, titleLo, outPathPtr)
 // Gets the NAND data directory path for a title.
@@ -121,6 +112,3 @@ extern "C" int32_t ESP_GetDataDir_stub(uint32_t titleHi, uint32_t titleLo, uint3
     Memory::Write8(dst, 0); // null terminator
     return 0;
 }
-#if 0  // SCOOBY: ESP_GetDataDir: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001010, ESP_GetDataDir_stub, int32_t, (uint32_t titleHi, uint32_t titleLo, uint32_t outPathPtr), (titleHi, titleLo, outPathPtr));
-#endif

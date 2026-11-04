@@ -1,10 +1,10 @@
 ﻿using System.Buffers.Binary;
 using System.Text;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // A GameCube disc image (.iso/.gcm or .ciso): unencrypted, so it is read straight from the container and extracted to
-// the layout the game reads (sys/ and files/). Same output as projects/scooby tooling (gcextract.py).
+// the layout the game reads (sys/ and files/).
 sealed class GcDisc : IDisposable
 {
     public const string WantedId = "GIHE78";
@@ -93,7 +93,7 @@ sealed class GcDisc : IDisposable
 
     public void Dispose() => disc.Dispose();
 
-    // ---- containers (from the Super Paper Mario launcher's WiiDisc) ----
+    // ---- containers ----
     abstract class Container : IDisposable
     {
         protected readonly FileStream File;

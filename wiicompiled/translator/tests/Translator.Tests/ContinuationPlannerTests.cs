@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Linq;
 using Translator.Core.Disassembly;
 using Translator.Core.Mods;
-using Translator.Core.Mods.Mkwii;
 using Translator.Core.Parsing.Kamek;
 using Xunit;
 
@@ -48,12 +47,12 @@ public class ContinuationPlannerTests
         var manifest = new BaseManifest(
             "test",
             1,
-            "RMCP01",
+            "TEST01",
             "P",
             "",
             0,
             [
-                new BaseSectionMetadata(".text", "StaticR.rel", 0x807EFFF0u, 0x807F0100u, true, false, "base_text.bin", 0)
+                new BaseSectionMetadata(".text", "module.rel", 0x807EFFF0u, 0x807F0100u, true, false, "base_text.bin", 0)
             ],
             [
                 new BaseFunctionRangeMetadata(0x807EFFE0u, 0x807F0100u, "func_807EFFE0", ".text", 0, "test", ["Executable"])
@@ -83,51 +82,6 @@ public class ContinuationPlannerTests
         var result = ContinuationPlanner.AddModuleTailJumpContinuations(plan, manifest, moduleBase, moduleImage);
 
         Assert.Empty(result.Entries);
-    }
-
-    [Fact]
-    public void AddRetroWfcExecutableHookContinuationsAddsInternalBaseTarget()
-    {
-        var manifest = new BaseManifest(
-            "test",
-            1,
-            "RMCP01",
-            "P",
-            "",
-            0,
-            [
-                new BaseSectionMetadata(".text", "main.dol", 0x800F164Cu, 0x800F1BC8u, true, false, "base_text.bin", 0)
-            ],
-            [
-                new BaseFunctionRangeMetadata(0x800F164Cu, 0x800F1BC8u, "func_800F164C", ".text", 0, "test", ["Executable"])
-            ],
-            "ranges.json");
-        var hook = new RetroWfcExecutableHookPlan(
-            5,
-            "executableHookWithContinuation",
-            "branchCtr",
-            0x800F164Cu,
-            4,
-            0x800F164Cu,
-            0x800F1BC8u,
-            ".text",
-            ["support.hostnameRewrite.gethostbyname"],
-            "overlayHookPatch",
-            0x8179E1A4u,
-            "support.hostnameRewrite.gethostbyname",
-            "moduleFunction",
-            null,
-            0x800F165Cu);
-
-        var plan = ContinuationPlanner.Build(EmptyChunk(), manifest, 0x81200000u);
-        var result = ContinuationPlanner.AddRetroWfcExecutableHookContinuations(plan, manifest, [hook]);
-
-        var entry = Assert.Single(result.Entries);
-        Assert.Equal(0x800F165Cu, entry.Address);
-        Assert.Equal(0x800F164Cu, entry.ContainingFunctionStart);
-        Assert.Equal(0x800F1BC8u, entry.ContainingFunctionEnd);
-        Assert.Equal(0x800F164Cu, entry.SourceCommandAddress);
-        Assert.Contains("Retro WFC executable hook continuation", entry.Reason);
     }
 
     [Fact]
@@ -194,12 +148,12 @@ public class ContinuationPlannerTests
         new(
             "test",
             1,
-            "RMCP01",
+            "TEST01",
             "P",
             "",
             0,
             [
-                new BaseSectionMetadata(".text", "StaticR.rel", 0x807E2D18u, 0x807E30ACu, true, false, "base_text.bin", 0)
+                new BaseSectionMetadata(".text", "module.rel", 0x807E2D18u, 0x807E30ACu, true, false, "base_text.bin", 0)
             ],
             [
                 new BaseFunctionRangeMetadata(0x807E2D18u, 0x807E30ACu, "func_807E2D18", ".text", 0, "test", ["Executable"])

@@ -36,7 +36,7 @@
 #endif
 
 namespace GuestFlat {
-#if !defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
+#if !defined(RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE)
 bool g_requiresCheckedAccess = false;
 #endif
 namespace {
@@ -53,7 +53,7 @@ constexpr size_t kHostPageSize = 0x1000;
 
 // Only hosts that can expose a page larger than 4 KiB need to discover their
 // size at runtime; see RequiresCheckedAccess() in guest_flat_memory.h.
-#if !defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
+#if !defined(RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE)
 size_t HostPageSize()
 {
     const long size = sysconf(_SC_PAGESIZE);
@@ -366,7 +366,7 @@ void ApplyExecutableProtectionLocked() {
     auto& protectedPages = ExecutableProtectedPages();
     for (const auto& range : ExecutableRanges()) {
         // Only pages fully inside the range are protected: edge pages often share a page with data
-        // (MKW's THP buffers do), so guarding them would fault legitimate stores; their writes still go through the checked path.
+        // (game buffers do), so guarding them would fault legitimate stores; their writes still go through the checked path.
         const uint64_t first = RoundUp(range.start, kHostPageSize);
         const uint64_t last = static_cast<uint64_t>(range.end) & ~(kHostPageSize - 1u);
         if (last <= first) continue;
@@ -510,7 +510,7 @@ bool IsActive() {
 void Initialize(const std::vector<RegionRequest>& regions) {
     std::lock_guard<std::mutex> lock(StateMutex());
 
-#if !defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
+#if !defined(RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE)
     g_requiresCheckedAccess = HostPageSize() > kGuestPageSize;
 #endif
 

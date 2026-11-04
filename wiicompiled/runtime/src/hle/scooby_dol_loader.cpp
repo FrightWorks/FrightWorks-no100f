@@ -1,7 +1,7 @@
 // Night of 100 Frights: the game's code and data sections come from the player's own disc, never from this exe.
 //
 // The translation was built from the disc's sys/main.dol. This checks the player's copy against the SHA-256 the build
-// pinned (scooby_logic_dol_sha256.inc, written by tools/build-no100f.ps1) and copies its sections into guest memory.
+// pinned (scooby_dol_sha256.inc, written by tools/build-no100f.ps1) and copies its sections into guest memory.
 // It replaces the translator's embedded data_sections_init.cpp.
 #include "memory.h"
 #include "no100f_game_state.h"
@@ -21,7 +21,7 @@
 
 namespace {
 
-#include "scooby_logic_dol_sha256.inc"  // kLogicDolSha256: hex SHA-256 of the main.dol the build translated
+#include "scooby_dol_sha256.inc"  // kDolSha256: hex SHA-256 of the main.dol the build translated
 
 namespace fs = std::filesystem;
 
@@ -55,7 +55,7 @@ extern "C" void InitializeDataSections() {
     if (disc.empty() || !f)
         Fail("No game disc is set up. Choose your Scooby-Doo! Night of 100 Frights (USA, GameCube) disc image in the launcher.");
     const std::vector<uint8_t> dol(std::istreambuf_iterator<char>(f), {});
-    if (dol.size() < 0x100 || Sha256Hex(dol) != kLogicDolSha256)
+    if (dol.size() < 0x100 || Sha256Hex(dol) != kDolSha256)
         Fail("This disc is not the copy this build expects (Scooby-Doo! Night of 100 Frights, USA, GameCube, GIHE78 "
              "revision 1). Set up a clean dump of that disc.");
     for (int k = 0; k < 18; ++k) {
@@ -64,6 +64,6 @@ extern "C" void InitializeDataSections() {
         std::memcpy(Memory::GetPointer(addr, size), &dol[off], size);
     }
     no100f_game_state::g_diagnosticLayoutVerified =
-        std::string_view(kLogicDolSha256) == "141d562a97f9d6a8794e164611a5da45f9c50b9d89049687f051b7af12e37434";
+        std::string_view(kDolSha256) == "141d562a97f9d6a8794e164611a5da45f9c50b9d89049687f051b7af12e37434";
     RT_LOG(RT_TAG_RUNTIME) << "[disc] loaded game code and data from " << RuntimeConfigFile::PathToUtf8(path) << std::endl;
 }

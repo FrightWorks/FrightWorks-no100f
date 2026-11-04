@@ -23,19 +23,10 @@ inline void InvokeIndirectCpu(uint32_t target, CpuContext* ctx);
 // Some game-facing runtime options alter arguments at well-defined ABI
 // boundaries. Keep this independent of the dispatch mechanism: generated
 // static calls deliberately bypass InvokeDirectCpu for performance.
-// (used for the path mask filtering in ScnRenderer::createPath: depth of
-// field is always removed, bloom when the user disabled it)
+// No option needs it in this game.
 inline void ApplyRuntimeCallOptions(uint32_t target, CpuContext* ctx) {
-#if 0  // NSMBW: MKW-only. 0x8023BD38 was Mario Kart's ScnRenderer::createPath; in NSMBW that
-       // address is an unrelated function, so rewriting its r4 would corrupt it.
-    if (target == 0x8023BD38u) {
-        // ScnRenderer::createPath receives the post-processing path mask in r4.
-        ctx->gpr[4] = RuntimeGameGraphicsOptions::FilterScnRendererPathMask(ctx->gpr[4]);
-    }
-#else
     (void)target;
     (void)ctx;
-#endif
 }
 
 // Persistent per-thread CPU context used across translated function calls.
@@ -278,10 +269,10 @@ struct KnownTranslatedCpuCall {
 };
 
 // Translator-emitted trait specializations, one macro shared by every generated shard.
-// `addr` is the 8-digit hex entry point, `winner` the resolved symbol (mods/Retro Rewind can
+// `addr` is the 8-digit hex entry point, `winner` the resolved symbol (mods can
 // publish their own name). A specialization only exists for a single statically bound winner,
 // so overridable/dynamically-dispatchable are hardcoded here rather than passed in.
-#define MKW_TRANSLATED_TRAIT(addr, winner, nonvolatile_fpr_write_mask)                    \
+#define RECOMP_TRANSLATED_TRAIT(addr, winner, nonvolatile_fpr_write_mask)                    \
     extern "C" void winner(CpuContext* ctx);                                              \
     template <>                                                                           \
     struct KnownTranslatedCpuCall<0x##addr##u> {                                          \
@@ -357,7 +348,7 @@ public:
     // generated-table binary search alongside it pushed the whole function past
     // the inliner's budget and out-of-lined the probe itself, which is the part
     // every bctrl executes.
-    static MKW_PPC_FORCE_INLINE const RawDispatchRecord* FindRawByAddressPtr(uint32_t address) {
+    static RECOMP_PPC_FORCE_INLINE const RawDispatchRecord* FindRawByAddressPtr(uint32_t address) {
         if (!lookupPublished_.load(std::memory_order_acquire)) {
             return nullptr;
         }
@@ -377,7 +368,7 @@ public:
 private:
     // Memo miss: resolve against the header-inline generated table first; only dynamically
     // registered records or a not-yet-published table fall through to the slow path.
-    static MKW_PPC_NO_INLINE MKW_PPC_COLD const RawDispatchRecord* FindRawByAddressPtrMiss(
+    static RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD const RawDispatchRecord* FindRawByAddressPtrMiss(
         uint32_t address, IndirectRawDispatchMemoEntry& cached) {
         const RawDispatchRecord* record = nullptr;
         if (const auto* table =
@@ -424,7 +415,7 @@ public:
     }
 };
 
-MKW_PPC_FORCE_INLINE bool TryDispatchResolvedCpuTarget(const TranslatedFunctionInfo* info, CpuContext* cpu) {
+RECOMP_PPC_FORCE_INLINE bool TryDispatchResolvedCpuTarget(const TranslatedFunctionInfo* info, CpuContext* cpu) {
     if (!info || !info->rawCpuInvoker) {
         return false;
     }
@@ -784,17 +775,17 @@ public:
     }
 };
 
-#define MKW_DETAIL_CAT(a, b) a##b
-#define MKW_DETAIL_MAKE_UNIQUE(a, b) MKW_DETAIL_CAT(a, b)
+#define RECOMP_DETAIL_CAT(a, b) a##b
+#define RECOMP_DETAIL_MAKE_UNIQUE(a, b) RECOMP_DETAIL_CAT(a, b)
 
 // Three hand-written registration macros. Generated code never registers per function; every
 // translated function reaches the registry via the bulk BulkTranslatedFunctionRecord tables
 // in the translator's *_registration TUs.
 #define REGISTER_TRANSLATED_FUNCTION(address, fn) \
-    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_trampoline_, __COUNTER__)(address, #fn, fn, FunctionKind::BaseTranslated, false, kPpcAllNonvolatileFprMask, 0, 0, nullptr, KnownTranslatedCpuCall<address>::kMustRemainDynamicallyDispatchable)
+    static AbiTrampoline<decltype(fn)> RECOMP_DETAIL_MAKE_UNIQUE(_abi_trampoline_, __COUNTER__)(address, #fn, fn, FunctionKind::BaseTranslated, false, kPpcAllNonvolatileFprMask, 0, 0, nullptr, KnownTranslatedCpuCall<address>::kMustRemainDynamicallyDispatchable)
 
 #define REGISTER_NATIVE_FUNCTION(address, fn) \
-    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_, __COUNTER__)(address, #fn, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)
+    static AbiTrampoline<decltype(fn)> RECOMP_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_, __COUNTER__)(address, #fn, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)
 
 #define REGISTER_NATIVE_FUNCTION_AS(address, fn, pretty_name) \
-    static AbiTrampoline<decltype(fn)> MKW_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_named_, __COUNTER__)(address, pretty_name, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)
+    static AbiTrampoline<decltype(fn)> RECOMP_DETAIL_MAKE_UNIQUE(_abi_native_trampoline_named_, __COUNTER__)(address, pretty_name, fn, FunctionKind::Native, false, kPpcAllNonvolatileFprMask, 0, 0, &AbiRawCpuThunk<&fn>::Invoke)

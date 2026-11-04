@@ -5,7 +5,7 @@
 # for uncommitted changes, a short hash of `git diff HEAD` (two builds with different edits get different IDs).
 # A build of a clean checkout at the tag v<version> is a release: its ID is just the version.
 set(version "0.0.0")
-file(READ "${REPO}/launcher/ScoobyReMasked.Launcher.csproj" csproj)
+file(READ "${REPO}/launcher/FrightWorks.Launcher.csproj" csproj)
 if(csproj MATCHES "<Version>([^<]+)</Version>")
     set(version "${CMAKE_MATCH_1}")
 endif()

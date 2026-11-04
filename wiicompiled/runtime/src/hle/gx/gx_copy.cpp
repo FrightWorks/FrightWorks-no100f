@@ -151,7 +151,7 @@ extern "C" void GX__CopyTex_8016fd74(uint32_t da, uint32_t c) {
     const uint16_t rawSrcTop = g_texCopyState.srcTop;
     const uint16_t rawSrcWidth = g_texCopyState.srcWidth;
     const uint16_t rawSrcHeight = g_texCopyState.srcHeight;
-    { static int n = 0; if (n++ < 40) RT_LOGF(RT_TAG_GX, "[spmcopy] tex copy src %u,%u %ux%u -> 0x%08X clear=%u\n", rawSrcLeft, rawSrcTop, rawSrcWidth, rawSrcHeight, da, c); }
+    { static int n = 0; if (n++ < 40) RT_LOGF(RT_TAG_GX, "[gxcopy] tex copy src %u,%u %ux%u -> 0x%08X clear=%u\n", rawSrcLeft, rawSrcTop, rawSrcWidth, rawSrcHeight, da, c); }
 
     // Keep the source in guest EFB coordinates. Aurora maps it to the scaled
     // EFB exactly once, matching Dolphin's ConvertEFBRectangle path.
@@ -161,9 +161,9 @@ extern "C" void GX__CopyTex_8016fd74(uint32_t da, uint32_t c) {
     // later. RISK: copies above the probe threshold, or on the offscreen list, are not
     // auto-downloaded, so guest reads see stale RAM; call aurora_flush_efb_copies_to_ram if a
     // copy needs reading back.
-    // NSMBW_LOG_COPY_FRAMES: per frame, the texture copies made (size, format, source, destination),
+    // NO100F_LOG_COPY_FRAMES: per frame, the texture copies made (size, format, source, destination),
     // logged with the time whenever that list changes from the previous frame's.
-    if (static const bool logFrames = std::getenv("NSMBW_LOG_COPY_FRAMES") != nullptr; logFrames) {
+    if (static const bool logFrames = std::getenv("NO100F_LOG_COPY_FRAMES") != nullptr; logFrames) {
         static uint32_t frame = ~0u;
         static std::string current, previous;
         if (frame != static_cast<uint32_t>(g_gxFrameCount)) {
@@ -182,9 +182,9 @@ extern "C" void GX__CopyTex_8016fd74(uint32_t da, uint32_t c) {
                       g_texCopyState.dstFormat, rawSrcLeft, rawSrcTop, da);
         current += item;
     }
-    // NSMBW_LOG_COPIES: each distinct texture copy (destination size, format, source rectangle) once,
+    // NO100F_LOG_COPIES: each distinct texture copy (destination size, format, source rectangle) once,
     // with the guest code that asked for it (profiling).
-    if (static const bool logCopies = std::getenv("NSMBW_LOG_COPIES") != nullptr; logCopies) {
+    if (static const bool logCopies = std::getenv("NO100F_LOG_COPIES") != nullptr; logCopies) {
         static std::vector<uint64_t> seen;
         const uint64_t key = (uint64_t(g_texCopyState.dstWidth) << 48) | (uint64_t(g_texCopyState.dstHeight) << 32) |
                              (uint64_t(rawSrcWidth) << 16) | rawSrcHeight;
@@ -219,8 +219,8 @@ extern "C" void GX__CopyTex_8016fd74(uint32_t da, uint32_t c) {
 }
 PPC_NATIVE_OVERRIDE_VOID(800FEEB0, GX__CopyTex_8016fd74, (uint32_t da, uint32_t c), (da, c));
 
-// GXSetDispCopyYScale (SPM 0x8028DC64) / GXGetYScaleFactor (0x8028DA34): SPM calls these directly
-// (NSMBW's EGG inlined them). Translated, they read the SDK's own copy state, which the native copy
+// GXSetDispCopyYScale / GXGetYScaleFactor: the game calls these directly.
+// Translated, they read the SDK's own copy state, which the native copy
 // hooks never fill, and programmed a bogus vertical XFB scale (every column smeared top to bottom).
 extern "C" uint32_t GX__SetDispCopyYScale_HLE(float vscale) { return GXSetDispCopyYScale(vscale); }
 PPC_NATIVE_OVERRIDE(800FE9C0, GX__SetDispCopyYScale_HLE, uint32_t, (float vscale), (vscale));

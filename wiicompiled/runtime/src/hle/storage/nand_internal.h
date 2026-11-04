@@ -41,10 +41,10 @@
 #include <unistd.h>
 #endif
 
-// NSMBW (SMNE01) title ID: 00010000-52385045 (tmd.bin). Mario Kart used 00010004-524D4350.
+// Fallback title ID, used before guest low memory holds a game code.
 namespace {
 constexpr uint32_t kNandTitleIdHi = 0x00010000;
-constexpr uint32_t kNandTitleIdLo = 0x52385045; // "SMNE" fallback
+constexpr uint32_t kNandTitleIdLo = 0x52385045; // fallback
 } // anonymous namespace
 
 // ============================================================================
@@ -89,7 +89,7 @@ void CloseFd(int32_t fd);
 // Path Translation
 // ============================================================================
 
-uint32_t CurrentMkwTitleIdLo();
+uint32_t CurrentGameTitleIdLo();
 std::string CurrentNandDataDir();
 const std::filesystem::path& GetNandBasePath();
 std::filesystem::path TranslateNandPath(const char* wiiPath);

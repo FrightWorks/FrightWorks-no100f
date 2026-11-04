@@ -8,7 +8,7 @@
 
 namespace NetworkHle {
 
-bool RetroRewindProfileActive();
+bool ModProductActive();
 
 static std::mutex g_mutex;
 static std::map<int32_t, DeviceKind> g_devices;
@@ -60,15 +60,15 @@ std::string Lower(std::string_view text) {
     return RuntimeHle::Lower(text);
 }
 
-bool RetroRewindProfileActive() {
-    return RuntimeProduct::IsRetroRewind();
+bool ModProductActive() {
+    return RuntimeProduct::IsModProduct();
 }
 
 bool StartsWith(std::string_view text, std::string_view prefix) {
     return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix) == 0;
 }
 
-// No host rewriting here: the Retro-WFC payload already redirects Nintendo
+// No host rewriting here: a mod's payload redirects Nintendo
 // hostnames at its own resolver hooks before the name reaches this HLE.
 
 std::vector<IoVector> ReadVectors(uint32_t vectorPtr, uint32_t count) {

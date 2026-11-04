@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <string>
 
-// NSMBW: the keyboard's sideways Wii Remote, one or two keys per control, changeable from the
+// The keyboard's sideways Wii Remote, one or two keys per control, changeable from the
 // game's settings window (Keybinds tab) and saved to Config.toml's [keyboard] table as SDL
 // scancode names ("jump = \"X,Space\"").
 namespace Keybinds {

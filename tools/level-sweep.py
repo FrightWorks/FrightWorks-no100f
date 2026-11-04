@@ -50,8 +50,8 @@ def run_level(w: Path, level: str, seconds: float, out: Path) -> dict:
     ini = re.sub(r"(?m)^ShowMenuOnBoot=1", "ShowMenuOnBoot=0", ini)
     (w / "UserData" / "mods" / "zz-sweep" / "files" / "sd2.ini").write_text(ini, encoding="latin-1")
     shutil.rmtree(w / "UserData" / "Saves", ignore_errors=True)
-    env = dict(os.environ, NSMBW_LOG_FPS="1", NO100F_NO_POPUP="1",  # crashes are logged, no popup window
-               NSMBW_INPUT_SCRIPT=",".join(f"{t}:A:200" for t in range(8000, int(seconds * 1000) - 6000, 4000)))
+    env = dict(os.environ, NO100F_LOG_FPS="1", NO100F_NO_POPUP="1",  # crashes are logged, no popup window
+               NO100F_INPUT_SCRIPT=",".join(f"{t}:A:200" for t in range(8000, int(seconds * 1000) - 6000, 4000)))
     log = out / "logs" / f"{level}.err.log"
     with open(log, "w", encoding="utf-8", errors="replace") as err:
         p = subprocess.Popen([str(w / EXE)], cwd=w, env=env, stdout=subprocess.DEVNULL, stderr=err)

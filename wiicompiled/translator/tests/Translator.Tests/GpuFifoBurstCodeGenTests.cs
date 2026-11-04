@@ -54,21 +54,21 @@ public class GpuFifoBurstCodeGenTests
         var code = Emit(Function("burst_mixed", stores.ToArray()));
 
         // 7 single bytes + 6 words = 31 bytes, one buffer, one call.
-        Assert.Contains("uint8_t mkw_fifo_burst_0[31];", code, StringComparison.Ordinal);
-        Assert.Contains("GX_HLE_FIFO_WriteBurst(mkw_fifo_burst_0, 31u);", code, StringComparison.Ordinal);
+        Assert.Contains("uint8_t recomp_fifo_burst_0[31];", code, StringComparison.Ordinal);
+        Assert.Contains("GX_HLE_FIFO_WriteBurst(recomp_fifo_burst_0, 31u);", code, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(code, "GX_HLE_FIFO_WriteBurst("));
         Assert.DoesNotContain("GX_HLE_FIFO_Write8(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("GX_HLE_FIFO_Write32(", code, StringComparison.Ordinal);
 
         // Byte 0 is the first 8-bit field; bytes 1..4 are the first word,
         // most-significant byte first.
-        Assert.Contains("mkw_fifo_burst_0[0] = static_cast<uint8_t>(r3);", code, StringComparison.Ordinal);
-        Assert.Contains("mkw_fifo_burst_0[1] = static_cast<uint8_t>((mkw_fifo_word >> 24));", code, StringComparison.Ordinal);
-        Assert.Contains("mkw_fifo_burst_0[2] = static_cast<uint8_t>((mkw_fifo_word >> 16));", code, StringComparison.Ordinal);
-        Assert.Contains("mkw_fifo_burst_0[3] = static_cast<uint8_t>((mkw_fifo_word >> 8));", code, StringComparison.Ordinal);
-        Assert.Contains("mkw_fifo_burst_0[4] = static_cast<uint8_t>(mkw_fifo_word);", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[0] = static_cast<uint8_t>(r3);", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[1] = static_cast<uint8_t>((recomp_fifo_word >> 24));", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[2] = static_cast<uint8_t>((recomp_fifo_word >> 16));", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[3] = static_cast<uint8_t>((recomp_fifo_word >> 8));", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[4] = static_cast<uint8_t>(recomp_fifo_word);", code, StringComparison.Ordinal);
         // ... and the run ends on the 13th store, at byte 30.
-        Assert.Contains("mkw_fifo_burst_0[30] = static_cast<uint8_t>(r3);", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[30] = static_cast<uint8_t>(r3);", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -81,9 +81,9 @@ public class GpuFifoBurstCodeGenTests
 
         var code = Emit(Function("burst_halfwords", stores));
 
-        Assert.Contains("uint8_t mkw_fifo_burst_0[8];", code, StringComparison.Ordinal);
-        Assert.Contains("mkw_fifo_burst_0[0] = static_cast<uint8_t>((mkw_fifo_word >> 8));", code, StringComparison.Ordinal);
-        Assert.Contains("mkw_fifo_burst_0[1] = static_cast<uint8_t>(mkw_fifo_word);", code, StringComparison.Ordinal);
+        Assert.Contains("uint8_t recomp_fifo_burst_0[8];", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[0] = static_cast<uint8_t>((recomp_fifo_word >> 8));", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_fifo_burst_0[1] = static_cast<uint8_t>(recomp_fifo_word);", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,9 +97,9 @@ public class GpuFifoBurstCodeGenTests
 
         var code = Emit(Function("burst_floats", stores));
 
-        Assert.Contains("uint8_t mkw_fifo_burst_0[16];", code, StringComparison.Ordinal);
+        Assert.Contains("uint8_t recomp_fifo_burst_0[16];", code, StringComparison.Ordinal);
         Assert.Contains("PpcBitCastToU32Inline(static_cast<float>(", code, StringComparison.Ordinal);
-        Assert.Contains("GX_HLE_FIFO_WriteBurst(mkw_fifo_burst_0, 16u);", code, StringComparison.Ordinal);
+        Assert.Contains("GX_HLE_FIFO_WriteBurst(recomp_fifo_burst_0, 16u);", code, StringComparison.Ordinal);
         Assert.DoesNotContain("GX_HLE_FIFO_WriteFloat(", code, StringComparison.Ordinal);
     }
 
@@ -116,7 +116,7 @@ public class GpuFifoBurstCodeGenTests
 
         var code = Emit(Function("burst_with_arithmetic", stores.ToArray()));
 
-        Assert.Contains("GX_HLE_FIFO_WriteBurst(mkw_fifo_burst_0, 16u);", code, StringComparison.Ordinal);
+        Assert.Contains("GX_HLE_FIFO_WriteBurst(recomp_fifo_burst_0, 16u);", code, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(code, "GX_HLE_FIFO_WriteBurst("));
     }
 
@@ -131,7 +131,7 @@ public class GpuFifoBurstCodeGenTests
         var code = Emit(Function("short_run", stores));
 
         Assert.DoesNotContain("GX_HLE_FIFO_WriteBurst", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("mkw_fifo_burst_0", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("recomp_fifo_burst_0", code, StringComparison.Ordinal);
         Assert.Equal(3, CountOccurrences(code, "GX_HLE_FIFO_Write32("));
     }
 
@@ -149,8 +149,8 @@ public class GpuFifoBurstCodeGenTests
         var code = Emit(Function("split_by_store", instructions.ToArray()));
 
         Assert.Equal(2, CountOccurrences(code, "GX_HLE_FIFO_WriteBurst("));
-        Assert.Contains("GX_HLE_FIFO_WriteBurst(mkw_fifo_burst_0, 16u);", code, StringComparison.Ordinal);
-        Assert.Contains("GX_HLE_FIFO_WriteBurst(mkw_fifo_burst_1, 16u);", code, StringComparison.Ordinal);
+        Assert.Contains("GX_HLE_FIFO_WriteBurst(recomp_fifo_burst_0, 16u);", code, StringComparison.Ordinal);
+        Assert.Contains("GX_HLE_FIFO_WriteBurst(recomp_fifo_burst_1, 16u);", code, StringComparison.Ordinal);
     }
 
     [Fact]

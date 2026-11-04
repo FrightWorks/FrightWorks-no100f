@@ -552,9 +552,6 @@ extern "C" void OSLockMutex_HLE_801a7ee4(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-#if 0  // SCOOBY: OSLockMutex: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013D0, OSLockMutex_HLE_801a7ee4, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void OSUnlockMutex_HLE_801a7fc0(CpuContext* ctx)
 {
@@ -600,7 +597,4 @@ extern "C" void OSUnlockMutex_HLE_801a7fc0(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-#if 0  // SCOOBY: OSUnlockMutex: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013D4, OSUnlockMutex_HLE_801a7fc0, (CpuContext* ctx), (ctx));
-#endif
 

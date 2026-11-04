@@ -7,6 +7,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\launcher\ScoobyReMasked.Launcher.csproj" />
+    <ProjectReference Include="..\..\launcher\FrightWorks.Launcher.csproj" />
   </ItemGroup>
 </Project>

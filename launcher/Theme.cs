@@ -4,7 +4,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Colours, the display font and the themed controls of the launcher (night purples, lime and cream, as on the signs).
 static class Theme
@@ -27,7 +27,7 @@ static class Theme
     public static Font BodyBold => new("Segoe UI", 10.5f, FontStyle.Bold);
     public static Font Heading => new("Segoe UI Semibold", 13f);
 
-    public static Stream? Resource(string name) => typeof(Theme).Assembly.GetManifestResourceStream("ScoobyReMasked." + name);
+    public static Stream? Resource(string name) => typeof(Theme).Assembly.GetManifestResourceStream("FrightWorks." + name);
 
     public static byte[] ReadAll(Stream s) { using var m = new MemoryStream(); s.CopyTo(m); return m.ToArray(); }
 
