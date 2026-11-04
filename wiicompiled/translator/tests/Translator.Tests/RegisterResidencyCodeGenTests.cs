@@ -83,7 +83,7 @@ public class RegisterResidencyCodeGenTests
 
     private static string FunctionBody(string code, string name)
     {
-        var declaration = $"extern \"C\" void {name}(CpuContext* MKW_RESTRICT ctx)";
+        var declaration = $"extern \"C\" void {name}(CpuContext* RECOMP_RESTRICT ctx)";
         var start = code.IndexOf(declaration, StringComparison.Ordinal);
         Assert.True(start >= 0, $"missing definition of {name}");
         var open = code.IndexOf('{', start);

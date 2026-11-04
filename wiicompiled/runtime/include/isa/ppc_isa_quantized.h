@@ -262,11 +262,11 @@ inline void PpcWritePairPsqInline(uint32_t addr, T first, T second)
 // The flat reservation makes every 32-bit guest address a host address; a pending-deferred
 // (EFB) page is PAGE_NOACCESS so the load faults through the vectored handler instead of
 // reading stale bytes, and unmapped pages commit on demand, same as MemoryInline::Flat* loads.
-MKW_PPC_FORCE_INLINE const uint8_t* PpcTryGetPsqReadableHostInline(uint32_t addr)
+RECOMP_PPC_FORCE_INLINE const uint8_t* PpcTryGetPsqReadableHostInline(uint32_t addr)
 {
     if (GuestFlat::RequiresCheckedAccess()) [[unlikely]]
         return nullptr;
-    return MKW_FLAT_GUEST_BASE + addr;
+    return RECOMP_FLAT_GUEST_BASE + addr;
 }
 
 // Same reduction for stores. Still refuses a 32-bit address wrap (one host access can't
@@ -274,7 +274,7 @@ MKW_PPC_FORCE_INLINE const uint8_t* PpcTryGetPsqReadableHostInline(uint32_t addr
 // stored value and a null result must preserve the cold GX FIFO dispatch path byte for byte.
 // The old 1 MiB page-cross refusal is gone since the whole 4 GiB is now contiguous; deferred,
 // executable, and unmapped pages still trap.
-MKW_PPC_FORCE_INLINE uint8_t* PpcTryGetPsqWritableHostInline(uint32_t addr)
+RECOMP_PPC_FORCE_INLINE uint8_t* PpcTryGetPsqWritableHostInline(uint32_t addr)
 {
     if (GuestFlat::RequiresCheckedAccess()) [[unlikely]]
         return nullptr;
@@ -283,7 +283,7 @@ MKW_PPC_FORCE_INLINE uint8_t* PpcTryGetPsqWritableHostInline(uint32_t addr)
     if (MemoryInline::FlatWriteNeedsPolicy(addr) ||
         MemoryInline::FlatWriteNeedsPolicy(addr + 7u)) [[unlikely]]
         return nullptr;
-    return MKW_FLAT_GUEST_BASE + addr;
+    return RECOMP_FLAT_GUEST_BASE + addr;
 }
 
 inline double PpcLoadPairPsqFloatFastInline(uint32_t addr)
@@ -399,7 +399,7 @@ inline uint16_t PpcQuantizePairPsqU8Scale61PackedInline(double value)
 // Preserve the complete memory/MMIO/executable-write behavior off the leaf
 // path. Keeping this out of line prevents those uncommon checks from being
 // replicated at every compile-time-known PSQ store.
-MKW_PPC_NO_INLINE inline void PpcStorePairPsqU8Scale61Fallback(
+RECOMP_PPC_NO_INLINE inline void PpcStorePairPsqU8Scale61Fallback(
     uint32_t addr, double value)
 {
     PPC_FPR fpr{};
@@ -414,7 +414,7 @@ MKW_PPC_NO_INLINE inline void PpcStorePairPsqU8Scale61Fallback(
 // is mapped, in range, debug-compatible, and cannot touch executable guest
 // code. Check that proof before doing any conversion work, then perform the
 // endian-aware native store directly. A zero entry takes the exact cold path.
-MKW_PPC_FORCE_INLINE void PpcStorePairPsqU8Scale61FastInline(
+RECOMP_PPC_FORCE_INLINE void PpcStorePairPsqU8Scale61FastInline(
     uint32_t addr, double value)
 {
     uint8_t* host = nullptr;
@@ -428,7 +428,7 @@ MKW_PPC_FORCE_INLINE void PpcStorePairPsqU8Scale61FastInline(
     BigEndian::Write16(host, packed);
 }
 
-MKW_PPC_FORCE_INLINE void PpcStorePairPsqU8Scale61ResolvedInline(
+RECOMP_PPC_FORCE_INLINE void PpcStorePairPsqU8Scale61ResolvedInline(
     uint8_t* resolvedHost, uint32_t offset, uint32_t addr, double value)
 {
     if (!resolvedHost)
@@ -785,7 +785,7 @@ extern "C" void PPC_PsqSt(uint32_t addr, double value, uint32_t w, uint32_t i);
 // out-of-line copy so PPC_PsqLInline's float fast path can be force-inlined at
 // guest call sites without spilling live registers around a call.
 template <uint32_t W, uint32_t I>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline double PPC_PsqLGeneric(uint32_t gqr, uint32_t addr)
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline double PPC_PsqLGeneric(uint32_t gqr, uint32_t addr)
 {
     static_assert(W <= 1u, "psq load W must be 0 or 1");
     static_assert(I < 8u, "psq load GQR index must be 0..7");
@@ -836,7 +836,7 @@ return PpcLoadSinglePsqQuantizedFastInline<int16_t>(addr, scale);
 // one compare and handled inline. Every other encoding, including the reserved
 // ones that must reach PPC_PsqL, tail-calls the cold generic body above.
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE double PPC_PsqLInline(CpuContext* cpu, uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLInline(CpuContext* cpu, uint32_t addr)
 {
     static_assert(W <= 1u, "psq load W must be 0 or 1");
     static_assert(I < 8u, "psq load GQR index must be 0..7");
@@ -868,7 +868,7 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLInline(CpuContext* cpu, uint32_t addr)
 }
 
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE double PPC_PsqLInline(uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLInline(uint32_t addr)
 {
     return PPC_PsqLInline<W, I>(TryGetCpuContext(), addr);
 }
@@ -878,7 +878,7 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLInline(uint32_t addr)
 // at every access, since pointer indirection otherwise forces a reload after every intervening
 // store. I is only consulted for reserved encodings that tail-call PPC_PsqL/PPC_PsqSt.
 template <uint32_t W, uint32_t I = 0u>
-MKW_PPC_FORCE_INLINE double PPC_PsqLGqrInline(uint32_t gqrValue, uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLGqrInline(uint32_t gqrValue, uint32_t addr)
 {
     static_assert(W <= 1u, "psq load W must be 0 or 1");
     static_assert(I < 8u, "psq load GQR index must be 0..7");
@@ -907,7 +907,7 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLGqrInline(uint32_t gqrValue, uint32_t addr)
 // every helper. The context is not read; the null check is retained so a broken
 // call site fails the same way the ctx->gqr[I] form does.
 template <uint32_t W, uint32_t I = 0u>
-MKW_PPC_FORCE_INLINE double PPC_PsqLGqrInline(CpuContext* cpu, uint32_t gqrValue, uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLGqrInline(CpuContext* cpu, uint32_t gqrValue, uint32_t addr)
 {
     if (!cpu) [[unlikely]]
     {
@@ -917,7 +917,7 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLGqrInline(CpuContext* cpu, uint32_t gqrValue
 }
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_FORCE_INLINE double PPC_PsqLKnownInline(CpuContext*, uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLKnownInline(CpuContext*, uint32_t addr)
 {
     static_assert(W <= 1u, "psq load W must be 0 or 1");
     static_assert(I < 8u, "psq load GQR index must be 0..7");
@@ -959,7 +959,7 @@ if constexpr (W == 0u) return PpcLoadPairPsqIntegerFastInline<int16_t>(addr, sca
 // wrapper's float path can be force-inlined at guest call sites without
 // spilling live registers around a call.
 template <uint32_t W, uint32_t I>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline double PPC_PsqLStackGeneric(uint32_t gqr, uint32_t addr)
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline double PPC_PsqLStackGeneric(uint32_t gqr, uint32_t addr)
 {
     static_assert(W <= 1u, "psq stack load W must be 0 or 1");
     static_assert(I < 8u, "psq stack load GQR index must be 0..7");
@@ -1010,7 +1010,7 @@ return PpcLoadSinglePsqQuantizedStackInline<int16_t>(addr, scale);
 // one compare and handled inline. Every other encoding, including the reserved
 // ones that must reach PPC_PsqL, tail-calls the cold generic body above.
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE double PPC_PsqLStackInline(CpuContext* cpu, uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLStackInline(CpuContext* cpu, uint32_t addr)
 {
     static_assert(W <= 1u, "psq stack load W must be 0 or 1");
     static_assert(I < 8u, "psq stack load GQR index must be 0..7");
@@ -1042,13 +1042,13 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLStackInline(CpuContext* cpu, uint32_t addr)
 }
 
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE double PPC_PsqLStackInline(uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLStackInline(uint32_t addr)
 {
     return PPC_PsqLStackInline<W, I>(TryGetCpuContext(), addr);
 }
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_FORCE_INLINE double PPC_PsqLKnownStackInline(CpuContext*, uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLKnownStackInline(CpuContext*, uint32_t addr)
 {
     static_assert(W <= 1u, "psq stack load W must be 0 or 1");
     static_assert(I < 8u, "psq stack load GQR index must be 0..7");
@@ -1088,7 +1088,7 @@ if constexpr (W == 0u) return PpcLoadPairPsqIntegerStackInline<int16_t>(addr, sc
 // Cold generic body for psq_st. See PPC_PsqLGeneric: the full switch stays out
 // of line so the float fast path in PPC_PsqStInline can be force-inlined.
 template <uint32_t W, uint32_t I>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline void PPC_PsqStGeneric(uint32_t gqr, uint32_t addr, double value)
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline void PPC_PsqStGeneric(uint32_t gqr, uint32_t addr, double value)
 {
     static_assert(W <= 1u, "psq store W must be 0 or 1");
     static_assert(I < 8u, "psq store GQR index must be 0..7");
@@ -1151,7 +1151,7 @@ PpcStoreSinglePsqQuantizedFastInline<int16_t>(addr, value, scale);
 // single compare and handled inline. Quantized encodings (including the U8
 // scale-61 pair case) and reserved encodings go to the cold generic body.
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE void PPC_PsqStInline(CpuContext* cpu, uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStInline(CpuContext* cpu, uint32_t addr, double value)
 {
     static_assert(W <= 1u, "psq store W must be 0 or 1");
     static_assert(I < 8u, "psq store GQR index must be 0..7");
@@ -1185,7 +1185,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStInline(CpuContext* cpu, uint32_t addr, double
 }
 
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE void PPC_PsqStInline(uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStInline(uint32_t addr, double value)
 {
     PPC_PsqStInline<W, I>(TryGetCpuContext(), addr, value);
 }
@@ -1193,7 +1193,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStInline(uint32_t addr, double value)
 // GQR-hoisting store entry points. See PPC_PsqLGqrInline above for why the GQR
 // value is passed in and what the template parameters still mean.
 template <uint32_t W, uint32_t I = 0u>
-MKW_PPC_FORCE_INLINE void PPC_PsqStGqrInline(uint32_t gqrValue, uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStGqrInline(uint32_t gqrValue, uint32_t addr, double value)
 {
     static_assert(W <= 1u, "psq store W must be 0 or 1");
     static_assert(I < 8u, "psq store GQR index must be 0..7");
@@ -1221,7 +1221,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStGqrInline(uint32_t gqrValue, uint32_t addr, d
 }
 
 template <uint32_t W, uint32_t I = 0u>
-MKW_PPC_FORCE_INLINE void PPC_PsqStGqrInline(CpuContext* cpu, uint32_t gqrValue, uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStGqrInline(CpuContext* cpu, uint32_t gqrValue, uint32_t addr, double value)
 {
     if (!cpu) [[unlikely]]
     {
@@ -1231,7 +1231,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStGqrInline(CpuContext* cpu, uint32_t gqrValue,
 }
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_FORCE_INLINE void PPC_PsqStKnownInline(CpuContext*, uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStKnownInline(CpuContext*, uint32_t addr, double value)
 {
     static_assert(W <= 1u, "psq store W must be 0 or 1");
     static_assert(I < 8u, "psq store GQR index must be 0..7");
@@ -1280,7 +1280,7 @@ if constexpr (W == 0u) PpcStorePairPsqQuantizedFastInline<int16_t>(addr, value, 
 // switch stays out of line so the float fast path in the hot wrapper below can
 // be force-inlined.
 template <uint32_t W, uint32_t I>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline void PPC_PsqStStackGeneric(uint32_t gqr, uint32_t addr, double value)
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline void PPC_PsqStStackGeneric(uint32_t gqr, uint32_t addr, double value)
 {
     static_assert(W <= 1u, "psq stack store W must be 0 or 1");
     static_assert(I < 8u, "psq stack store GQR index must be 0..7");
@@ -1343,7 +1343,7 @@ PpcStoreSinglePsqQuantizedStackInline<int16_t>(addr, value, scale);
 // single compare and handled inline. Quantized encodings (including the U8
 // scale-61 pair case) and reserved encodings go to the cold generic body.
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE void PPC_PsqStStackInline(CpuContext* cpu, uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStStackInline(CpuContext* cpu, uint32_t addr, double value)
 {
     static_assert(W <= 1u, "psq stack store W must be 0 or 1");
     static_assert(I < 8u, "psq stack store GQR index must be 0..7");
@@ -1377,7 +1377,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStStackInline(CpuContext* cpu, uint32_t addr, d
 }
 
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE void PPC_PsqStStackInline(uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStStackInline(uint32_t addr, double value)
 {
     PPC_PsqStStackInline<W, I>(TryGetCpuContext(), addr, value);
 }
@@ -1386,7 +1386,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStStackInline(uint32_t addr, double value)
 // ordinary native value. All architecturally valid quantization encodings are
 // handled directly; reserved encodings retain the generic helper's abort.
 template <uint32_t W, bool Stack>
-MKW_PPC_NO_INLINE MKW_PPC_COLD double PPC_PsqLStateFallback(uint32_t gqr, uint32_t addr);
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD double PPC_PsqLStateFallback(uint32_t gqr, uint32_t addr);
 
 extern template double PPC_PsqLStateFallback<0u, false>(uint32_t, uint32_t);
 extern template double PPC_PsqLStateFallback<0u, true>(uint32_t, uint32_t);
@@ -1397,7 +1397,7 @@ extern template double PPC_PsqLStateFallback<1u, true>(uint32_t, uint32_t);
 // unscaled encodings cover the SDK's common GQR setup; scaled and reserved
 // encodings retain the complete implementation in one cold outlined body.
 template <uint32_t W, uint32_t I, bool Stack>
-MKW_PPC_FORCE_INLINE double PPC_PsqLStateInline(uint32_t gqr, uint32_t addr)
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLStateInline(uint32_t gqr, uint32_t addr)
 {
     static_assert(W <= 1u && I < 8u);
     switch (gqr & 0xFFFF0000u)
@@ -1423,7 +1423,7 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLStateInline(uint32_t gqr, uint32_t addr)
 }
 
 template <uint32_t W, bool Stack>
-MKW_PPC_NO_INLINE MKW_PPC_COLD void PPC_PsqStStateFallback(uint32_t gqr, uint32_t addr, double value);
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD void PPC_PsqStStateFallback(uint32_t gqr, uint32_t addr, double value);
 
 extern template void PPC_PsqStStateFallback<0u, false>(uint32_t, uint32_t, double);
 extern template void PPC_PsqStStateFallback<0u, true>(uint32_t, uint32_t, double);
@@ -1431,7 +1431,7 @@ extern template void PPC_PsqStStateFallback<1u, false>(uint32_t, uint32_t, doubl
 extern template void PPC_PsqStStateFallback<1u, true>(uint32_t, uint32_t, double);
 
 template <uint32_t W, uint32_t I, bool Stack>
-MKW_PPC_FORCE_INLINE void PPC_PsqStStateInline(uint32_t gqr, uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStStateInline(uint32_t gqr, uint32_t addr, double value)
 {
     static_assert(W <= 1u && I < 8u);
     switch (gqr & 0xFFFFu)
@@ -1463,14 +1463,14 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStStateInline(uint32_t gqr, uint32_t addr, doub
 }
 
 template <uint32_t W>
-MKW_PPC_NO_INLINE MKW_PPC_COLD double PPC_PsqLResolvedStateFallback(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD double PPC_PsqLResolvedStateFallback(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr);
 
 extern template double PPC_PsqLResolvedStateFallback<0u>(uint32_t, uint8_t*, uint32_t, uint32_t);
 extern template double PPC_PsqLResolvedStateFallback<1u>(uint32_t, uint8_t*, uint32_t, uint32_t);
 
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE double PPC_PsqLResolvedStateInline(
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLResolvedStateInline(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr)
 {
     static_assert(W <= 1u && I < 8u);
@@ -1505,14 +1505,14 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLResolvedStateInline(
 }
 
 template <uint32_t W>
-MKW_PPC_NO_INLINE MKW_PPC_COLD void PPC_PsqStResolvedStateFallback(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD void PPC_PsqStResolvedStateFallback(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr, double value);
 
 extern template void PPC_PsqStResolvedStateFallback<0u>(uint32_t, uint8_t*, uint32_t, uint32_t, double);
 extern template void PPC_PsqStResolvedStateFallback<1u>(uint32_t, uint8_t*, uint32_t, uint32_t, double);
 
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE void PPC_PsqStResolvedStateInline(
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStResolvedStateInline(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr, double value)
 {
     static_assert(W <= 1u && I < 8u);
@@ -1553,7 +1553,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStResolvedStateInline(
 }
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_FORCE_INLINE void PPC_PsqStKnownStackInline(CpuContext*, uint32_t addr, double value)
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStKnownStackInline(CpuContext*, uint32_t addr, double value)
 {
     static_assert(W <= 1u, "psq stack store W must be 0 or 1");
     static_assert(I < 8u, "psq stack store GQR index must be 0..7");
@@ -1602,7 +1602,7 @@ if constexpr (W == 0u) PpcStorePairPsqQuantizedStackInline<int16_t>(addr, value,
 // resolvedHost; the null case keeps its original PPC_PsqL behaviour in the
 // force-inlined wrapper below.
 template <uint32_t W, uint32_t I>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline double PPC_PsqLResolvedGeneric(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline double PPC_PsqLResolvedGeneric(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr)
 {
     if constexpr (W == 0u) {
@@ -1632,7 +1632,7 @@ MKW_PPC_NO_INLINE MKW_PPC_COLD inline double PPC_PsqLResolvedGeneric(
 // that dominates translated code, so it is a compare and a direct byteswapped
 // access. Null host and every non-float encoding stay out of line.
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE double PPC_PsqLResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
                                                    uint32_t offset, uint32_t addr)
 {
     if (!resolvedHost) [[unlikely]] return PPC_PsqL(addr, W, I);
@@ -1650,14 +1650,14 @@ MKW_PPC_FORCE_INLINE double PPC_PsqLResolvedInline(CpuContext* cpu, uint8_t* res
 }
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline double PPC_PsqLKnownResolvedFallback(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline double PPC_PsqLKnownResolvedFallback(
     uint32_t addr)
 {
     return PPC_PsqLKnownInline<W, I, GQR>(nullptr, addr);
 }
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_FORCE_INLINE double PPC_PsqLKnownResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
+RECOMP_PPC_FORCE_INLINE double PPC_PsqLKnownResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
                                                         uint32_t offset, uint32_t addr)
 {
     if (!resolvedHost) [[unlikely]] return PPC_PsqLKnownResolvedFallback<W, I, GQR>(addr);
@@ -1700,7 +1700,7 @@ if constexpr (W == 0u) return PpcLoadPairPsqIntegerResolvedInline<int16_t>(resol
 // resolvedHost; the null case keeps its original PPC_PsqSt behaviour in the
 // force-inlined wrapper below.
 template <uint32_t W, uint32_t I>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline void PPC_PsqStResolvedGeneric(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline void PPC_PsqStResolvedGeneric(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr, double value)
 {
     if constexpr (W == 0u) {
@@ -1731,7 +1731,7 @@ MKW_PPC_NO_INLINE MKW_PPC_COLD inline void PPC_PsqStResolvedGeneric(
 // compare and a direct byteswapped store. Null host and every non-float
 // encoding (including U8 scale 61) stay out of line.
 template <uint32_t W, uint32_t I>
-MKW_PPC_FORCE_INLINE void PPC_PsqStResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
                                                   uint32_t offset, uint32_t addr, double value)
 {
     if (!resolvedHost) [[unlikely]] { PPC_PsqSt(addr, value, W, I); return; }
@@ -1753,7 +1753,7 @@ MKW_PPC_FORCE_INLINE void PPC_PsqStResolvedInline(CpuContext* cpu, uint8_t* reso
 }
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_NO_INLINE MKW_PPC_COLD inline void PPC_PsqStKnownResolvedFallback(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD inline void PPC_PsqStKnownResolvedFallback(
     uint32_t addr, double value)
 {
     PPC_PsqStKnownInline<W, I, GQR>(nullptr, addr, value);
@@ -1761,7 +1761,7 @@ MKW_PPC_NO_INLINE MKW_PPC_COLD inline void PPC_PsqStKnownResolvedFallback(
 
 
 template <uint32_t W, uint32_t I, uint32_t GQR>
-MKW_PPC_FORCE_INLINE void PPC_PsqStKnownResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
+RECOMP_PPC_FORCE_INLINE void PPC_PsqStKnownResolvedInline(CpuContext* cpu, uint8_t* resolvedHost,
                                                        uint32_t offset, uint32_t addr, double value)
 {
     if (!resolvedHost) [[unlikely]] { PPC_PsqStKnownResolvedFallback<W, I, GQR>(addr, value); return; }

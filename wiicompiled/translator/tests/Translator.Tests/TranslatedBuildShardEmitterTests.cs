@@ -111,13 +111,13 @@ public sealed class TranslatedBuildShardEmitterTests
             var shardText = File.ReadAllText(shard);
             Assert.Contains("#include \"abi_bridge.h\"", shardText);
             Assert.DoesNotContain("#include \"" + Path.GetFullPath(Path.Combine(functions, "func_80001000.cpp")).Replace('\\', '/'), shardText);
-            Assert.Contains("MKW_STATIC_TRANSLATED_CALL(0x80002000u, func_80002000, ctx);", shardText);
+            Assert.Contains("RECOMP_STATIC_TRANSLATED_CALL(0x80002000u, func_80002000, ctx);", shardText);
             Assert.Contains("ApplyRuntimeCallOptions(Target, Context)", shardText);
 
             var portableBaseTraits = Directory.GetFiles(Path.Combine(output, "base_portable_sensitive"), "*_traits.h").Single();
-            var portableRetroTraits = Directory.GetFiles(Path.Combine(output, "retro_portable_sensitive"), "*_traits.h").Single();
-            Assert.Contains("MKW_TRANSLATED_TRAIT(80002000, func_80002000,", File.ReadAllText(portableBaseTraits));
-            Assert.Contains("MKW_TRANSLATED_TRAIT(80002000, rr_80002000,", File.ReadAllText(portableRetroTraits));
+            var portableModTraits = Directory.GetFiles(Path.Combine(output, "mod_portable_sensitive"), "*_traits.h").Single();
+            Assert.Contains("RECOMP_TRANSLATED_TRAIT(80002000, func_80002000,", File.ReadAllText(portableBaseTraits));
+            Assert.Contains("RECOMP_TRANSLATED_TRAIT(80002000, rr_80002000,", File.ReadAllText(portableModTraits));
             var baseDispatch = Directory.GetFiles(Path.Combine(output, "base_dispatch"), "*.cpp").Single();
             var baseDispatchText = File.ReadAllText(baseDispatch);
             Assert.Contains("const StaticIndirectDispatchSegment kSegments[256]", baseDispatchText);
@@ -125,10 +125,10 @@ public sealed class TranslatedBuildShardEmitterTests
             Assert.Contains("{0x80002000u, &func_80002000, 0x00000000u, false}", baseDispatchText);
             Assert.Contains("{0x80003000u, &RuntimeOverride_80003000, 0xFFFFC000u, false}", baseDispatchText);
             Assert.DoesNotContain("0x80004000u", baseDispatchText);
-            var retroDispatch = Directory.GetFiles(Path.Combine(output, "retro_rewind_dispatch"), "*.cpp").Single();
-            var retroDispatchText = File.ReadAllText(retroDispatch);
-            Assert.Contains("{0x80002000u, &rr_80002000, 0x00004000u, false}", retroDispatchText);
-            Assert.DoesNotContain("{0x80002000u, &func_80002000", retroDispatchText);
+            var modDispatch = Directory.GetFiles(Path.Combine(output, "mod_product_dispatch"), "*.cpp").Single();
+            var modDispatchText = File.ReadAllText(modDispatch);
+            Assert.Contains("{0x80002000u, &rr_80002000, 0x00004000u, false}", modDispatchText);
+            Assert.DoesNotContain("{0x80002000u, &func_80002000", modDispatchText);
 
             // A function claimed by a native registration is excluded from the
             // translated graph entirely rather than emitted and then overridden.
@@ -241,14 +241,14 @@ public sealed class TranslatedBuildShardEmitterTests
                 Directory.GetFiles(Path.Combine(output, "base_common"), "*.cpp").Single());
             // Same shard, same winner in both profiles: call the definition in
             // this translation unit so the host optimizer can still inline it.
-            Assert.Contains("MKW_STATIC_TRANSLATED_CALL(0x80002000u, func_80002000, ctx);", commonShard);
+            Assert.Contains("RECOMP_STATIC_TRANSLATED_CALL(0x80002000u, func_80002000, ctx);", commonShard);
             // A nonvolatile-FPR writer keeps the generic dynamically guarded call.
             Assert.Contains("InvokeDirectCpu<0x80003000u>(ctx);", commonShard);
             var baseSpecific = Directory.GetFiles(Path.Combine(output, "base_portable_sensitive"), "*.cpp")
                 .Select(File.ReadAllText)
                 .Aggregate(string.Concat);
-            Assert.Contains("MKW_STATIC_TRANSLATED_CALL(0x80005000u, func_80005000, ctx);", baseSpecific);
-            Assert.Contains("MKW_STATIC_TRANSLATED_CALL(0x80002000u, func_80002000, ctx);", baseSpecific);
+            Assert.Contains("RECOMP_STATIC_TRANSLATED_CALL(0x80005000u, func_80005000, ctx);", baseSpecific);
+            Assert.Contains("RECOMP_STATIC_TRANSLATED_CALL(0x80002000u, func_80002000, ctx);", baseSpecific);
 
             // The lowering choice participates in shard identity, so a rebuild is
             // byte-identical and file identities are stable.

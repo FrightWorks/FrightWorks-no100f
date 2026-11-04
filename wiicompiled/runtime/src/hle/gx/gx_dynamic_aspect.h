@@ -10,7 +10,7 @@
 // FOV, so records can only widen horizontal FOV. Solving for k = surfaceAspect/(16:9): record
 // width = base*max(k,1), gScreenScaleY = max(1/k,1), giving Hor+ above 16:9 and Vert+ below it
 // without cropping either axis. Verified bit-exact against the reference Gecko patch at 2560x1080.
-namespace MkwDynamicAspect {
+namespace RecompDynamicAspect {
 
 inline constexpr float kPresentationAspect169 = 16.0f / 9.0f;
 inline constexpr float kEggFramebufferWidth = 608.0f;
@@ -65,4 +65,4 @@ inline float EggHorizontalScale(uint32_t recordWidth) noexcept {
     return kEggFramebufferWidth / static_cast<float>(std::max(recordWidth, 1u));
 }
 
-} // namespace MkwDynamicAspect
+} // namespace RecompDynamicAspect

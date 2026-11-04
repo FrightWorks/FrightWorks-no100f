@@ -108,8 +108,8 @@ static IosVector ReadIosVector(uint32_t vectorPtr, uint32_t index) {
     return ReadIoVector(vectorPtr, index);
 }
 
-static uint64_t CurrentMkwTitleId() {
-    uint32_t low = CurrentMkwTitleIdLo();
+static uint64_t CurrentGameTitleId() {
+    uint32_t low = CurrentGameTitleIdLo();
     return (static_cast<uint64_t>(kNandTitleIdHi) << 32) | low;
 }
 
@@ -857,7 +857,7 @@ int32_t ISFS_OpenLib_Initialize(CpuContext* ctx) {
     char titleId[32];
     std::snprintf(titleId, sizeof(titleId), "%08x", kNandTitleIdHi);
     char gameId[32];
-    std::snprintf(gameId, sizeof(gameId), "%08x", CurrentMkwTitleIdLo());
+    std::snprintf(gameId, sizeof(gameId), "%08x", CurrentGameTitleIdLo());
     CreateDirectoryPath(GetNandBasePath() / "title" / titleId / gameId / "data");
 
     if (!ctx) {
@@ -1059,7 +1059,7 @@ extern "C" int32_t NAND_IOS_Ioctlv_HLE(
                 if (out.size < 8 || out.address == 0 || !Memory::Contains(out.address, 8)) {
                     return ISFS_EINVAL;
                 }
-                const uint64_t titleId = CurrentMkwTitleId();
+                const uint64_t titleId = CurrentGameTitleId();
                 Memory::Write32(out.address, static_cast<uint32_t>(titleId >> 32));
                 Memory::Write32(out.address + 4u, static_cast<uint32_t>(titleId));
                 return ISFS_OK;
@@ -1078,7 +1078,7 @@ extern "C" int32_t NAND_IOS_Ioctlv_HLE(
                 const uint8_t* input = Memory::GetPointer(in.address, in.size);
                 WiiEsCrypto::EcSignature signature{};
                 WiiEsCrypto::EccCert cert{};
-                WiiEsCrypto::Sign(CurrentMkwTitleId(), input, in.size, signature, cert);
+                WiiEsCrypto::Sign(CurrentGameTitleId(), input, in.size, signature, cert);
                 if (!WriteGuestBytes(sigOut.address, sigOut.size, signature.data(), signature.size()) ||
                     !WriteGuestBytes(certOut.address, certOut.size, cert.data(), cert.size())) {
                     return ISFS_EINVAL;

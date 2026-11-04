@@ -105,7 +105,7 @@ struct RuntimeUserConfig {
     std::optional<std::string> savesDir;
     // The one canonical Retro Rewind installation, owned and updated by the frontend. Setup records
     // it here instead of copying the pack, so an asset-only update is visible on the next launch.
-    std::optional<std::string> retroRewindRoot;
+    std::optional<std::string> modInstallRoot;
     std::vector<std::string> overlayRoots;
     // Controller mappings use Wii/GameCube button names as keys and up to two
     // comma-separated SDL-style physical button names ("south", or
@@ -625,7 +625,7 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
     config.nandRoot = FindConfigValue<std::string>(document, "paths", "nand_root");
     config.dvdRoot = FindConfigValue<std::string>(document, "paths", "dvd_root");
     config.savesDir = FindConfigValue<std::string>(document, "paths", "saves_dir");
-    config.retroRewindRoot = FindConfigValue<std::string>(document, "paths", "retro_rewind_root");
+    config.modInstallRoot = FindConfigValue<std::string>(document, "paths", "retro_rewind_root");
     if (auto roots = FindConfigValue<std::vector<std::string>>(document, "paths", "overlay_roots")) {
         for (auto& root : *roots) {
             root = Trim(root);
@@ -1341,8 +1341,8 @@ inline bool SetDvdRoot(const std::filesystem::path& path) {
 }
 
 /// The canonical Retro Rewind installation the frontend owns, or "" when none is recorded.
-inline std::string RetroRewindRoot(std::string fallback = "") {
-    return Get().retroRewindRoot.value_or(std::move(fallback));
+inline std::string ModInstallRoot(std::string fallback = "") {
+    return Get().modInstallRoot.value_or(std::move(fallback));
 }
 
 inline bool DiscordPresenceEnabled(bool fallback = true) {
@@ -1417,8 +1417,8 @@ inline void LogLoadedConfig() {
             if (config.nandRoot) {
                 std::cout << " nand_root=" << *config.nandRoot;
             }
-            if (config.retroRewindRoot) {
-                std::cout << " retro_rewind_root=" << *config.retroRewindRoot;
+            if (config.modInstallRoot) {
+                std::cout << " retro_rewind_root=" << *config.modInstallRoot;
             }
         }
         std::cout << std::endl;

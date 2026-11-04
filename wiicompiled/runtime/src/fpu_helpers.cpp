@@ -44,7 +44,7 @@ extern "C" void PPC_Mtfsf(uint32_t fieldMask, double source) {
     if (fieldMask == 0xFFu) {
         cpu->fpscr = (cpu->fpscr & kFpscrReadOnlySummaryMask) |
                      (incoming & ~kFpscrReadOnlySummaryMask);
-        MkwApplyHostNiMode(cpu->fpscr);
+        RecompApplyHostNiMode(cpu->fpscr);
         return;
     }
 
@@ -64,7 +64,7 @@ extern "C" void PPC_Mtfsf(uint32_t fieldMask, double source) {
 
         cpu->fpscr = (cpu->fpscr & ~mask) | (incoming & mask);
     }
-    MkwApplyHostNiMode(cpu->fpscr);
+    RecompApplyHostNiMode(cpu->fpscr);
 }
 
 extern "C" void PPC_Mtfsb1(uint32_t bit) {
@@ -79,7 +79,7 @@ extern "C" void PPC_Mtfsb1(uint32_t bit) {
 
     const uint32_t shift = 31u - bit;
     cpu->fpscr |= (1u << shift);
-    MkwApplyHostNiMode(cpu->fpscr);
+    RecompApplyHostNiMode(cpu->fpscr);
 }
 
 extern "C" void PPC_Mtfsb0(uint32_t bit) {
@@ -89,7 +89,7 @@ extern "C" void PPC_Mtfsb0(uint32_t bit) {
 
     const uint32_t shift = 31u - bit;
     cpu->fpscr &= ~(1u << shift);
-    MkwApplyHostNiMode(cpu->fpscr);
+    RecompApplyHostNiMode(cpu->fpscr);
 }
 
 extern "C" void PPC_Mtfsfi(uint32_t field, uint32_t value) {
@@ -103,7 +103,7 @@ extern "C" void PPC_Mtfsfi(uint32_t field, uint32_t value) {
     }
 
     cpu->fpscr = (cpu->fpscr & ~mask) | ((value & 0xFu) << shift);
-    MkwApplyHostNiMode(cpu->fpscr);
+    RecompApplyHostNiMode(cpu->fpscr);
 }
 
 extern "C" double PPC_Mffs() {

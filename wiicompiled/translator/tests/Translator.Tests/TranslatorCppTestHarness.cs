@@ -35,9 +35,9 @@ internal static class TranslatorCppTestHarness
         args.Append("-fno-fast-math -ffp-contract=off ");
         if (!RuntimeHeadersDefineRestrictMacro(repoRoot))
         {
-            // Fallback for the window between an emitter change using MKW_RESTRICT and the runtime
+            // Fallback for the window between an emitter change using RECOMP_RESTRICT and the runtime
             // headers defining it. Stops firing once headers catch up, so it can't hide a real regression.
-            args.Append("-DMKW_RESTRICT=__restrict ");
+            args.Append("-DRECOMP_RESTRICT=__restrict ");
         }
         args.Append("-Wno-error=unused-but-set-variable ");
         args.Append(string.Join(' ', runtimeSources.Select(Quote))).Append(' ');
@@ -76,7 +76,7 @@ internal static class TranslatorCppTestHarness
 
         foreach (var header in Directory.EnumerateFiles(includeDirectory, "*.h", SearchOption.AllDirectories))
         {
-            if (File.ReadAllText(header).Contains("define MKW_RESTRICT", StringComparison.Ordinal))
+            if (File.ReadAllText(header).Contains("define RECOMP_RESTRICT", StringComparison.Ordinal))
             {
                 return true;
             }

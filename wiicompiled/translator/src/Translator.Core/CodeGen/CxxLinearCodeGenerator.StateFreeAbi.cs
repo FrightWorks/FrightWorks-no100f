@@ -19,7 +19,7 @@ public sealed partial class CxxLinearCodeGenerator
         private const RegexOptions Options = RegexOptions.CultureInvariant | RegexOptions.Compiled;
 
         public static readonly Regex DifferentialBlock = new(
-            @"(?s)\s*// MKW_STATE_FREE_DIFFERENTIAL_BEGIN.*?// MKW_STATE_FREE_DIFFERENTIAL_END\s*", Options);
+            @"(?s)\s*// RECOMP_STATE_FREE_DIFFERENTIAL_BEGIN.*?// RECOMP_STATE_FREE_DIFFERENTIAL_END\s*", Options);
 
         public static readonly Regex CtxGqrAccess = new(@"ctx->gqr\[(\d+)u?\]", Options);
 
@@ -144,7 +144,7 @@ public sealed partial class CxxLinearCodeGenerator
     // platform ABI avoids that until regions can be fused before host register allocation.
     private static string StateFreeCallingConvention(GuestAbiContract contract) => string.Empty;
 
-    private static string StateFreeResultType(uint address) => $"MkwStateFreeResult_{address:X8}";
+    private static string StateFreeResultType(uint address) => $"RecompStateFreeResult_{address:X8}";
 
     private static string StateFreeAvailabilityCondition(
         uint root,
@@ -171,7 +171,7 @@ public sealed partial class CxxLinearCodeGenerator
         // translation for any descendant even with compile-time-constant call traits. Every member must
         // resolve to the base body before skipping CpuContext dispatch, or the region silently drops a
         // Retro Rewind override and corrupts guest state.
-        return $"MkwStateFreeAbiEnabled(0x{root:X8}u) && " + string.Join(" && ", region.Select(static address =>
+        return $"RecompStateFreeAbiEnabled(0x{root:X8}u) && " + string.Join(" && ", region.Select(static address =>
             $"KnownTranslatedCpuCall<0x{address:X8}u>::kAvailable && " +
             $"!KnownTranslatedCpuCall<0x{address:X8}u>::kMustRemainDynamicallyDispatchable && " +
             $"IsBaseTranslatedCpuTargetActive<0x{address:X8}u>()"));
@@ -182,7 +182,7 @@ public sealed partial class CxxLinearCodeGenerator
         {
             0 => "void",
             1 => "uint64_t",
-            2 => "MkwStateFreeResult2",
+            2 => "RecompStateFreeResult2",
             _ => StateFreeResultType(address)
         };
 
@@ -190,8 +190,8 @@ public sealed partial class CxxLinearCodeGenerator
     {
         var outputCount = StateFreeOutputCount(contract);
         if (outputCount <= 2) return;
-        sb.AppendLine($"#ifndef MKW_STATE_FREE_RESULT_{address:X8}_DEFINED");
-        sb.AppendLine($"#define MKW_STATE_FREE_RESULT_{address:X8}_DEFINED 1");
+        sb.AppendLine($"#ifndef RECOMP_STATE_FREE_RESULT_{address:X8}_DEFINED");
+        sb.AppendLine($"#define RECOMP_STATE_FREE_RESULT_{address:X8}_DEFINED 1");
         sb.AppendLine($"struct {StateFreeResultType(address)} {{");
         for (var gpr = 0; gpr < 32; ++gpr)
             if ((contract.GprPossibleWriteMask & (1u << gpr)) != 0) sb.AppendLine($"    uint32_t r{gpr};");
@@ -482,7 +482,7 @@ public sealed partial class CxxLinearCodeGenerator
 
     private static string RemoveStateFreeDirectCallFallbacks(string body)
     {
-        const string prefix = "if (MkwStateFreeAbiEnabled(";
+        const string prefix = "if (RecompStateFreeAbiEnabled(";
         var search = 0;
         while ((search = body.IndexOf(prefix, search, StringComparison.Ordinal)) >= 0)
         {
@@ -766,7 +766,7 @@ public sealed partial class CxxLinearCodeGenerator
         var variant = new StringBuilder(body.Length + 512);
         variant.AppendLine();
         AppendStateFreeResultDeclaration(variant, entryPoint, contract);
-        var bodyAttribute = preferInline ? "MKW_PPC_ALWAYS_INLINE_BODY" : "MKW_PPC_NO_INLINE";
+        var bodyAttribute = preferInline ? "RECOMP_PPC_ALWAYS_INLINE_BODY" : "RECOMP_PPC_NO_INLINE";
         variant.AppendLine($"extern \"C\" {bodyAttribute} {StateFreeReturnType(entryPoint, contract)} {StateFreeCallingConvention(contract)}{stateFreeSymbol}({StateFreeParameterList(contract, includeNames: true)})");
         variant.AppendLine("{");
         variant.Append(body);

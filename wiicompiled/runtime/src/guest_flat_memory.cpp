@@ -36,7 +36,7 @@
 #endif
 
 namespace GuestFlat {
-#if !defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
+#if !defined(RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE)
 bool g_requiresCheckedAccess = false;
 #endif
 namespace {
@@ -53,7 +53,7 @@ constexpr size_t kHostPageSize = 0x1000;
 
 // Only hosts that can expose a page larger than 4 KiB need to discover their
 // size at runtime; see RequiresCheckedAccess() in guest_flat_memory.h.
-#if !defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
+#if !defined(RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE)
 size_t HostPageSize()
 {
     const long size = sysconf(_SC_PAGESIZE);
@@ -510,7 +510,7 @@ bool IsActive() {
 void Initialize(const std::vector<RegionRequest>& regions) {
     std::lock_guard<std::mutex> lock(StateMutex());
 
-#if !defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
+#if !defined(RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE)
     g_requiresCheckedAccess = HostPageSize() > kGuestPageSize;
 #endif
 

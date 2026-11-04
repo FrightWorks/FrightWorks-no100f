@@ -19,7 +19,7 @@ public sealed record TranslationSourceBundleEntry(
 /// <summary>Versioned deterministic source handoff between lowering and aggregate shard emission.</summary>
 public sealed class TranslationSourceBundle
 {
-    private static readonly byte[] Magic = "MKWSRC01"u8.ToArray();
+    private static readonly byte[] Magic = "RCMPSRC1"u8.ToArray();
     public const int FormatVersion = 1;
     private readonly IReadOnlyList<TranslationSourceBundleEntry> _entries;
     // A null value marks an address carried by more than one virtual path. Such an

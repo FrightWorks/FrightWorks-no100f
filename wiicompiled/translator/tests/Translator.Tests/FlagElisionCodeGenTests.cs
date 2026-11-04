@@ -650,8 +650,8 @@ public class FlagElisionCodeGenTests
 
         var code = Emit(function);
 
-        Assert.Contains("extern \"C\" void restrict_probe(CpuContext* MKW_RESTRICT ctx)", code, StringComparison.Ordinal);
-        Assert.Contains("extern \"C\" void func_80001000(CpuContext* MKW_RESTRICT ctx)", code, StringComparison.Ordinal);
+        Assert.Contains("extern \"C\" void restrict_probe(CpuContext* RECOMP_RESTRICT ctx)", code, StringComparison.Ordinal);
+        Assert.Contains("extern \"C\" void func_80001000(CpuContext* RECOMP_RESTRICT ctx)", code, StringComparison.Ordinal);
         // Top-level restrict is not part of the function type, so forward
         // declarations stay plain and still match.
         Assert.Contains("extern \"C\" void func_helper_target(CpuContext* ctx);", code, StringComparison.Ordinal);

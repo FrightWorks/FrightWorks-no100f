@@ -40,7 +40,7 @@ inline constexpr uintptr_t kFixedFlatGuestBase = 0x0000'0010'0000'0000ull;
 #error "guest_flat_memory.h has no fixed flat guest base chosen for this architecture"
 #endif
 
-#define MKW_FLAT_GUEST_BASE (reinterpret_cast<uint8_t*>(GuestFlat::kFixedFlatGuestBase))
+#define RECOMP_FLAT_GUEST_BASE (reinterpret_cast<uint8_t*>(GuestFlat::kFixedFlatGuestBase))
 
 enum class Backing {
     Owned,
@@ -74,10 +74,10 @@ bool IsActive();
 // not become a hot-path load. Only AArch64, where the page size is a kernel
 // configuration (4/16/64 KiB), has to probe it at runtime.
 #if defined(_WIN32) || defined(__x86_64__)
-#define MKW_GUEST_FLAT_FIXED_PAGE_SIZE 1
+#define RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE 1
 #endif
 
-#if defined(MKW_GUEST_FLAT_FIXED_PAGE_SIZE)
+#if defined(RECOMP_GUEST_FLAT_FIXED_PAGE_SIZE)
 inline constexpr bool RequiresCheckedAccess() noexcept { return false; }
 #else
 extern bool g_requiresCheckedAccess;

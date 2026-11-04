@@ -20,7 +20,7 @@ static uint32_t ReadWord(const unsigned char* bytes) {
 int main(int argc, char** argv) {
     try {
         // Feed real generator + SC ABI outputs to the upstream bot decoder.
-        // Usage: mkw_sc_serial_tests --timestamp-vectors <unix-seconds> ...
+        // Usage: recomp_sc_serial_tests --timestamp-vectors <unix-seconds> ...
         if (argc > 1 && std::string(argv[1]) == "--timestamp-vectors") {
             for (int i = 2; i < argc; ++i) {
                 const auto timestamp = std::stoll(argv[i]);
