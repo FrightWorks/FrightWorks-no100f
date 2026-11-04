@@ -80,12 +80,12 @@ if (-not $SkipTools) {
     Set-Status 'tools and dependencies ready'
 }
 
-# 2. Translate (.NET 8 runtime; the translator is already built)
+# 2. Translate (.NET 10 runtime; the translator is already built)
 if (-not $SkipTranslate) {
-    $dotnet = Get-Item (& (Join-Path $PSScriptRoot 'get-dotnet.ps1') | Select-Object -Last 1)  # portable .NET 8 SDK
+    $dotnet = Get-Item (& (Join-Path $PSScriptRoot 'get-dotnet.ps1') | Select-Object -Last 1)  # portable .NET 10 SDK
     $env:DOTNET_ROLL_FORWARD = 'Major'
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-    $translator = Join-Path $wc 'translator\src\Translator.Cli\bin\Release\net8.0\Translator.Cli.dll'
+    $translator = Join-Path $wc 'translator\src\Translator.Cli\bin\Release\net10.0\Translator.Cli.dll'
     if (-not (Test-Path -LiteralPath $translator)) {
         Invoke-Step 'translator-build' $dotnet.FullName @('build', (Join-Path $wc 'translator\src\Translator.Cli'), '-c', 'Release') $wc
     }

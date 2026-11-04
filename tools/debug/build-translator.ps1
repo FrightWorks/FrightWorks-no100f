@@ -3,7 +3,7 @@
 # wiicompiled\translator (e.g. upstream PR #23) run this, then build WITHOUT -SkipTranslate (a full translate).
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$dotnet = Get-Item (& (Join-Path $root 'tools\get-dotnet.ps1') | Select-Object -Last 1)   # portable .NET 8 SDK
+$dotnet = Get-Item (& (Join-Path $root 'tools\get-dotnet.ps1') | Select-Object -Last 1)   # portable .NET 10 SDK
 $env:DOTNET_ROLL_FORWARD = 'Major'; $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & $dotnet.FullName build (Join-Path $root 'wiicompiled\translator\src\Translator.Cli') -c Release --no-incremental *>&1 |
     Select-Object -Last 3

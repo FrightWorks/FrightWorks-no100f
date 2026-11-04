@@ -219,7 +219,7 @@ useful:
 - Remove test variables afterwards: `Remove-Item Env:NO100F_*, Env:AX_*, Env:NSMBW_*, Env:AUDIO_*, Env:BUTTON_ICONS -ErrorAction SilentlyContinue`.
 - **Launcher screenshots** without opening it: `& "launcher\publish\FrightWorks.exe" --shots <dir>`
   draws every page to `<dir>\<Page>.png`.
-- **Isolated launcher layout regression** (Windows, .NET 8 SDK or newer):
+- **Isolated launcher layout regression** (Windows, .NET 10 SDK or newer):
   `dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout`.
   This builds the launcher and checks Settings/Display, Controls, Mods and Extras at normal, minimum and smaller
   window sizes, reopening and growing/shrinking layouts, long mod names, nested scrolling, dropdown widths, keyboard

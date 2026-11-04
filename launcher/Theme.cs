@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
@@ -151,9 +152,9 @@ static class Theme
 sealed class PlankButton : Button
 {
     bool hover, down;
-    public bool Primary { get; init; }
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public bool Primary { get; init; }
     bool selected;
-    public bool Selected { get => selected; set { selected = value; Invalidate(); } }  // a tab that is open
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public bool Selected { get => selected; set { selected = value; Invalidate(); } }  // a tab that is open
     readonly int seed;
 
     public PlankButton(string text, EventHandler onClick, bool primary = false)
@@ -294,8 +295,8 @@ sealed class ThemedCombo : ComboBox
 sealed class ThemedBar : Control
 {
     int value, maximum = 100;
-    public int Value { get => value; set { this.value = value; Invalidate(); } }
-    public int Maximum { get => maximum; set { maximum = Math.Max(1, value); Invalidate(); } }
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public int Value { get => value; set { this.value = value; Invalidate(); } }
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public int Maximum { get => maximum; set { maximum = Math.Max(1, value); Invalidate(); } }
 
     public ThemedBar()
     {

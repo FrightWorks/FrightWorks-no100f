@@ -83,7 +83,7 @@ if ($Installer) {
     if (-not $Feed) { $Feed = "$root\dist\installer" }
     New-Item -ItemType Directory -Force $Feed | Out-Null
     # The title names the shortcuts and the uninstall entry: no ':' (on NTFS "A: B.lnk" becomes a stream of a file "A").
-    # vpk (Velopack's packer), a .NET tool, pinned and kept in dist\.vpk; it runs on the .NET 8 SDK in toolchain\dotnet.
+    # vpk (Velopack's packer), a .NET tool, pinned and kept in dist\.vpk; it runs on the .NET 10 SDK in toolchain\dotnet.
     $dotnet = & "$PSScriptRoot\get-dotnet.ps1" | Select-Object -Last 1
     $env:DOTNET_ROOT = Split-Path $dotnet; $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; $env:DOTNET_NOLOGO = '1'
     $vpkDir = "$root\dist\.vpk\$VpkVersion"

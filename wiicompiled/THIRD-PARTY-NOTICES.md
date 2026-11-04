@@ -186,7 +186,7 @@ Not redistributed in any release artifact.
 | xUnit.net 2.4.2, xunit.runner.visualstudio 2.4.5 | Apache-2.0 |
 | Microsoft.NET.Test.Sdk 17.6.0 | MIT |
 | coverlet.collector 6.0.0 | MIT |
-| .NET 8 SDK | MIT |
+| .NET 10 SDK | MIT |
 
 ---
 

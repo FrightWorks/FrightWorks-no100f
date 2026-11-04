@@ -1,4 +1,4 @@
-# Builds the FrightWorks launcher (launcher\) with the portable .NET 8 SDK in toolchain\dotnet.
+# Builds the FrightWorks launcher (launcher\) with the portable .NET 10 SDK in toolchain\dotnet.
 # Output: launcher\publish\FrightWorks.exe (self-contained single file, no .NET install needed).
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot

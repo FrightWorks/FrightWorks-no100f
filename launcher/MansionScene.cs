@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -13,7 +14,7 @@ sealed class MansionScene : Control
 {
     public event Action<string>? SignClicked;
     string? active;
-    public string? ActiveSign { get => active; set { active = value; Invalidate(); } }
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] public string? ActiveSign { get => active; set { active = value; Invalidate(); } }
     string status = "";
     bool statusOk;
     public void SetStatus(string text, bool ok) { status = text; statusOk = ok; Invalidate(); }
