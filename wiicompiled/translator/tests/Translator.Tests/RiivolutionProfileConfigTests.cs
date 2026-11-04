@@ -21,7 +21,7 @@ public sealed class RiivolutionProfileConfigTests
                 "          choice: 1",
                 "        - option: Extra");
 
-            var profile = TranslationProjectConfig.Load(projectPath).Profiles["retro-rewind"];
+            var profile = TranslationProjectConfig.Load(projectPath).Profiles["example-mod"];
 
             Assert.NotNull(profile.Riivolution);
             Assert.Equal("xml/ExampleMod.xml", profile.Riivolution!.Xml);
@@ -43,7 +43,7 @@ public sealed class RiivolutionProfileConfigTests
         try
         {
             var projectPath = WriteProject(root);
-            Assert.Null(TranslationProjectConfig.Load(projectPath).Profiles["retro-rewind"].Riivolution);
+            Assert.Null(TranslationProjectConfig.Load(projectPath).Profiles["example-mod"].Riivolution);
         }
         finally
         {
@@ -65,7 +65,7 @@ public sealed class RiivolutionProfileConfigTests
                 "          choice: 1");
 
             var error = Assert.Throws<InvalidDataException>(() => TranslationProjectConfig.Load(projectPath));
-            Assert.Contains("profiles.retro-rewind.riivolution.xml", error.Message, StringComparison.Ordinal);
+            Assert.Contains("profiles.example-mod.riivolution.xml", error.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -116,7 +116,7 @@ public sealed class RiivolutionProfileConfigTests
             "    - 0x80001000",
             "",
             "profiles:",
-            "  retro-rewind:",
+            "  example-mod:",
             "    enabled: true",
         };
         lines.AddRange(profileLines);

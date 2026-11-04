@@ -89,8 +89,7 @@ private:
     std::vector<std::shared_ptr<Font>> m_fonts;
 };
 
-// The game's text, measured and drawn with one of its fonts ("mj2d00_MessageFont_32_I4.brfnt",
-// "mj2d01_marioFont_64_IA4.brfnt", "mj2d00_PictureFont_32_RGBA8.brfnt").
+// The game's text, measured and drawn with one of its fonts, named by file.
 std::shared_ptr<Font> LoadFont(const std::string& name);
 bool FontReady(const Font* font);
 float MeasureText(const Font& font, const std::u16string& text, float fontSize);
