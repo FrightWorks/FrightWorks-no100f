@@ -1054,7 +1054,7 @@ bool Network_HLE_ProcessCompletions(CpuContext* cpu) {
         g_lastSocketError = result;
         // Every blocking connect settles here exactly once, whether it was
         // resolved at submission, probed, timed out or aborted by a close - so
-        // this is the single place a failed WFC connect becomes visible.
+        // this is the single place a failed connect becomes visible.
         if (result != 0) {
             char peer[INET_ADDRSTRLEN]{};
             inet_ntop(AF_INET, &work.peerAddress.sin_addr, peer, sizeof(peer));

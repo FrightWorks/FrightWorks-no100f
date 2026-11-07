@@ -1639,8 +1639,8 @@ int RunTranslateModCore(string[] argsTail, string? outputDirectoryOverride)
     if (droppedReservedWrites > 0)
     {
         Console.WriteLine(
-            $"[translator] Dropped {droppedReservedWrites} Code.pul write(s) to the WFC codehandler probe word " +
-            "(0x80001920); the recomp keeps it clean so the WFC anticheat probe reads an untouched console.");
+            $"[translator] Dropped {droppedReservedWrites} Code.pul write(s) to the reserved word at 0x80001920; " +
+            "the recomp leaves that word unmodified.");
     }
 
     var baseManifestDirectory = Path.GetDirectoryName(Path.GetFullPath(baseManifestPath))!;

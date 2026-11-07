@@ -155,7 +155,7 @@ public static class KamekPatchPlanner
                     null,
                     null,
                     section.Name,
-                    "write to the WFC codehandler probe word is dropped; the recomp keeps 0x80001920 clean for the WFC anticheat probe",
+                    "write to the reserved word at 0x80001920 is dropped; the recomp leaves that word unmodified",
                     command.Arguments));
                 continue;
             }
