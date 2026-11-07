@@ -460,10 +460,10 @@ index 6d098c6..18664d0 100644
 +// std::once_flag for curtain LB/F8 capture window
  
  extern "C" {
- int g_spmDrawDump = 0;
-@@ -39,6 +45,48 @@ unsigned g_spmAudit[8] = {};  // render audit for tools/sweep-spm-maps.py
- unsigned g_spmGameClear = 0;  // the game's own EFB clear colour (0xRRGGBB) while sweeping
- int g_spmCullOff = 0;
+ int g_gxDrawDump = 0;
+@@ -39,6 +45,48 @@ unsigned g_gxAudit[8] = {};  // render audit
+ unsigned g_gxGameClear = 0;  // the game's own EFB clear colour (0xRRGGBB) while sweeping
+ int g_gxCullOff = 0;
  }
 +
 +// i001 curtain capture window: F8 / Xbox LB begin+end (settings_overlay), or env NO100F_CURTAIN_TRACE=1 continuous.
@@ -554,7 +554,7 @@ index 6d098c6..18664d0 100644
  
  // The per-draw geometry signature, matrix-usage mask and draw-identity hashes exist purely to feed frame interpolation (build_uniform consumes them only after its `frame_interpolation_fps() == 0` early-out).
  static inline bool frame_interpolation_identity_needed() noexcept {
-@@ -2361,7 +2420,8 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
+@@ -2361,7 +2420,8 @@ static void gx_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
    }
    float pm[16];
    std::memcpy(pm, &g_gxState.proj, sizeof(pm));
@@ -564,19 +564,19 @@ index 6d098c6..18664d0 100644
    float mv[12] = {};
    if (mi < MaxPnMtx) std::memcpy(mv, &g_gxState.pnMtx[mi].pos, sizeof(mv));
    const auto& vp = g_gxState.renderViewport;
-@@ -2554,7 +2614,8 @@ static void spm_bbox_accumulate(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
+@@ -2554,7 +2614,8 @@ static void gx_bbox_accumulate(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
      const bool cbe = (pd == GX_DIRECT) ? be : !arr.le;
      float pos[3] = {0.f, 0.f, 0.f};
-     for (u32 c = 0; c < comps; ++c) pos[c] = spm_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
+     for (u32 c = 0; c < comps; ++c) pos[c] = gx_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
 -    const u32 mi = (hasPnIdx ? v[0] : g_gxState.currentPnMtx) / 3u;
 +    // PNMTXIDX byte needs /3; currentPnMtx is already a slot index.
 +    const u32 mi = hasPnIdx ? (u32(v[0]) / 3u) : g_gxState.currentPnMtx;
      if (mi >= MaxPnMtx) continue;
      float m[12];
      std::memcpy(m, &g_gxState.pnMtx[mi].pos, sizeof(m));
-@@ -2613,7 +2674,8 @@ static bool spm_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
+@@ -2613,7 +2674,8 @@ static bool gx_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
      float pos[3] = {0.f, 0.f, 0.f};
-     for (u32 c = 0; c < comps; ++c) pos[c] = spm_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
+     for (u32 c = 0; c < comps; ++c) pos[c] = gx_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
      for (int c = 0; c < 3; ++c) { mb[c] = std::min(mb[c], pos[c]); mb[c + 3] = std::max(mb[c + 3], pos[c]); }
 -    const u32 mi = (hasPnIdx ? v[0] : g_gxState.currentPnMtx) / 3u;
 +    // PNMTXIDX byte needs /3; currentPnMtx is already a slot index.
@@ -587,7 +587,7 @@ index 6d098c6..18664d0 100644
 @@ -2674,7 +2736,9 @@ static bool gx_vertex_ndc(GXVtxFmt fmt, const u8* v, bool be, float out[3]) {
    const bool cbe = (pd == GX_DIRECT) ? be : !arr.le;
    float pos[3] = {0.f, 0.f, 0.f};
-   for (u32 c = 0; c < comps; ++c) pos[c] = spm_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
+   for (u32 c = 0; c < comps; ++c) pos[c] = gx_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
 -  const u32 mi = (g_gxState.vtxDesc[GX_VA_PNMTXIDX] == GX_DIRECT ? v[0] : g_gxState.currentPnMtx) / 3u;
 +  // PNMTXIDX byte needs /3; currentPnMtx is already a slot index.
 +  const u32 mi =
@@ -719,8 +719,8 @@ index 6d098c6..18664d0 100644
 +      u32 ok = 0;
 +      for (u32 i = 0; i < nSlots; ++i) {
 +        const u8* pp = static_cast<const u8*>(arr.data) + i * arr.stride;
-+        slots[i] = {spm_bbox_comp(pp, GX_F32, 0, true), spm_bbox_comp(pp + 4, GX_F32, 0, true),
-+                    spm_bbox_comp(pp + 8, GX_F32, 0, true)};
++        slots[i] = {gx_bbox_comp(pp, GX_F32, 0, true), gx_bbox_comp(pp + 4, GX_F32, 0, true),
++                    gx_bbox_comp(pp + 8, GX_F32, 0, true)};
 +        if (!std::isfinite(slots[i][0]) || !std::isfinite(slots[i][1]) || !std::isfinite(slots[i][2])) continue;
 +        for (int k = 0; k < 3; ++k) center[k] += slots[i][k];
 +        ++ok;
@@ -813,7 +813,7 @@ index 6d098c6..18664d0 100644
 +                       "pos_data=%p stride=%u size=%u le=%d curPn=%u hasPn=%d arr_n=%u med=%g spikeR=%g "
 +                       "spikes=%zu ref_spikes=%u minIdx=%u maxIdx=%u uniq=%zu usedHash=%08x chg=%d "
 +                       "maxd=%g at=(%g %g %g) center=(%g %g %g)\n",
-+                       frame, g_spmDrawIdx, (int)prim, (int)fmt, (unsigned)declaredVtxCount, (unsigned)vtxCount, vtxSize,
++                       frame, g_gxDrawIdx, (int)prim, (int)fmt, (unsigned)declaredVtxCount, (unsigned)vtxCount, vtxSize,
 +                       size, trimName, curtainTrimReason, (long long)curtainFirstOff, (long long)curtainEndOff,
 +                       (long long)curtainDeclaredEndOff, (long long)curtainLastBlockOff, curtainTailStart,
 +                       curtainPriorMaxIdx, arr.data, (unsigned)arr.stride, (unsigned)arr.size, (int)arr.le,
@@ -960,8 +960,8 @@ index 6d098c6..18664d0 100644
 +            char hex[40]{};
 +            for (int b = 0; b < 12; ++b) std::snprintf(hex + b * 2, 3, "%02x", pp[b]);
 +            const float be[3] = {slots[idx][0], slots[idx][1], slots[idx][2]};
-+            const float le[3] = {spm_bbox_comp(pp, GX_F32, 0, false), spm_bbox_comp(pp + 4, GX_F32, 0, false),
-+                                 spm_bbox_comp(pp + 8, GX_F32, 0, false)};
++            const float le[3] = {gx_bbox_comp(pp, GX_F32, 0, false), gx_bbox_comp(pp + 4, GX_F32, 0, false),
++                                 gx_bbox_comp(pp + 8, GX_F32, 0, false)};
 +            u32 h = 2166136261u;
 +            for (int b = 0; b < 12; ++b) {
 +              h ^= pp[b];
@@ -1025,9 +1025,9 @@ index 6d098c6..18664d0 100644
 +          maxIdx = std::max(maxIdx, idx);
 +          uniq.insert(idx);
 +          const u8* pp = static_cast<const u8*>(arr.data) + idx * arr.stride;
-+          const float x = spm_bbox_comp(pp, GX_F32, 0, true);
-+          const float y = spm_bbox_comp(pp + 4, GX_F32, 0, true);
-+          const float z = spm_bbox_comp(pp + 8, GX_F32, 0, true);
++          const float x = gx_bbox_comp(pp, GX_F32, 0, true);
++          const float y = gx_bbox_comp(pp + 4, GX_F32, 0, true);
++          const float z = gx_bbox_comp(pp + 8, GX_F32, 0, true);
 +          if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
 +          umin[0] = std::min(umin[0], x);
 +          umin[1] = std::min(umin[1], y);
@@ -1102,9 +1102,9 @@ index 6d098c6..18664d0 100644
 +            pdHem == GX_INDEX8 ? ip[0] : (bigEndian ? u32((ip[0] << 8) | ip[1]) : u32(ip[0] | (ip[1] << 8)));
 +        if (idx >= nSlots) continue;
 +        const u8* pp = static_cast<const u8*>(arrHem.data) + idx * arrHem.stride;
-+        const float x = spm_bbox_comp(pp, GX_F32, 0, true);
-+        const float y = spm_bbox_comp(pp + 4, GX_F32, 0, true);
-+        const float z = spm_bbox_comp(pp + 8, GX_F32, 0, true);
++        const float x = gx_bbox_comp(pp, GX_F32, 0, true);
++        const float y = gx_bbox_comp(pp + 4, GX_F32, 0, true);
++        const float z = gx_bbox_comp(pp + 8, GX_F32, 0, true);
 +        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
 +        umin[0] = std::min(umin[0], x);
 +        umin[1] = std::min(umin[1], y);
@@ -1158,9 +1158,9 @@ index 6d098c6..18664d0 100644
 +            pdDeep == GX_INDEX8 ? ip[0] : (bigEndian ? u32((ip[0] << 8) | ip[1]) : u32(ip[0] | (ip[1] << 8)));
 +        if (idx >= nSlots) continue;
 +        const u8* pp = static_cast<const u8*>(arrDeep.data) + idx * arrDeep.stride;
-+        const float x = spm_bbox_comp(pp, GX_F32, 0, true);
-+        const float y = spm_bbox_comp(pp + 4, GX_F32, 0, true);
-+        const float z = spm_bbox_comp(pp + 8, GX_F32, 0, true);
++        const float x = gx_bbox_comp(pp, GX_F32, 0, true);
++        const float y = gx_bbox_comp(pp + 4, GX_F32, 0, true);
++        const float z = gx_bbox_comp(pp + 8, GX_F32, 0, true);
 +        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
 +        umin[0] = std::min(umin[0], x);
 +        umin[1] = std::min(umin[1], y);
@@ -1213,9 +1213,9 @@ index 6d098c6..18664d0 100644
 +        minIdx = std::min(minIdx, idx);
 +        maxIdx = std::max(maxIdx, idx);
 +        const u8* pp = static_cast<const u8*>(arrS.data) + idx * arrS.stride;
-+        const float x = spm_bbox_comp(pp, GX_F32, 0, true);
-+        const float y = spm_bbox_comp(pp + 4, GX_F32, 0, true);
-+        const float z = spm_bbox_comp(pp + 8, GX_F32, 0, true);
++        const float x = gx_bbox_comp(pp, GX_F32, 0, true);
++        const float y = gx_bbox_comp(pp + 4, GX_F32, 0, true);
++        const float z = gx_bbox_comp(pp + 8, GX_F32, 0, true);
 +        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) continue;
 +        umin[0] = std::min(umin[0], x);
 +        umin[1] = std::min(umin[1], y);
@@ -1256,7 +1256,7 @@ index 6d098c6..18664d0 100644
 +  // Early FIFO skips here only hit strips and left the triangle curtain batches drawing.
 +
    DrawData* mergeTarget = nullptr;
-   // NSMBW debugging: NSMBW_NO_MERGE turns draw merging off.
+   // Debugging: NO100F_NO_MERGE turns draw merging off.
    static const int noMergeMode = [] {
 @@ -3152,7 +3796,7 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
    handle_draw_unmerged(prim, fmt, vtxCount, vertRange,
@@ -1275,12 +1275,12 @@ index 6d098c6..18664d0 100644
 +                                 HashType geometrySignature, bool interpolationIdentityActive,
 +                                 const uint8_t* vtxBytes, u32 vtxStride, bool vtxBigEndian) {
    ZoneScoped;
-   if (g_spmDrawLimit != ~0u && g_spmDrawIdx++ >= g_spmDrawLimit) return;
-   // NO100F diagnostic (env NO100F_SKIP_DRAWS=a-b): skip draws a..b of every frame to bisect a bad draw (use NSMBW_NO_MERGE=1).
+   if (g_gxDrawLimit != ~0u && g_gxDrawIdx++ >= g_gxDrawLimit) return;
+   // NO100F diagnostic (env NO100F_SKIP_DRAWS=a-b): skip draws a..b of every frame to bisect a bad draw (use NO100F_NO_MERGE=1).
 @@ -3234,8 +3879,59 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
-   // SPM diagnostic (env SPM_FLAT_TEST): map-tile class (fmt0 strips, CMPR map0) drawn 1 = flat white, 2 = flat white over
+   // Diagnostic (env NO100F_FLAT_TEST): map-tile class (fmt0 strips, CMPR map0) drawn 1 = flat white, 2 = flat white over
    // everything (no depth), 3 = texture colour only, 4 = every draw flat white, 5 = every non-quad draw flat white (quads = backdrop/HUD), 6 = depth-tested quads white, 7 = 2 + culling off, 10 = 7 + fixed z -0.95. Shows whether missing walls/floors rasterize at all.
-   static const int flatTest = [] { const char* e = std::getenv("SPM_FLAT_TEST"); return e ? std::atoi(e) : 0; }();
+   static const int flatTest = [] { const char* e = std::getenv("NO100F_FLAT_TEST"); return e ? std::atoi(e) : 0; }();
 +  // Curtain ownership: NO100F_FLAT_POS_SIZES=12648,6540 paints those POS pools flat white (geometry kept).
 +  // Optional Play/curtain-flat-events.txt range a-b paints only those host events white.
 +  // Re-read env each draw so live A/B works (do not cache in a function-local static).
@@ -1360,9 +1360,9 @@ index 6d098c6..18664d0 100644
 +  const bool tipBearing = [&] {
 +    if (!posArr.data || posArr.stride != 12 || posArr.size < 12) return false;
 +    const auto* pp = static_cast<const u8*>(posArr.data);
-+    const float x = spm_bbox_comp(pp, GX_F32, 0, true);
-+    const float y = spm_bbox_comp(pp + 4, GX_F32, 0, true);
-+    const float z = spm_bbox_comp(pp + 8, GX_F32, 0, true);
++    const float x = gx_bbox_comp(pp, GX_F32, 0, true);
++    const float y = gx_bbox_comp(pp + 4, GX_F32, 0, true);
++    const float z = gx_bbox_comp(pp + 8, GX_F32, 0, true);
 +    return std::hypot(x + 2.2121f, y - 2.4375f, z + 53.4862f) < 0.08f;
 +  }();
 +  if (dropDegenIdx && tipBearing && (prim == GX_TRIANGLES || prim == GX_TRIANGLESTRIP) && vtxBytes && vtxStride &&
@@ -1378,9 +1378,9 @@ index 6d098c6..18664d0 100644
 +    };
 +    auto slotPos = [&](u32 idx, float out[3]) {
 +      const u8* pp = static_cast<const u8*>(posArr.data) + idx * posArr.stride;
-+      out[0] = spm_bbox_comp(pp, GX_F32, 0, true);
-+      out[1] = spm_bbox_comp(pp + 4, GX_F32, 0, true);
-+      out[2] = spm_bbox_comp(pp + 8, GX_F32, 0, true);
++      out[0] = gx_bbox_comp(pp, GX_F32, 0, true);
++      out[1] = gx_bbox_comp(pp + 4, GX_F32, 0, true);
++      out[2] = gx_bbox_comp(pp + 8, GX_F32, 0, true);
 +    };
 +    auto emitIfKeep = [&](u16 i0, u16 i1, u16 i2, u32& dropped) {
 +      const u32 ia = posIdxAt(i0), ib = posIdxAt(i1), ic = posIdxAt(i2);
@@ -1534,9 +1534,9 @@ index 6d098c6..18664d0 100644
 +        maxI = std::max(maxI, idx);
 +        if (seen.insert(idx).second) {
 +          const u8* pp = static_cast<const u8*>(posArrMeta.data) + idx * posArrMeta.stride;
-+          const float x = spm_bbox_comp(pp, GX_F32, 0, true);
-+          const float y = spm_bbox_comp(pp + 4, GX_F32, 0, true);
-+          const float z = spm_bbox_comp(pp + 8, GX_F32, 0, true);
++          const float x = gx_bbox_comp(pp, GX_F32, 0, true);
++          const float y = gx_bbox_comp(pp + 4, GX_F32, 0, true);
++          const float z = gx_bbox_comp(pp + 8, GX_F32, 0, true);
 +          umin[0] = std::min(umin[0], x);
 +          umin[1] = std::min(umin[1], y);
 +          umin[2] = std::min(umin[2], z);
@@ -1618,7 +1618,7 @@ index cf5d5bd..ce9a583 100644
 +++ b/wiicompiled/runtime/include/wii_remote_input.h
 @@ -97,6 +97,9 @@ void HideRemotesFromPad(PADStatus* statuses, uint32_t count);
  
- // Buttons NSMBW_INPUT_SCRIPT holds for GameCube pad 1 now; false without a script.
+ // Buttons NO100F_INPUT_SCRIPT holds for GameCube pad 1 now; false without a script.
  bool ScriptedPadButtons(uint16_t& buttons);
 +// Like ScriptedPadButtons, plus optional main-stick override (STICK_LEFT/RIGHT/UP/DOWN).
 +// stickSet is true when an active event drives the stick this frame.
@@ -1942,7 +1942,7 @@ index a675eb1..37cc9ef 100644
 --- a/wiicompiled/runtime/src/wii_remote_input.cpp
 +++ b/wiicompiled/runtime/src/wii_remote_input.cpp
 @@ -76,11 +76,15 @@ constexpr uint32_t kWpadLeft = 0x0001, kWpadRight = 0x0002, kWpadDown = 0x0004,
- // variable is set, channel 1 (and channels up to NSMBW_SCRIPT_REMOTES, default 1) report a connected
+ // variable is set, channel 1 (and channels up to NO100F_SCRIPT_REMOTES, default 1) report a connected
  // Wii Remote at rest. Buttons: A B ONE TWO PLUS MINUS HOME UP DOWN LEFT RIGHT (also 1 and 2); the
  // D-pad names are the remote's own, so held sideways RIGHT is screen up and DOWN is screen right.
 +// GameCube pad 1 also accepts STICK_LEFT/RIGHT/UP/DOWN (main stick full deflection).
@@ -1990,7 +1990,7 @@ index a675eb1..37cc9ef 100644
 @@ -933,17 +953,45 @@ const char* AccelCalibrationMessage() {
  }
  
- // GameCube games: NSMBW_INPUT_SCRIPT channel 1 drives pad 1 instead (A B, PLUS = START, ONE = X, TWO = Y,
+ // GameCube games: NO100F_INPUT_SCRIPT channel 1 drives pad 1 instead (A B, PLUS = START, ONE = X, TWO = Y,
 -// MINUS = Z, D-pad as named). Returns false while no script is set.
 -bool ScriptedPadButtons(uint16_t& buttons) {
 -    KpadSample sample;
