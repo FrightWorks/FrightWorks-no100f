@@ -32,7 +32,7 @@ public sealed record BaseTranslationModAwareness(
     /// </summary>
     IReadOnlyList<uint> TranslatedFunctionRanges)
 {
-    public const string CurrentFormat = "mkw-base-translation-mod-awareness";
+    public const string CurrentFormat = "recomp-base-translation-mod-awareness";
     public const int CurrentFormatVersion = 1;
 
     /// <summary>The file name this record is always written under, beside the output metadata.</summary>

@@ -94,7 +94,7 @@ public class BaseTranslationModAwarenessTests
         using var original = TemporaryPul(
             Absolute(KamekCommandId.BranchLink, 0x80005F40),
             Absolute(KamekCommandId.Write32, 0x80001920));
-        var path = Path.Combine(Path.GetTempPath(), $"mkwc-awareness-{Guid.NewGuid():N}.json");
+        var path = Path.Combine(Path.GetTempPath(), $"recompc-awareness-{Guid.NewGuid():N}.json");
         try
         {
             BaseTranslationModAwarenessFile.WriteIfChangedAtomic(path, Awareness(original.Path));
@@ -155,7 +155,7 @@ public class BaseTranslationModAwarenessTests
     private sealed class TemporaryFile : IDisposable
     {
         public string Path { get; } =
-            System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"mkwc-pul-{Guid.NewGuid():N}.pul");
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"recompc-pul-{Guid.NewGuid():N}.pul");
 
         public void Dispose() => File.Delete(Path);
     }

@@ -62,7 +62,7 @@ public class CodeGenTests
         var code = new CxxLinearCodeGenerator().Emit(0x80001000, ssa, signature, types);
 
         var root = Translator.Core.Loading.ProjectPaths.FindRepositoryRoot();
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_codegen_tests");
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_codegen_tests");
         Directory.CreateDirectory(tempDir);
 
         var genPath = Path.Combine(tempDir, "generated.cpp");
@@ -689,7 +689,7 @@ public class CodeGenTests
         var code = new CxxLinearCodeGenerator().Emit(0x80002000, ssa, signature, types);
 
         var root = Translator.Core.Loading.ProjectPaths.FindRepositoryRoot();
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_codegen_float_tests");
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_codegen_float_tests");
         Directory.CreateDirectory(tempDir);
 
         var genPath = Path.Combine(tempDir, "generated_float.cpp");
@@ -784,7 +784,7 @@ public class CodeGenTests
         var code = new CxxLinearCodeGenerator().Emit(0x80003000, ssa, signature, types);
 
         var root = Translator.Core.Loading.ProjectPaths.FindRepositoryRoot();
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_codegen_int_tests");
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_codegen_int_tests");
         Directory.CreateDirectory(tempDir);
 
         var genPath = Path.Combine(tempDir, "generated_int.cpp");
@@ -1393,7 +1393,7 @@ public class CodeGenTests
     [Fact]
     public void RuntimeNativeAbiProvider_LoadsTypedVoidStubsButSkipsCpuContextStubs()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_native_abi_tests", Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_native_abi_tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         File.WriteAllText(
             Path.Combine(tempDir, "gx_test.cpp"),
@@ -1436,7 +1436,7 @@ public class CodeGenTests
         var code = new CxxLinearCodeGenerator().Emit(0x80007000, ssa, signature, types);
 
         Assert.Contains("extern \"C\" void func_helper_target(CpuContext* ctx);", code, StringComparison.Ordinal);
-        Assert.Contains("extern \"C\" void func_80007000(CpuContext* MKW_RESTRICT ctx)", code, StringComparison.Ordinal);
+        Assert.Contains("extern \"C\" void func_80007000(CpuContext* RECOMP_RESTRICT ctx)", code, StringComparison.Ordinal);
         Assert.Contains("named_call_target(ctx);", code, StringComparison.Ordinal);
     }
 

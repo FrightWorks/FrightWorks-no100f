@@ -110,8 +110,8 @@ public sealed class GqrConstantPropagationTests
         Assert.Contains("PPC_PsqLKnownInline<0u, 5u, 0x00070007u>", code, StringComparison.Ordinal);
         // The guard's dynamic arm is the generic helper, reading the GQR value
         // hoisted into the prologue rather than ctx->gqr[5] per access.
-        Assert.Contains("[[maybe_unused]] uint32_t mkw_gqr5 = ctx->gqr[5];", code, StringComparison.Ordinal);
-        Assert.Contains("PPC_PsqLGqrInline<0u, 5u>(ctx, mkw_gqr5,", code, StringComparison.Ordinal);
+        Assert.Contains("[[maybe_unused]] uint32_t recomp_gqr5 = ctx->gqr[5];", code, StringComparison.Ordinal);
+        Assert.Contains("PPC_PsqLGqrInline<0u, 5u>(ctx, recomp_gqr5,", code, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -89,7 +89,7 @@ void CloseFd(int32_t fd);
 // Path Translation
 // ============================================================================
 
-uint32_t CurrentMkwTitleIdLo();
+uint32_t CurrentGameTitleIdLo();
 std::string CurrentNandDataDir();
 const std::filesystem::path& GetNandBasePath();
 std::filesystem::path TranslateNandPath(const char* wiiPath);

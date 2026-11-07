@@ -8,7 +8,7 @@ public sealed class GeneratedOutputPrunerTests
     [Fact]
     public void MetadataPruningRemovesStaleTranslatedBody()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mkw_prune_test", Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "recomp_prune_test", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
@@ -42,7 +42,7 @@ public sealed class GeneratedOutputPrunerTests
     [Fact]
     public void MetadataPruningRefusesPathOutsideOutputRoot()
     {
-        var parent = Path.Combine(Path.GetTempPath(), "mkw_prune_test", Guid.NewGuid().ToString("N"));
+        var parent = Path.Combine(Path.GetTempPath(), "recomp_prune_test", Guid.NewGuid().ToString("N"));
         var root = Path.Combine(parent, "generated");
         Directory.CreateDirectory(root);
         var outside = Path.Combine(parent, "outside.cpp");

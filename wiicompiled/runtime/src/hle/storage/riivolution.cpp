@@ -138,10 +138,10 @@ std::vector<RuntimeRiivolution::Overlay> RiivoDiscoverRoots() {
     // The one canonical Retro Rewind installation setup recorded. Only the
     // Retro Rewind product applies it: overlaying the base product with the
     // pack's menu archives made "base game" boot as a half-Retro-Rewind build.
-    if (const auto retroRewindRoot =
-            RuntimeProduct::IsRetroRewind() ? RuntimeConfigFile::RetroRewindRoot() : std::string{};
-        !retroRewindRoot.empty()) {
-        RiivoAddRoot(overlays, RuntimeNandPath::ResolveConfiguredPath(retroRewindRoot),
+    if (const auto modInstallRoot =
+            RuntimeProduct::IsModProduct() ? RuntimeConfigFile::ModInstallRoot() : std::string{};
+        !modInstallRoot.empty()) {
+        RiivoAddRoot(overlays, RuntimeNandPath::ResolveConfiguredPath(modInstallRoot),
                      "canonical Retro Rewind installation");
     }
 

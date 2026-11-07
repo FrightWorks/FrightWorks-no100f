@@ -19,15 +19,15 @@ extern "C" {
 
 namespace MemoryInline {
 #if defined(_WIN32)
-#define MKW_MEMORY_FORCE_INLINE __forceinline
-#define MKW_MEMORY_NO_INLINE __declspec(noinline)
+#define RECOMP_MEMORY_FORCE_INLINE __forceinline
+#define RECOMP_MEMORY_NO_INLINE __declspec(noinline)
 #else
 // See runtime/include/isa/ppc_isa_config.h for why non-Windows Clang needs the GNU-attribute
 // spellings instead of the MS-extension keywords.
-#define MKW_MEMORY_FORCE_INLINE __attribute__((always_inline)) inline
-#define MKW_MEMORY_NO_INLINE __attribute__((noinline))
+#define RECOMP_MEMORY_FORCE_INLINE __attribute__((always_inline)) inline
+#define RECOMP_MEMORY_NO_INLINE __attribute__((noinline))
 #endif
-#define MKW_MEMORY_COLD __attribute__((cold))
+#define RECOMP_MEMORY_COLD __attribute__((cold))
 inline constexpr uint32_t kPageShift = 20;
 inline constexpr uint32_t kPageSize = 1u << kPageShift;
 inline constexpr uint32_t kPageMask = kPageSize - 1u;
@@ -69,26 +69,26 @@ extern const SparseWritablePageTable* g_sparseWritablePageTables[kPageCount];
 // from "small but plain memory"; range resolution needs the explicit flag.
 extern uint8_t g_deferredReadCoveredPages[kPageCount];
 
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD uint8_t Read8Slow(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD uint16_t Read16Slow(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD uint32_t Read32Slow(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD uint64_t Read64Slow(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD float ReadFloat32Slow(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD double ReadFloat64Slow(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void Write8Slow(uint32_t addr, uint8_t val);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void Write16Slow(uint32_t addr, uint16_t val);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void Write32Slow(uint32_t addr, uint32_t val);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void Write64Slow(uint32_t addr, uint64_t val);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void WriteFloat32Slow(uint32_t addr, double val);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void WriteFloat64Slow(uint32_t addr, double val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD uint8_t Read8Slow(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD uint16_t Read16Slow(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD uint32_t Read32Slow(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD uint64_t Read64Slow(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD float ReadFloat32Slow(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD double ReadFloat64Slow(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void Write8Slow(uint32_t addr, uint8_t val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void Write16Slow(uint32_t addr, uint16_t val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void Write32Slow(uint32_t addr, uint32_t val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void Write64Slow(uint32_t addr, uint64_t val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void WriteFloat32Slow(uint32_t addr, double val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void WriteFloat64Slow(uint32_t addr, double val);
 template <typename T>
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD T ReadResolvedFallback(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD float ReadResolvedFallbackFloat32(uint32_t addr);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD double ReadResolvedFallbackFloat64(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD T ReadResolvedFallback(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD float ReadResolvedFallbackFloat32(uint32_t addr);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD double ReadResolvedFallbackFloat64(uint32_t addr);
 template <typename T>
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void WriteResolvedFallback(uint32_t addr, T value);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void WriteResolvedFallbackFloat32(uint32_t addr, double val);
-MKW_MEMORY_NO_INLINE MKW_MEMORY_COLD void WriteResolvedFallbackFloat64(uint32_t addr, double val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void WriteResolvedFallback(uint32_t addr, T value);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void WriteResolvedFallbackFloat32(uint32_t addr, double val);
+RECOMP_MEMORY_NO_INLINE RECOMP_MEMORY_COLD void WriteResolvedFallbackFloat64(uint32_t addr, double val);
 bool ResolveDeferredReads(uint32_t addr, size_t length);
 
 constexpr bool IsMmioAddress(uint32_t addr) {
@@ -102,14 +102,14 @@ constexpr bool IsGpuFifoAddress(uint32_t addr) {
 // Page protections can't cover this: an MMIO write must reach GX HLE with its value or be
 // reported, and a fault record can't carry the value, so this mask/compare sits in front of
 // every flat store instead.
-MKW_MEMORY_FORCE_INLINE bool FlatWriteNeedsPolicy(uint32_t address) {
+RECOMP_MEMORY_FORCE_INLINE bool FlatWriteNeedsPolicy(uint32_t address) {
     return (address & 0xFE000000u) == 0xCC000000u;  // 0xCC000000..0xCDFFFFFF
 }
 
 // Gekko stfs conversion is a bit-level narrowing operation.  In particular it
 // does not behave like a host double-to-float cast for values which were left
 // in double precision, and it has hardware-tested handling for tiny values.
-MKW_MEMORY_FORCE_INLINE uint32_t ConvertPpcDoubleToSingleBits(double value) {
+RECOMP_MEMORY_FORCE_INLINE uint32_t ConvertPpcDoubleToSingleBits(double value) {
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
     const uint32_t exponent = static_cast<uint32_t>((bits >> 52) & 0x7FFu);
@@ -137,7 +137,7 @@ MKW_MEMORY_FORCE_INLINE uint32_t ConvertPpcDoubleToSingleBits(double value) {
 // for normal numbers, but under the DAZ the runtime sets to model NI it zeroes denormals (and it quiets SNaNs):
 // Game code can copy 8-byte variants holding pointers through lfs/stfs, and a 0x8029xxxx stack pointer is
 // a negative single denormal, so it came back as 0x80000000. Zero/denormal/Inf/NaN take Dolphin's ConvertToDouble.
-MKW_MEMORY_FORCE_INLINE double PpcSingleBitsToDouble(uint32_t bits) {
+RECOMP_MEMORY_FORCE_INLINE double PpcSingleBitsToDouble(uint32_t bits) {
     const uint32_t exp = bits & 0x7F800000u;
     if (exp != 0 && exp != 0x7F800000u) [[likely]] {
         float value;
@@ -159,13 +159,13 @@ MKW_MEMORY_FORCE_INLINE double PpcSingleBitsToDouble(uint32_t bits) {
     return value;
 }
 
-MKW_MEMORY_FORCE_INLINE float PpcSingleBitsToFloat(uint32_t bits) {
+RECOMP_MEMORY_FORCE_INLINE float PpcSingleBitsToFloat(uint32_t bits) {
     float value = 0.0f;
     std::memcpy(&value, &bits, sizeof(value));
     return value;
 }
 
-MKW_MEMORY_FORCE_INLINE bool TryGetPointerFast(uint32_t address, size_t length, uint8_t*& pointer) {
+RECOMP_MEMORY_FORCE_INLINE bool TryGetPointerFast(uint32_t address, size_t length, uint8_t*& pointer) {
     const uint32_t page = address >> kPageShift;
     if (length <= 8) {
         const uintptr_t encodedBias = g_fullPageBias[page];
@@ -189,7 +189,7 @@ inline uint8_t* GetPointerFast(uint32_t address, size_t length) {
     return TryGetPointerFast(address, length, pointer) ? pointer : nullptr;
 }
 
-MKW_MEMORY_FORCE_INLINE bool TryGetWritablePointerFast(
+RECOMP_MEMORY_FORCE_INLINE bool TryGetWritablePointerFast(
     uint32_t address, size_t length, uint8_t*& pointer) {
     // The sparse-table hit below distinguishes itself from the small-mapping
     // hit through `pointer`, so the out-parameter must start null regardless
@@ -252,7 +252,7 @@ MKW_MEMORY_FORCE_INLINE bool TryGetWritablePointerFast(
 // Two checks stay inline: a wrapped guest address can't survive 64-bit `host + rangeOffset`, and an MMIO write's value isn't recoverable from a
 // fault record, so a write touching that window must resolve null and fall back to Memory::Write*. Checking both range endpoints is a complete
 // proof since length <= kPageSize (1 MiB) can't straddle the 32 MiB MMIO window.
-MKW_MEMORY_FORCE_INLINE uint8_t* ResolveRangeHost(uint32_t base, int32_t minOffset, uint32_t length,
+RECOMP_MEMORY_FORCE_INLINE uint8_t* ResolveRangeHost(uint32_t base, int32_t minOffset, uint32_t length,
                                                  bool needsRead, bool needsWrite) {
     (void)needsRead;
     const uint32_t guestStart = base + static_cast<uint32_t>(minOffset);
@@ -267,7 +267,7 @@ MKW_MEMORY_FORCE_INLINE uint8_t* ResolveRangeHost(uint32_t base, int32_t minOffs
     if (needsWrite &&
         (FlatWriteNeedsPolicy(guestStart) || FlatWriteNeedsPolicy(guestStart + (length - 1))))
         [[unlikely]] return nullptr;
-    return MKW_FLAT_GUEST_BASE + guestStart;
+    return RECOMP_FLAT_GUEST_BASE + guestStart;
 }
 
 // Guest-address byte order. Distinct from isa/big_endian.h, which is the
@@ -300,7 +300,7 @@ inline T MaybeByteSwap(T value) {
 }
 
 template <typename T>
-MKW_MEMORY_FORCE_INLINE bool ReadResolvedScalar(uint8_t* host, uint32_t rangeOffset, T& outValue) {
+RECOMP_MEMORY_FORCE_INLINE bool ReadResolvedScalar(uint8_t* host, uint32_t rangeOffset, T& outValue) {
     if (!host) return false;
     if constexpr (sizeof(T) == 1) {
         outValue = host[rangeOffset];
@@ -318,21 +318,21 @@ struct ResolvedLoadPair {
     bool valid = false;
 };
 
-MKW_MEMORY_FORCE_INLINE ResolvedLoadPair ReadResolvedPair16(
+RECOMP_MEMORY_FORCE_INLINE ResolvedLoadPair ReadResolvedPair16(
     uint8_t* host, uint32_t rangeOffset) {
     uint32_t packed = 0;
     if (!ReadResolvedScalar(host, rangeOffset, packed)) return {};
     return {packed >> 16, packed & 0xFFFFu, true};
 }
 
-MKW_MEMORY_FORCE_INLINE ResolvedLoadPair ReadResolvedPair32(uint8_t* host, uint32_t rangeOffset) {
+RECOMP_MEMORY_FORCE_INLINE ResolvedLoadPair ReadResolvedPair32(uint8_t* host, uint32_t rangeOffset) {
     uint64_t packed = 0;
     if (!ReadResolvedScalar(host, rangeOffset, packed)) return {};
     return {static_cast<uint32_t>(packed >> 32), static_cast<uint32_t>(packed), true};
 }
 
 template <typename Packed>
-MKW_MEMORY_FORCE_INLINE bool WriteResolvedPairFast(
+RECOMP_MEMORY_FORCE_INLINE bool WriteResolvedPairFast(
     uint8_t* host, uint32_t rangeOffset, Packed packed) {
     if (!host) return false;
     const Packed swapped = MaybeByteSwap(packed);
@@ -340,18 +340,18 @@ MKW_MEMORY_FORCE_INLINE bool WriteResolvedPairFast(
     return true;
 }
 
-MKW_MEMORY_FORCE_INLINE bool WriteResolvedPair16(
+RECOMP_MEMORY_FORCE_INLINE bool WriteResolvedPair16(
     uint8_t* host, uint32_t rangeOffset, uint32_t packed) {
     return WriteResolvedPairFast(host, rangeOffset, packed);
 }
 
-MKW_MEMORY_FORCE_INLINE bool WriteResolvedPair32(
+RECOMP_MEMORY_FORCE_INLINE bool WriteResolvedPair32(
     uint8_t* host, uint32_t rangeOffset, uint64_t packed) {
     return WriteResolvedPairFast(host, rangeOffset, packed);
 }
 
 template <typename T>
-MKW_MEMORY_FORCE_INLINE bool WriteResolvedScalar(uint8_t* host, uint32_t rangeOffset, T value) {
+RECOMP_MEMORY_FORCE_INLINE bool WriteResolvedScalar(uint8_t* host, uint32_t rangeOffset, T value) {
     if (!host) return false;
     if constexpr (sizeof(T) == 1) {
         host[rangeOffset] = static_cast<uint8_t>(value);
@@ -379,7 +379,7 @@ inline bool TryReadMappedScalar(uint32_t address, T& outValue) {
 }
 
 template <typename T>
-MKW_MEMORY_FORCE_INLINE bool TryReadGuestScalar(uint32_t address, T& outValue) {
+RECOMP_MEMORY_FORCE_INLINE bool TryReadGuestScalar(uint32_t address, T& outValue) {
     const uintptr_t encodedBias = g_fullReadablePageBias[address >> kPageShift];
     if (encodedBias == 0) [[unlikely]]
         return false;
@@ -395,7 +395,7 @@ MKW_MEMORY_FORCE_INLINE bool TryReadGuestScalar(uint32_t address, T& outValue) {
 }
 
 template <typename T>
-MKW_MEMORY_FORCE_INLINE bool TryWriteGuestScalar(uint32_t address, T value) {
+RECOMP_MEMORY_FORCE_INLINE bool TryWriteGuestScalar(uint32_t address, T value) {
     static_assert(sizeof(T) >= 1 && sizeof(T) <= kMaxFastScalarSize);
     // A mixed executable/data 1 MiB page zeroes the coarse writable bias even though most of
     // its 4 KiB sub-pages are plain data; MKW's THP buffers share such a page with .text, which
@@ -500,7 +500,7 @@ inline void WriteStackFloat64(uint32_t address, double value) {
 }
 
 template <typename T, typename SlowRead>
-MKW_MEMORY_FORCE_INLINE T ReadResolved(uint8_t* host, uint32_t rangeOffset, uint32_t address,
+RECOMP_MEMORY_FORCE_INLINE T ReadResolved(uint8_t* host, uint32_t rangeOffset, uint32_t address,
                       SlowRead slow) {
     T value = 0;
     if (ReadResolvedScalar(host, rangeOffset, value)) {
@@ -509,25 +509,25 @@ MKW_MEMORY_FORCE_INLINE T ReadResolved(uint8_t* host, uint32_t rangeOffset, uint
     [[unlikely]] return slow(address);
 }
 
-MKW_MEMORY_FORCE_INLINE uint8_t ReadResolved8(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint8_t>(r, o, a, ReadResolvedFallback<uint8_t>); }
-MKW_MEMORY_FORCE_INLINE uint16_t ReadResolved16(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint16_t>(r, o, a, ReadResolvedFallback<uint16_t>); }
-MKW_MEMORY_FORCE_INLINE uint32_t ReadResolved32(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint32_t>(r, o, a, ReadResolvedFallback<uint32_t>); }
+RECOMP_MEMORY_FORCE_INLINE uint8_t ReadResolved8(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint8_t>(r, o, a, ReadResolvedFallback<uint8_t>); }
+RECOMP_MEMORY_FORCE_INLINE uint16_t ReadResolved16(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint16_t>(r, o, a, ReadResolvedFallback<uint16_t>); }
+RECOMP_MEMORY_FORCE_INLINE uint32_t ReadResolved32(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint32_t>(r, o, a, ReadResolvedFallback<uint32_t>); }
 // Live via isa/ppc_isa_quantized.h (the psq resolved tier packs two lanes into
 // one 64-bit access); generated code never names it directly.
-MKW_MEMORY_FORCE_INLINE uint64_t ReadResolved64(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint64_t>(r, o, a, ReadResolvedFallback<uint64_t>); }
-MKW_MEMORY_FORCE_INLINE double ReadResolvedFloat32(uint8_t* r, uint32_t o, uint32_t a) {
+RECOMP_MEMORY_FORCE_INLINE uint64_t ReadResolved64(uint8_t* r, uint32_t o, uint32_t a) { return ReadResolved<uint64_t>(r, o, a, ReadResolvedFallback<uint64_t>); }
+RECOMP_MEMORY_FORCE_INLINE double ReadResolvedFloat32(uint8_t* r, uint32_t o, uint32_t a) {
     uint32_t bits = 0;
     if (!ReadResolvedScalar(r, o, bits)) [[unlikely]] return PpcSingleBitsToDouble(Memory::Read32(a));
     return PpcSingleBitsToDouble(bits);
 }
-MKW_MEMORY_FORCE_INLINE double ReadResolvedFloat64(uint8_t* r, uint32_t o, uint32_t a) {
+RECOMP_MEMORY_FORCE_INLINE double ReadResolvedFloat64(uint8_t* r, uint32_t o, uint32_t a) {
     uint64_t bits = 0;
     if (!ReadResolvedScalar(r, o, bits)) [[unlikely]] return ReadResolvedFallbackFloat64(a);
     double value; std::memcpy(&value, &bits, sizeof(value)); return value;
 }
 
 template <typename T, typename SlowWrite>
-MKW_MEMORY_FORCE_INLINE void WriteResolved(uint8_t* host, uint32_t rangeOffset, uint32_t address, T value,
+RECOMP_MEMORY_FORCE_INLINE void WriteResolved(uint8_t* host, uint32_t rangeOffset, uint32_t address, T value,
                           SlowWrite slow) {
     if (WriteResolvedScalar(host, rangeOffset, value)) {
         return;
@@ -535,17 +535,17 @@ MKW_MEMORY_FORCE_INLINE void WriteResolved(uint8_t* host, uint32_t rangeOffset, 
     [[unlikely]] slow(address, value);
 }
 
-MKW_MEMORY_FORCE_INLINE void WriteResolved8(uint8_t* r, uint32_t o, uint32_t a, uint8_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint8_t>); }
-MKW_MEMORY_FORCE_INLINE void WriteResolved16(uint8_t* r, uint32_t o, uint32_t a, uint16_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint16_t>); }
-MKW_MEMORY_FORCE_INLINE void WriteResolved32(uint8_t* r, uint32_t o, uint32_t a, uint32_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint32_t>); }
+RECOMP_MEMORY_FORCE_INLINE void WriteResolved8(uint8_t* r, uint32_t o, uint32_t a, uint8_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint8_t>); }
+RECOMP_MEMORY_FORCE_INLINE void WriteResolved16(uint8_t* r, uint32_t o, uint32_t a, uint16_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint16_t>); }
+RECOMP_MEMORY_FORCE_INLINE void WriteResolved32(uint8_t* r, uint32_t o, uint32_t a, uint32_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint32_t>); }
 // Live via isa/ppc_isa_quantized.h, as ReadResolved64 above.
-MKW_MEMORY_FORCE_INLINE void WriteResolved64(uint8_t* r, uint32_t o, uint32_t a, uint64_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint64_t>); }
-MKW_MEMORY_FORCE_INLINE void WriteResolvedFloat32(uint8_t* r, uint32_t o, uint32_t a, double v) {
+RECOMP_MEMORY_FORCE_INLINE void WriteResolved64(uint8_t* r, uint32_t o, uint32_t a, uint64_t v) { WriteResolved(r, o, a, v, WriteResolvedFallback<uint64_t>); }
+RECOMP_MEMORY_FORCE_INLINE void WriteResolvedFloat32(uint8_t* r, uint32_t o, uint32_t a, double v) {
     const uint32_t bits = ConvertPpcDoubleToSingleBits(v);
     if (WriteResolvedScalar(r, o, bits)) return;
     [[unlikely]] WriteResolvedFallbackFloat32(a, v);
 }
-MKW_MEMORY_FORCE_INLINE void WriteResolvedFloat64(uint8_t* r, uint32_t o, uint32_t a, double v) {
+RECOMP_MEMORY_FORCE_INLINE void WriteResolvedFloat64(uint8_t* r, uint32_t o, uint32_t a, double v) {
     uint64_t bits; std::memcpy(&bits, &v, sizeof(bits));
     if (WriteResolvedScalar(r, o, bits)) return;
     [[unlikely]] WriteResolvedFallbackFloat64(a, v);
@@ -564,36 +564,36 @@ MKW_MEMORY_FORCE_INLINE void WriteResolvedFloat64(uint8_t* r, uint32_t o, uint32
 // addresses it has proven are ordinary RAM.
 
 template <typename T>
-MKW_MEMORY_FORCE_INLINE T FlatLoad(uint32_t address) {
+RECOMP_MEMORY_FORCE_INLINE T FlatLoad(uint32_t address) {
     T value{};
-    std::memcpy(&value, MKW_FLAT_GUEST_BASE + address, sizeof(T));
+    std::memcpy(&value, RECOMP_FLAT_GUEST_BASE + address, sizeof(T));
     return MaybeByteSwap(value);
 }
 
 template <typename T>
-MKW_MEMORY_FORCE_INLINE void FlatStore(uint32_t address, T value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatStore(uint32_t address, T value) {
     const T swapped = MaybeByteSwap(value);
-    std::memcpy(MKW_FLAT_GUEST_BASE + address, &swapped, sizeof(T));
+    std::memcpy(RECOMP_FLAT_GUEST_BASE + address, &swapped, sizeof(T));
 }
 
-MKW_MEMORY_FORCE_INLINE uint8_t FlatRead8(uint32_t address) {
+RECOMP_MEMORY_FORCE_INLINE uint8_t FlatRead8(uint32_t address) {
     if (GuestFlat::RequiresCheckedAccess()) return Memory::Read8(address);
     return FlatLoad<uint8_t>(address);
 }
-MKW_MEMORY_FORCE_INLINE uint16_t FlatRead16(uint32_t address) {
+RECOMP_MEMORY_FORCE_INLINE uint16_t FlatRead16(uint32_t address) {
     if (GuestFlat::RequiresCheckedAccess()) return Memory::Read16(address);
     return FlatLoad<uint16_t>(address);
 }
-MKW_MEMORY_FORCE_INLINE uint32_t FlatRead32(uint32_t address) {
+RECOMP_MEMORY_FORCE_INLINE uint32_t FlatRead32(uint32_t address) {
     if (GuestFlat::RequiresCheckedAccess()) return Memory::Read32(address);
     return FlatLoad<uint32_t>(address);
 }
 
-MKW_MEMORY_FORCE_INLINE double FlatReadFloat32(uint32_t address) {
+RECOMP_MEMORY_FORCE_INLINE double FlatReadFloat32(uint32_t address) {
     return PpcSingleBitsToDouble(FlatRead32(address));
 }
 
-MKW_MEMORY_FORCE_INLINE double FlatReadFloat64(uint32_t address) {
+RECOMP_MEMORY_FORCE_INLINE double FlatReadFloat64(uint32_t address) {
     const uint64_t bits = GuestFlat::RequiresCheckedAccess()
         ? Memory::Read64(address) : FlatLoad<uint64_t>(address);
     double value = 0.0;
@@ -601,33 +601,33 @@ MKW_MEMORY_FORCE_INLINE double FlatReadFloat64(uint32_t address) {
     return value;
 }
 
-MKW_MEMORY_FORCE_INLINE void FlatWrite8(uint32_t address, uint8_t value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWrite8(uint32_t address, uint8_t value) {
     if (GuestFlat::RequiresCheckedAccess()) { Memory::Write8(address, value); return; }
     if (FlatWriteNeedsPolicy(address)) [[unlikely]] { Write8Slow(address, value); return; }
     FlatStore<uint8_t>(address, value);
 }
 
-MKW_MEMORY_FORCE_INLINE void FlatWrite16(uint32_t address, uint16_t value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWrite16(uint32_t address, uint16_t value) {
     if (GuestFlat::RequiresCheckedAccess()) { Memory::Write16(address, value); return; }
     if (FlatWriteNeedsPolicy(address)) [[unlikely]] { Write16Slow(address, value); return; }
     FlatStore<uint16_t>(address, value);
 }
 
-MKW_MEMORY_FORCE_INLINE void FlatWrite32(uint32_t address, uint32_t value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWrite32(uint32_t address, uint32_t value) {
     if (GuestFlat::RequiresCheckedAccess()) { Memory::Write32(address, value); return; }
     if (FlatWriteNeedsPolicy(address)) [[unlikely]] { Write32Slow(address, value); return; }
     FlatStore<uint32_t>(address, value);
 }
 
 
-MKW_MEMORY_FORCE_INLINE void FlatWriteFloat32(uint32_t address, double value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWriteFloat32(uint32_t address, double value) {
     if (GuestFlat::RequiresCheckedAccess()) { Memory::WriteFloat32(address, value); return; }
     const uint32_t bits = ConvertPpcDoubleToSingleBits(value);
     if (FlatWriteNeedsPolicy(address)) [[unlikely]] { WriteFloat32Slow(address, value); return; }
     FlatStore<uint32_t>(address, bits);
 }
 
-MKW_MEMORY_FORCE_INLINE void FlatWriteFloat64(uint32_t address, double value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWriteFloat64(uint32_t address, double value) {
     if (GuestFlat::RequiresCheckedAccess()) { Memory::WriteFloat64(address, value); return; }
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
@@ -640,24 +640,24 @@ MKW_MEMORY_FORCE_INLINE void FlatWriteFloat64(uint32_t address, double value) {
 // 0xCC000000..0xCDFFFFFF PAGE_NOACCESS, so a stray MMIO store faults into the same handler and diagnostic as the checked path, just reported
 // instead of dispatched inline. Never use these for an address the translator hasn't proven.
 
-MKW_MEMORY_FORCE_INLINE void FlatWriteRam8(uint32_t address, uint8_t value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWriteRam8(uint32_t address, uint8_t value) {
     FlatStore<uint8_t>(address, value);
 }
 
-MKW_MEMORY_FORCE_INLINE void FlatWriteRam16(uint32_t address, uint16_t value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWriteRam16(uint32_t address, uint16_t value) {
     FlatStore<uint16_t>(address, value);
 }
 
-MKW_MEMORY_FORCE_INLINE void FlatWriteRam32(uint32_t address, uint32_t value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWriteRam32(uint32_t address, uint32_t value) {
     FlatStore<uint32_t>(address, value);
 }
 
 
-MKW_MEMORY_FORCE_INLINE void FlatWriteRamFloat32(uint32_t address, double value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWriteRamFloat32(uint32_t address, double value) {
     FlatStore<uint32_t>(address, ConvertPpcDoubleToSingleBits(value));
 }
 
-MKW_MEMORY_FORCE_INLINE void FlatWriteRamFloat64(uint32_t address, double value) {
+RECOMP_MEMORY_FORCE_INLINE void FlatWriteRamFloat64(uint32_t address, double value) {
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
     FlatStore<uint64_t>(address, bits);
@@ -665,9 +665,9 @@ MKW_MEMORY_FORCE_INLINE void FlatWriteRamFloat64(uint32_t address, double value)
 
 } // namespace MemoryInline
 
-#undef MKW_MEMORY_FORCE_INLINE
-#undef MKW_MEMORY_NO_INLINE
-#undef MKW_MEMORY_COLD
+#undef RECOMP_MEMORY_FORCE_INLINE
+#undef RECOMP_MEMORY_NO_INLINE
+#undef RECOMP_MEMORY_COLD
 
 inline uint8_t Memory::Read8(uint32_t addr) {
     uint8_t value = 0;

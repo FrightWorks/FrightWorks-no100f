@@ -90,7 +90,7 @@ public sealed class RuntimeNativeGuestEffectAnalyzerTests
     {
         public SourceFixture(string source)
         {
-            Directory = Path.Combine(Path.GetTempPath(), $"mkw-native-effects-{Guid.NewGuid():N}");
+            Directory = Path.Combine(Path.GetTempPath(), $"recomp-native-effects-{Guid.NewGuid():N}");
             System.IO.Directory.CreateDirectory(Directory);
             File.WriteAllText(Path.Combine(Directory, "fixture.cpp"), source);
         }

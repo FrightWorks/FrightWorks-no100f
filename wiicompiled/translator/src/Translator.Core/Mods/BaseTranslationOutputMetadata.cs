@@ -17,7 +17,7 @@ public sealed record BaseTranslationOutputMetadata(
     string? SourceBundlePath = null,
     IReadOnlyList<BaseTranslationModPatchAwareness>? ModPatchAwareness = null)
 {
-    public const string CurrentFormat = "mkw-base-translation-output";
+    public const string CurrentFormat = "recomp-base-translation-output";
     public const int CurrentFormatVersion = 2;
 
     public static BaseTranslationOutputMetadata Create(

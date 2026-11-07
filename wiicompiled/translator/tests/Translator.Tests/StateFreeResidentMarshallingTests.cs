@@ -104,7 +104,7 @@ public class StateFreeResidentMarshallingTests
     public void FastArmEmitsNoBoundaryFlushOrReload()
     {
         var code = Emit(Caller(), Contract(gprRead: 1u << 3, gprWrite: 1u << 3));
-        var fastArm = code.IndexOf("if (MkwStateFreeAbiEnabled(", StringComparison.Ordinal);
+        var fastArm = code.IndexOf("if (RecompStateFreeAbiEnabled(", StringComparison.Ordinal);
         Assert.True(fastArm > 0);
 
         // Nothing between the last body statement and the guard.

@@ -18,8 +18,8 @@
 #include <vector>
 #endif
 
-extern "C" void mkw_co_switch(void** targetSp, void** sourceSp);
-extern "C" void* mkw_co_init(void* stackTop, void (*entry)(void*), void* argument);
+extern "C" void recomp_co_switch(void** targetSp, void** sourceSp);
+extern "C" void* recomp_co_init(void* stackTop, void (*entry)(void*), void* argument);
 #elif defined(__linux__) || (defined(__APPLE__) && defined(__x86_64__))
 #include <libco.h>
 
@@ -192,7 +192,7 @@ Handle Create(std::size_t stackSize, Entry entry, void* argument)
     context->stackSize = totalSize;
 
     auto* stackTop = static_cast<char*>(context->stack) + totalSize;
-    context->savedStackPointer = mkw_co_init(stackTop, entry, argument);
+    context->savedStackPointer = recomp_co_init(stackTop, entry, argument);
     return context;
 }
 
@@ -230,7 +230,7 @@ void Switch(Handle target)
     }
 
     g_current = destination;
-    mkw_co_switch(&destination->savedStackPointer, &source->savedStackPointer);
+    recomp_co_switch(&destination->savedStackPointer, &source->savedStackPointer);
     g_current = source;
 }
 

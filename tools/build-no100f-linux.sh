@@ -75,7 +75,7 @@ step configure-linux "$cmake" -S runtime -B "$build" -G Ninja \
     -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_PROCESSOR=x86_64 \
     -DAURORA_DAWN_PROVIDER=package -DAURORA_SDL3_PROVIDER=vendor -DCMAKE_POLICY_DEFAULT_CMP0168=NEW \
-    -DMKW_TRANSLATED_COMPILE_JOBS="$jobs" -DMKW_GIT_EXECUTABLE="$(command -v git || true)"
+    -DRECOMP_TRANSLATED_COMPILE_JOBS="$jobs" -DRECOMP_GIT_EXECUTABLE="$(command -v git || true)"
 step compile-linux "$cmake" --build "$build" --target WiiCompiled --parallel "$jobs"
 
 # 4. Stage Play/: the program, its runtime files and a Config.toml pointing at Disc/DATA

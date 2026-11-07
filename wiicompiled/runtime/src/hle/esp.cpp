@@ -11,8 +11,8 @@
 #include <cstdlib>
 #include <cctype>
 
-static constexpr uint32_t MKW_TITLE_ID_HI = 0x00010000;  // NSMBW disc title 00010000-52385045 (tmd.bin); name kept
-static constexpr uint32_t MKW_TITLE_ID_LO = 0x52385045; // "SMNE" fallback
+static constexpr uint32_t GAME_TITLE_ID_HI = 0x00010000;  // NSMBW disc title 00010000-52385045 (tmd.bin); name kept
+static constexpr uint32_t GAME_TITLE_ID_LO = 0x52385045; // "SMNE" fallback
 
 static bool IsValidEspTitleCode(uint32_t code) {
     for (int shift = 24; shift >= 0; shift -= 8) {
@@ -32,7 +32,7 @@ static uint32_t CurrentTitleIdLo() {
         }
     }
 
-    return MKW_TITLE_ID_LO;
+    return GAME_TITLE_ID_LO;
 }
 
 // The guest asked for its title ID or data directory through a pointer we cannot
@@ -74,7 +74,7 @@ extern "C" int32_t ESP_GetTitleId_stub(uint32_t outPtr)
     }
 
     // Write title ID (big-endian)
-    Memory::Write32(outPtr, MKW_TITLE_ID_HI);
+    Memory::Write32(outPtr, GAME_TITLE_ID_HI);
     Memory::Write32(outPtr + 4, CurrentTitleIdLo());
     return 0;
 }

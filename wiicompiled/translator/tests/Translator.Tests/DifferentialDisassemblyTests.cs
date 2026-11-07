@@ -66,7 +66,7 @@ public class DifferentialDisassemblyTests
 
         public static string Disassemble(uint opcode, uint address)
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), "mkw_llvm_disasm_oracle");
+            var tempDir = Path.Combine(Path.GetTempPath(), "recomp_llvm_disasm_oracle");
             Directory.CreateDirectory(tempDir);
             var asmPath = Path.Combine(tempDir, "oracle.s");
             var objPath = Path.Combine(tempDir, "oracle.o");

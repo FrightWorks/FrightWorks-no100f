@@ -68,7 +68,7 @@ extern "C" void GX__GetViewportv_801733e0(uint32_t oa) {
     static int lastBypassFrame = -1;
     if (lastBypassFrame != g_gxFrameCount) {
         lastBypassFrame = g_gxFrameCount;
-        AssertMkwOffscreenScreenBypass();
+        AssertRecompOffscreenScreenBypass();
     }
     if (!oa) return; for(int i=0; i<6; ++i) WriteGuestFloat(oa + i*4, g_viewportState[i]);
 }
