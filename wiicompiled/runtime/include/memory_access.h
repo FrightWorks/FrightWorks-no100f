@@ -398,7 +398,7 @@ template <typename T>
 RECOMP_MEMORY_FORCE_INLINE bool TryWriteGuestScalar(uint32_t address, T value) {
     static_assert(sizeof(T) >= 1 && sizeof(T) <= kMaxFastScalarSize);
     // A mixed executable/data 1 MiB page zeroes the coarse writable bias even though most of
-    // its 4 KiB sub-pages are plain data; MKW's THP buffers share such a page with .text, which
+    // its 4 KiB sub-pages are plain data; a game's buffers can share such a page with .text, which
     // used to force ~15% of total CPU through the cold path. The sparse sub-page tier below
     // keeps those stores native while the exact 4 KiB executable guards stay authoritative.
     if (address > UINT32_MAX - static_cast<uint32_t>(sizeof(T) - 1u)) [[unlikely]]

@@ -167,10 +167,10 @@ public sealed partial class CxxLinearCodeGenerator
                 !contracts.TryGetValue(address, out var contract) ||
                 !StateFreeFitsNativeRegisterBudget(contract)))
             return "false";
-        // Base shards are shared by base and Retro Rewind; profile-neutral dispatch can still pick a mod
+        // Base shards are shared by base and mod; profile-neutral dispatch can still pick a mod
         // translation for any descendant even with compile-time-constant call traits. Every member must
         // resolve to the base body before skipping CpuContext dispatch, or the region silently drops a
-        // Retro Rewind override and corrupts guest state.
+        // mod override and corrupts guest state.
         return $"RecompStateFreeAbiEnabled(0x{root:X8}u) && " + string.Join(" && ", region.Select(static address =>
             $"KnownTranslatedCpuCall<0x{address:X8}u>::kAvailable && " +
             $"!KnownTranslatedCpuCall<0x{address:X8}u>::kMustRemainDynamicallyDispatchable && " +

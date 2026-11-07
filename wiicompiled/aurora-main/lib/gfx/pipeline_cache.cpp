@@ -955,7 +955,7 @@ static void note_pipeline_queue_drained() {
     return;
   }
   // Persist the monolithic Vulkan pipeline cache once after boot prewarm only; doing it on
-  // every drained burst stalls the device lock mid-race. Later first-use compiles are
+  // every drained burst stalls the device lock during play. Later first-use compiles are
   // covered by the shutdown serialize.
   webgpu::serialize_pipeline_caches();
   const auto elapsed =

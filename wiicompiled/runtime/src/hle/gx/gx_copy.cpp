@@ -219,8 +219,8 @@ extern "C" void GX__CopyTex_8016fd74(uint32_t da, uint32_t c) {
 }
 PPC_NATIVE_OVERRIDE_VOID(800FEEB0, GX__CopyTex_8016fd74, (uint32_t da, uint32_t c), (da, c));
 
-// GXSetDispCopyYScale (SPM 0x8028DC64) / GXGetYScaleFactor (0x8028DA34): SPM calls these directly
-// (NSMBW's EGG inlined them). Translated, they read the SDK's own copy state, which the native copy
+// GXSetDispCopyYScale / GXGetYScaleFactor: the game calls these directly.
+// Translated, they read the SDK's own copy state, which the native copy
 // hooks never fill, and programmed a bogus vertical XFB scale (every column smeared top to bottom).
 extern "C" uint32_t GX__SetDispCopyYScale_HLE(float vscale) { return GXSetDispCopyYScale(vscale); }
 PPC_NATIVE_OVERRIDE(800FE9C0, GX__SetDispCopyYScale_HLE, uint32_t, (float vscale), (vscale));

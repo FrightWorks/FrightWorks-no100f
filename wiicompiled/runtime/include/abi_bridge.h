@@ -269,7 +269,7 @@ struct KnownTranslatedCpuCall {
 };
 
 // Translator-emitted trait specializations, one macro shared by every generated shard.
-// `addr` is the 8-digit hex entry point, `winner` the resolved symbol (mods/Retro Rewind can
+// `addr` is the 8-digit hex entry point, `winner` the resolved symbol (mods can
 // publish their own name). A specialization only exists for a single statically bound winner,
 // so overridable/dynamically-dispatchable are hardcoded here rather than passed in.
 #define RECOMP_TRANSLATED_TRAIT(addr, winner, nonvolatile_fpr_write_mask)                    \

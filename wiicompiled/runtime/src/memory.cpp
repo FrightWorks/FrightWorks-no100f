@@ -446,8 +446,8 @@ GuestFlat::Backing ClassifyBacking(uint32_t baseAddress) {
     }
 
     // NDEV-sized MEM2: physical (0x10000000), cached (0x90000000),
-    // uncached (0xD0000000). Mario Kart Wii detects this configuration and
-    // creates its original EGGRootDebug expansion heap.
+    // uncached (0xD0000000). A game can detect this configuration and
+    // create a debug expansion heap.
     if ((baseAddress >= Memory::kMem2PhysicalBase &&
          baseAddress < Memory::kMem2PhysicalEnd) ||
         (baseAddress >= Memory::kMem2CachedBase &&

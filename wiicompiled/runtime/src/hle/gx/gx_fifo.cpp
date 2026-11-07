@@ -108,9 +108,9 @@ int HleGxState::GetExpectedCompCount(GXAttr attr, const VtxAttrFmt& fmt) {
 }
 
 static void ApplyAuroraVtxStateForRawBegin(GXVtxFmt fmt) {
-    // SPM: never publish the GX_VA_NBT row. It has no VAT of its own, and publishing its default
+    // Never publish the GX_VA_NBT row. It has no VAT of its own, and publishing its default
     // (cnt 1, F32) after GX_VA_NRM turned Aurora's normals into NBT (60-byte vertices) while the
-    // stream carried 36-byte ones, so every paper-character draw was dropped as truncated.
+    // stream carried 36-byte ones, so every draw of that kind was dropped as truncated.
     PublishAuroraVtxState(fmt, AuroraVtxPublishOptions{/*includeNbt=*/false,
                                                        /*fmtLoopFirst=*/0,
                                                        /*fmtLoopLast=*/25});

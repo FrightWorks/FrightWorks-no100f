@@ -645,7 +645,7 @@ extern "C" void GX__LoadTexObj_80170f2c(uint32_t oa, uint32_t tid) {
             if (s_texLog++ < 60) RT_LOGF(RT_TAG_GX, "[gxdl] recorded tex load map %u data 0x%08X %ux%u fmt 0x%X pal %d\n", tid, meta.dataAddr, meta.width, meta.height, meta.format, isPalette ? 1 : 0);
         }
         if (GxAuroraDlRecording() && !isPalette) {
-            // SPM builds map materials into display lists from a stack GXTexObj reused for every
+            // A game can build map materials into display lists from a stack GXTexObj reused for every
             // material, so the shared host twin (keyed by that stack address) would give every recorded
             // load the same texture identity. Recorded loads get a permanent host object per image.
             GXLoadTexObj(PersistentDlTexObj(meta, wrapS, wrapT, minFilter, magFilter, maxAnisoSafe, size),
@@ -750,9 +750,8 @@ extern "C" void GX__SetTexCoordScaleManually_80171180(uint32_t c, uint32_t en, u
 
 extern "C" void GX__SetTexCoordBias_801711fc(uint32_t c, uint32_t se, uint32_t te) { GXSetTexCoordBias((GXTexCoordID)c, (GXBool)se, (GXBool)te); try{ uint32_t gd=Memory::Read32(kGXDataPtrAddr); if(gd){ uint32_t sa=gd+0x108u+c*4u, ta=gd+0x128u+c*4u; Memory::Write32(sa, (Memory::Read32(sa)&0xFFFEFFFFu)|((se&1u)<<16)); Memory::Write32(ta, (Memory::Read32(ta)&0xFFFEFFFFu)|((te&1u)<<16)); if(Memory::Read32(gd+0x5E4u)&(1u<<c)) Memory::Write16(gd+2, 0); } }catch(...){} }
 
-// GXInitTexObjData (SPM 0x8028ED7C): repoints a texture object at new image data. SPM's smartTexObj
-// uses it for every animated paper-character frame; NSMBW never called it, so it ran translated and
-// changed only the guest struct, leaving the native twin on the first image (characters drew nothing).
+// GXInitTexObjData: repoints a texture object at new image data, used for animated
+// texture frames. Translated, it would change only the guest struct, leaving the native twin on the first image (characters drew nothing).
 extern "C" void GX__InitTexObjData_Gc(uint32_t oa, uint32_t da) {
     const uint32_t canonical = CanonicalizeGxMainRamAddress(da);
     {

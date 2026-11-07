@@ -330,7 +330,7 @@ void after_submit() noexcept;
 void map_staging_buffer();
 // `persistentCopy` marks resolves whose destination outlives the frame with no re-issue path, so
 // the pass waits for its pipelines instead of dropping draws that would be baked in permanently.
-// NSMBW: after `source` (a resolve target) is resolved this frame, copy it, scaled to width x height,
+// After `source` (a resolve target) is resolved this frame, copy it, scaled to width x height,
 // into `dst` at (x, y). False when it can't (no such resolve, or dst isn't RGBA8).
 bool add_resolve_patch(const TextureHandle& source, TextureHandle dst, uint32_t x, uint32_t y, uint32_t width,
                        uint32_t height);

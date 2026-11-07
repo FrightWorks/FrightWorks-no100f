@@ -5,7 +5,7 @@ using Translator.Core.Loading;
 namespace Translator.Tests;
 
 /// <summary>
-/// Installs the RECOMPii PAL save/restore thunk address ranges once for the whole test assembly,
+/// Installs a fixed set of save/restore thunk address ranges once for the whole test assembly,
 /// since several suites translate hand-assembled fragments that call these thunks by address.
 /// </summary>
 internal static class GuestSaveRestoreThunkTestDefaults
@@ -24,6 +24,6 @@ internal static class GuestSaveRestoreThunkTestDefaults
                 "800215b8 _rest_gpr_14",
                 "800215ec _rest_gpr_27"
             ],
-            "recompii-pal-test-defaults"));
+            "recomp-test-defaults"));
     }
 }

@@ -559,8 +559,8 @@ gfx::TextureHandle get_tlut_texture(const GXTlutObj_& tlut) {
 
 } // namespace
 
-// NSMBW: every cached static texture whose RAM contains `dest`, with the patch's place in it. A copy
-// into part of a texture (NSMBW's animated tiles patch the tile atlas) is then applied on the GPU.
+// Every cached static texture whose RAM contains `dest`, with the patch's place in it. A copy
+// into part of a texture (animated tiles patching a tile atlas) is then applied on the GPU.
 std::vector<PatchTarget> find_patch_targets(const void* dest) {
   std::vector<PatchTarget> targets;
   const auto* d = static_cast<const uint8_t*>(dest);
@@ -1378,7 +1378,7 @@ void evict_copy_texture(const void* dest) noexcept {
       }
     }
   }
-  // NSMBW: the pooled GPU textures stay: a destination evicted and copied again every frame (the
+  // The pooled GPU textures stay: a destination evicted and copied again every frame (the
   // animated tiles) reuses them instead of creating new ones; the pool releases idle ones itself.
   if (changed) {
     mark_copy_texture_cache_changed();
@@ -1449,7 +1449,7 @@ GXState::CopyTextureRef* find_copy_texture_for_texobj(const GXTexObj_& obj) noex
   }
 
   if (auto* cached = find_cached_copy_texture(obj.data, obj)) {
-    // NSMBW debugging: NO100F_LOG_STALE_COPIES logs copies sampled in a frame that didn't produce them.
+    // Debugging: NO100F_LOG_STALE_COPIES logs copies sampled in a frame that didn't produce them.
     static const bool logStale = std::getenv("NO100F_LOG_STALE_COPIES") != nullptr;
     if (logStale && cached->lastProducedFrame != gfx::current_frame()) {
       static u32 lastFrame = 0, count = 0;
@@ -1468,7 +1468,7 @@ GXState::CopyTextureRef* find_copy_texture_for_texobj(const GXTexObj_& obj) noex
     mark_copy_texture_sampled(obj.data, exact->second);
     return &exact->second;
   }
-  // NSMBW debugging: NO100F_LOG_COPY_MISSES logs a texture whose address holds an EFB copy that it
+  // Debugging: NO100F_LOG_COPY_MISSES logs a texture whose address holds an EFB copy that it
   // doesn't match (so it falls back to guest RAM, which GPU-only copies never wrote).
   static const bool logMisses = std::getenv("NO100F_LOG_COPY_MISSES") != nullptr;
   if (logMisses) {
@@ -1522,7 +1522,7 @@ void resolve_sampled_textures(const ShaderInfo& info) noexcept {
     GXTexObj_ obj = g_gxState.loadedTextures[i];
     auto& textureBind = g_gxState.textures[i];
     const TextureResolveIdentity identity = make_texture_resolve_identity(obj);
-    // NSMBW debugging: NO100F_NO_TEXMEMO resolves every sampled texture from scratch (no memo shortcuts).
+    // Debugging: NO100F_NO_TEXMEMO resolves every sampled texture from scratch (no memo shortcuts).
     static const bool noTexMemo = std::getenv("NO100F_NO_TEXMEMO") != nullptr;
     if (noTexMemo) {
       s_lastTextureResolveIdentityValid[i] = false;
@@ -1601,7 +1601,7 @@ void resolve_sampled_textures(const ShaderInfo& info) noexcept {
       handle = resolve_static_texture(obj);
     }
 
-    // NSMBW debugging: NO100F_TEX_PROBE logs each texture (address, size, format) the first time it
+    // Debugging: NO100F_TEX_PROBE logs each texture (address, size, format) the first time it
     // resolves from a given source: an EFB copy or guest RAM (and which GPU texture).
     static const bool texProbe = std::getenv("NO100F_TEX_PROBE") != nullptr || std::filesystem::exists("texprobe.txt");
     if (!handle && obj.data != nullptr && (++g_gxAudit[2], texProbe)) {

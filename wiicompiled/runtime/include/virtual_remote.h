@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-// New Super Mario Bros. Wii reads nothing but Wii Remotes (held sideways, or with a Nunchuk), so a
+// For a game that reads only Wii Remotes (held sideways, or with a Nunchuk), a
 // keyboard or an ordinary gamepad has to become one. Every port with no real Wii Remote but with an
 // aurora PAD source (an SDL gamepad, or the keyboard when it is switched on for that port in the
 // settings overlay) is presented to the game as a bare Wii Remote held sideways: aurora's PADRead

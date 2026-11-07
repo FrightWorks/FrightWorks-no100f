@@ -98,16 +98,16 @@ typedef enum _AuroraViewportPolicy {
 void AuroraSetViewportPolicy(AuroraViewportPolicy policy);
 // AURORA_VIEWPORT_16_9 with another fixed content aspect (2.39:1 for a cinematic picture).
 void AuroraSetViewportFixedAspect(float aspect);
-// NSMBW: widen cameras (perspective, and screen-sized orthographic) set up for 16:9 to this aspect
+// Widen cameras (perspective, and screen-sized orthographic) set up for 16:9 to this aspect
 // (0 = off), for a screen the picture fills that is wider than 16:9.
 void AuroraSetWidePerspectiveAspect(float aspect);
-// NSMBW: copies that patch part of a texture (animated tiles: spinning coins...) on or off.
+// Copies that patch part of a texture (animated tiles: spinning coins...) on or off.
 void AuroraSetTexturePatches(bool enabled);
-// NSMBW: GX decoding time, renderer-lock wait and draw count since the last call (profiling).
+// GX decoding time, renderer-lock wait and draw count since the last call (profiling).
 void AuroraTakeGxStats(uint64_t* processNanos, uint64_t* lockNanos, uint64_t* draws);
 // Time spent processing GX commands since start (NO100F_LOG_FPS only; else 0).
 uint64_t AuroraGxProcessNanosTotal(void);
-// NSMBW: GXCopyTex calls and the new GPU textures they needed, since the last call (profiling).
+// GXCopyTex calls and the new GPU textures they needed, since the last call (profiling).
 void AuroraTakeCopyStats(uint64_t* copies, uint64_t* creates);
 
 /**

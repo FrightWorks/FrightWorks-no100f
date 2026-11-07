@@ -71,7 +71,7 @@ extern "C" void OS__Panic_801A2660_Cpu(CpuContext* ctx)
     RT_LOGF(RT_TAG_OS, "Location: %s:%d\n", file.empty() ? "<null>" : file.c_str(), line);
     if (!fmt.empty()) {
         RT_LOGF(RT_TAG_OS, "Message: %s\n", fmt.c_str());
-        // SPM asserts pass the failed condition (and sometimes a name) as %s arguments in r6/r7.
+        // Game asserts can pass the failed condition (and sometimes a name) as %s arguments in r6/r7.
         if (ctx) {
             const std::string a6 = ReadGuestStringSafe(ctx->gpr[6]);
             const std::string a7 = ReadGuestStringSafe(ctx->gpr[7]);

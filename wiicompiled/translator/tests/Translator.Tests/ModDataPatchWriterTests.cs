@@ -134,7 +134,7 @@ public sealed class ModDataPatchWriterTests
         string? publishedBlobDirectory = null)
     {
         var plan = new KamekPatchPlan { ModuleGuestBase = 0x81700000u, Classifications = [] };
-        var manifest = new BaseManifest("test", 1, "RMCP01", "P", "hash", 0, [], [], "ranges.json");
+        var manifest = new BaseManifest("test", 1, "TEST01", "P", "hash", 0, [], [], "ranges.json");
         ModDataPatchWriter.Write(
             path,
             plan,

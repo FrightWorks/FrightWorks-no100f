@@ -31,8 +31,8 @@ void VI_HLE_ApplyDisplayCopyForMode();  // hle/vi.cpp
 
 extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
 {
-    constexpr uint32_t kFifoObjAddr = 0x80275720u;  // FifoObj (NSMBW)
-    constexpr uint32_t kGXDataAddr = 0x802757A0u;   // gxData (NSMBW)
+    constexpr uint32_t kFifoObjAddr = 0x80275720u;  // FifoObj
+    constexpr uint32_t kGXDataAddr = 0x802757A0u;   // gxData
     constexpr uint32_t kGXDataSize = 0x5B0u;  // GameCube SDK gxData (ELF symbol size); the Wii SDK's is 0x600
 
     GXInit(GuestToHostPtr(fifoBase, fifoSize), fifoSize);
@@ -127,10 +127,10 @@ extern "C" void __GX__FifoInit_8016d180()
     constexpr uint32_t kCpInterruptId = 0x11u;
     constexpr uint32_t kCpInterruptMask = 0x4000u;
     constexpr uint32_t kCpInterruptHandlerAddr = 0x80169e9cu;
-    constexpr uint32_t kGxCurrentThreadPtrAddr = 0x80279f58u;  // __GXCurrentThread (NSMBW)
-    constexpr uint32_t kGxThreadQueueAddr = 0x80279f60u;       // GXOverflowSuspendInProgress (NSMBW)
-    constexpr uint32_t kCpuFifoObjAddr = 0x80279F50u;  // CPUFifo (NSMBW)
-    constexpr uint32_t kGpFifoObjAddr = 0x80279F54u;   // GPFifo (NSMBW)
+    constexpr uint32_t kGxCurrentThreadPtrAddr = 0x80279f58u;  // __GXCurrentThread
+    constexpr uint32_t kGxThreadQueueAddr = 0x80279f60u;       // GXOverflowSuspendInProgress
+    constexpr uint32_t kCpuFifoObjAddr = 0x80279F50u;  // CPUFifo
+    constexpr uint32_t kGpFifoObjAddr = 0x80279F54u;   // GPFifo
     constexpr size_t kFifoObjSize = 4u;  // GameCube SDK: CPUFifo/GPFifo are GXFifoObj pointers, not inline objects
 
     __OSSetInterruptHandler_801a65f8_hle(kCpInterruptId, kCpInterruptHandlerAddr);
@@ -158,7 +158,7 @@ extern "C" void __GX__PEInit_8016ee14()
     constexpr uint32_t kPeFinishInterruptMask = 0x2000u;
     constexpr uint32_t kPeTokenHandlerAddr = 0x8016b900;
     constexpr uint32_t kPeFinishHandlerAddr = 0x8016b9cc;
-    constexpr uint32_t kPeThreadQueueAddr = 0x80279f7cu;  // FinishQueue (NSMBW)
+    constexpr uint32_t kPeThreadQueueAddr = 0x80279f7cu;  // FinishQueue
 
     __OSSetInterruptHandler_801a65f8_hle(kPeTokenInterruptId, kPeTokenHandlerAddr);
     __OSSetInterruptHandler_801a65f8_hle(kPeFinishInterruptId, kPeFinishHandlerAddr);
@@ -205,9 +205,9 @@ void GxRecordRawVertexDisplayList() {
     g_gxAuroraDlActive = false;
     BeginDisplayListRecording(g_gxAuroraDlAddr, g_gxAuroraDlSize);
 }
-// Aurora's list encoding is larger than real GX (SPM's extdrv asserts dl_size < 128), so lists are
+// Aurora's list encoding is larger than real GX (a game can assert dl_size < 128), so lists are
 // recorded host-side and the guest buffer only receives a 32-byte stub naming the recording. The stub
-// travels with guest copies (mapdrv records into scratch and copies), unlike an address key.
+// travels with guest copies (a game can record into scratch and copy), unlike an address key.
 static std::vector<uint8_t> g_gxDlScratch;
 static std::vector<std::vector<uint8_t>> g_hostDls;
 static std::unordered_map<uint64_t, uint32_t> g_hostDlByHash;
@@ -238,9 +238,9 @@ extern "C" void GX__BeginDisplayList_80172e00(uint32_t la, uint32_t s) {
         // Mirror the guest fifo-object fields the FIFO write path consumes so
         // HleFifoWrite never has to read them back out of guest memory.
         GXFlush();
-        // SPM compiles map materials into display lists from native GX state calls (GXSetTevOp,
+        // A game can compile map materials into display lists from native GX state calls (GXSetTevOp,
         // GXLoadTexObj, GXSetCullMode...), which the vertex-only shadow recorder never captured, so
-        // GXEndDisplayList returned 0 and mapdrv asserted. Aurora encodes every GX call into its FIFO,
+        // GXEndDisplayList returned 0 and the game asserted. Aurora encodes every GX call into its FIFO,
         // so let it record the whole list straight into the guest buffer.
         if (GuestToHostPtr(la, s) && s >= 32u) {
             if (g_gxDlScratch.empty()) g_gxDlScratch.resize(4u << 20);

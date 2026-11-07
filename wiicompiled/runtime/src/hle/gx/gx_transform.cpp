@@ -63,7 +63,7 @@ extern "C" void GX__GetViewportv_801733e0(uint32_t oa) {
     // EGG::StateGX::GXSetViewport (0x802418D0) reads the current viewport unconditionally, and
     // every offscreen bake reaches it via its clear pass (0x802D1900) before building its own
     // projection, so arming the frustum-scale bypass here always beats the bake, including
-    // RaceScene::createSubsystems's frame-boundary-less ones. Gated to one walk per GX frame to
+    // frame-boundary-less ones. Gated to one walk per GX frame to
     // skip the cross-TU call on repeats, while the first viewport read of each frame stays unthrottled.
     static int lastBypassFrame = -1;
     if (lastBypassFrame != g_gxFrameCount) {
@@ -243,7 +243,7 @@ PPC_NATIVE_OVERRIDE_VOID(8000125c, GX__GetProjectionv_801730cc, (uint32_t pa), (
 // Matrix Loading
 // ============================================================================
 
-// SPM paper characters: animPoseDisp_MakeExtTexture draws a pose, reads the GX bounding box of the pixels
+// Character textures: the game draws a pose, reads the GX bounding box of the pixels
 // it touched and copies that rectangle of the EFB into the character's texture. Aurora draws on the GPU
 // and never computes the box, so it read back empty and every character texture was 0x0 (invisible).
 // The box is computed here instead from the positions submitted between GXClearBoundingBox and

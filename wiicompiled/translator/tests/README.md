@@ -5,7 +5,7 @@ generation helpers, parsers with synthetic inputs, project-manifest loading, DOL
 construction, and generic entry-point translation.
 
 The older asset-backed and host-C++-compiler-backed test sources are intentionally retained in
-`Translator.Tests` but excluded in its project file. They mixed RECOMPii fixtures, several compiler
+`Translator.Tests` but excluded in its project file. They mixed fixtures from an earlier game's data, several compiler
 selection strategies, and private-method reflection checks, which made the normal suite both slow
 and red on a clean Windows setup. They should become a separate opt-in integration project when
 that work is useful again.

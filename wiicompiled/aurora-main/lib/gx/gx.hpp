@@ -474,7 +474,7 @@ void clear_copy_texture_cache() noexcept;
 void clear_display_copy_cache() noexcept;
 void set_display_copy_present_source() noexcept;
 void evict_copy_texture(const void* dest) noexcept;
-// NSMBW: the cached static textures whose RAM holds `dest` (a copy patching part of a texture).
+// The cached static textures whose RAM holds `dest` (a copy patching part of a texture).
 struct PatchTarget {
   gfx::TextureHandle texture;
   u32 x = 0, y = 0;

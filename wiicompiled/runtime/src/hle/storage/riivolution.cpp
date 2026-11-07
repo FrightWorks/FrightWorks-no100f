@@ -47,11 +47,11 @@ std::optional<std::string> RiivoReadFile(const fs::path& path) {
     return buffer.str();
 }
 
-// Six-character game ID ("RMCP01") from guest low memory, with the same RMCP
-// fallback the rest of the storage HLE uses for boots that have not written
+// Six-character game ID from guest low memory, with a fallback code like the
+// one the rest of the storage HLE uses for boots that have not written
 // the disc header yet.
 std::string RiivoGameId() {
-    const uint32_t code = RuntimeHle::CurrentGameCode(0x524D4350u); // "RMCP"
+    const uint32_t code = RuntimeHle::CurrentGameCode(0x524D4350u); // fallback
     std::string id(6, '\0');
     id[0] = static_cast<char>((code >> 24) & 0xffu);
     id[1] = static_cast<char>((code >> 16) & 0xffu);
@@ -135,14 +135,14 @@ std::vector<RuntimeRiivolution::Overlay> RiivoDiscoverRoots() {
                      "command line or Config.toml");
     }
 
-    // The one canonical Retro Rewind installation setup recorded. Only the
-    // Retro Rewind product applies it: overlaying the base product with the
-    // pack's menu archives made "base game" boot as a half-Retro-Rewind build.
+    // The one canonical mod installation setup recorded. Only the mod product
+    // applies it: overlaying the base product with the pack's menu archives
+    // made "base game" boot as a half-modded build.
     if (const auto modInstallRoot =
             RuntimeProduct::IsModProduct() ? RuntimeConfigFile::ModInstallRoot() : std::string{};
         !modInstallRoot.empty()) {
         RiivoAddRoot(overlays, RuntimeNandPath::ResolveConfiguredPath(modInstallRoot),
-                     "canonical Retro Rewind installation");
+                     "canonical mod installation");
     }
 
     for (const auto& root : RecompMod::DvdOverlayRoots()) {
@@ -187,7 +187,7 @@ std::optional<RiivoXmlSet> RiivoFindXmls(const fs::path& overlayRoot) {
 
     // Distribution-pinned XML from recomp.yml: a path relative to the pack
     // folder. The pack folder sits inside the virtual SD root (e.g.
-    // <sd>/RetroRewind6), so externals resolve against the root's parent.
+    // <sd>/ModPack), so externals resolve against the root's parent.
     const std::string& configured = RecompMod::RiivolutionXml();
     if (!configured.empty()) {
         const fs::path configuredXml = overlayRoot / PathFromUtf8(configured);

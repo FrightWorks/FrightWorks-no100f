@@ -73,8 +73,7 @@ int32_t ComputeThreadEffectivePriority(uint32_t threadPtr)
 
 bool IsThpVideoDecoderEntry(uint32_t entryFunc)
 {
-    // Mario Kart Wii's THP decoder threads (0x805529A8 / 0x80552A74) needed GQR presets.
-    // NSMBW ships no THP video and no THP player code, so no thread entry qualifies.
+    // No thread entry here needs GQR presets for THP decoding.
     (void)entryFunc;
     return false;
 }
@@ -338,7 +337,7 @@ extern "C" void OSCreateThread_HLE_801a9e84(CpuContext* ctx)
         // Match the original OSCreateThread: when a floating-point exception handler is installed
         // (__OSErrorTable[OS_ERROR_FPE] != NULL) the new thread gets FE0|FE1 in SRR1, the FPSAVED
         // state bit and an FPSCR built from __OSFpscrEnableBits.
-        constexpr uint32_t kSchedulerInitFlagAddr = 0x804F5270u;  // SPM OSCreateThread 0x80274F64: __OSErrorTable + 0x40.
+        constexpr uint32_t kSchedulerInitFlagAddr = 0x804F5270u;  // __OSErrorTable + 0x40 (OSCreateThread)
         constexpr uint32_t kThreadAttrSourceAddr = 0x80277530u;   // __OSFpscrEnableBits
         if (Memory::Contains(kSchedulerInitFlagAddr, 4) &&
             ::Memory::Read32(kSchedulerInitFlagAddr) != 0) {

@@ -2159,7 +2159,7 @@ void HandleEvents(const AuroraEvent* events) noexcept {
             CompleteRebind(g_rebind.kind == RebindKind::Controller ? PAD_NATIVE_BUTTON_DISABLED
                                                                   : static_cast<uint32_t>(PAD_KEY_INVALID));
         }
-        // NSMBW: F11 toggles between a window and borderless fullscreen (saved like the F10 bar's
+        // F11 toggles between a window and borderless fullscreen (saved like the F10 bar's
         // Display mode).
         if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_F11)) {
             const AuroraDisplayMode mode = aurora_get_display_mode() == AURORA_DISPLAY_MODE_WINDOWED
@@ -2189,7 +2189,7 @@ void HandleEvents(const AuroraEvent* events) noexcept {
             AudioBackend::Instance().SetMuted(g_audioMuted);
             RuntimeConfigFile::SetAudioMuted(g_audioMuted);
         }
-        // NSMBW: Escape is the game's + (its pause menus, Keybinds); here it only closes the F10 bar
+        // Escape is the game's + (its pause menus, Keybinds); here it only closes the F10 bar
         // or the quit prompt.
         if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_ESCAPE)) {
             if (g_exitPromptOpen) {

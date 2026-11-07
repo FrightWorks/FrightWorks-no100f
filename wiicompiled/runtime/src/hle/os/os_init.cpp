@@ -84,7 +84,7 @@ extern "C" uint32_t BTM_IsDeviceUp_HLE_8013a300(CpuContext* ctx)
 {
     // Force Bluetooth stack to "up" to avoid endless polling loops while we lack
     // real hardware bring-up.
-    constexpr uint32_t kBtmCbBase = 0x80557218u;  // btm_cb (NSMBW); BTM_IsDeviceUp reads +0x64E == 5
+    constexpr uint32_t kBtmCbBase = 0x80557218u;  // btm_cb; BTM_IsDeviceUp reads +0x64E == 5
     constexpr uint32_t kDevStateOffset = 0x64Eu;
     try {
         ::Memory::Write8(kBtmCbBase + kDevStateOffset, 5u);
@@ -139,7 +139,7 @@ extern "C" uint32_t OS____InitMemoryProtection_801a7dfc(uint32_t r3, uint32_t r4
 PPC_NATIVE_OVERRIDE(80106618, OS____InitMemoryProtection_801a7dfc, uint32_t, (uint32_t r3, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7, uint32_t r8), (r3, r4, r5, r6, r7, r8));
 
 // OSGetConsoleType (0x801a9ee0): standard Wii = 0x12, NDEV (expanded MEM2) = 0x10000012;
-// RECOMPii uses the NDEV result to enable its extra-memory heap path.
+// A game can use the NDEV result to enable an extra-memory heap path.
 extern "C" uint32_t OS__GetConsoleType_8019f33c(uint32_t /*r4*/, uint32_t /*r5*/, uint32_t /*r6*/,
                                                 uint32_t /*r7*/, uint32_t /*r8*/, uint32_t /*r31*/)
 {
@@ -191,15 +191,15 @@ extern "C" uint32_t __OSInitSTM_HLE_801ab848(CpuContext* ctx)
          return 0;
     }
 
-    // NSMBW offsets: r13-0x4F64=StmReady, r13-0x4F60=StmImDesc (/dev/stm/immediate),
-    // r13-0x4F5C=StmEhDesc (/dev/stm/eventhook).
+    // STM state the SDK expects: StmReady, StmImDesc (/dev/stm/immediate),
+    // StmEhDesc (/dev/stm/eventhook).
     try {
         // Mark STM as initialized
-        ::Memory::Write32(r13 - 0x735cu, 1);  // SPM StmReady
+        ::Memory::Write32(r13 - 0x735cu, 1);  // StmReady
 
         // Fake non-zero handles so callers' zero-checks pass.
-        ::Memory::Write32(r13 - 0x7358u, 0x00535401);  // SPM StmImDesc // "ST\x01"
-        ::Memory::Write32(r13 - 0x7354u, 0x00535402);  // SPM StmEhDesc // "ST\x02"
+        ::Memory::Write32(r13 - 0x7358u, 0x00535401);  // StmImDesc // "ST\x01"
+        ::Memory::Write32(r13 - 0x7354u, 0x00535402);  // StmEhDesc // "ST\x02"
 
         // Default Power/Reset callback pointers are left unset; safe since we never fire
         // the STM hardware interrupt that would invoke them.

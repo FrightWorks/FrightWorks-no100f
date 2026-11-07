@@ -1,8 +1,8 @@
 # Public WiiCompiled product graph.
 #
-# The translator owns the translated build graph. Mario Kart's profile-neutral
+# The translator owns the translated build graph. The game's profile-neutral
 # functions are compiled once into recomp_base_shared; only callers whose direct
-# ABI differs between profiles receive small base/RR variants.
+# ABI differs between profiles receive small base/mod variants.
 
 # FrightWorks ships no game data: the translator's data_sections_init.cpp and its blobs are not compiled;
 # src/hle/scooby_dol_loader.cpp loads the sections from the player's disc instead.

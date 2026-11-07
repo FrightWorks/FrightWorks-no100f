@@ -75,7 +75,7 @@ uint32_t EncodeAIDmaLengthRegister(uint32_t length) {
     return length & 0x000fffe0u;
 }
 
-// NSMBW bring-up: the loudest sample of the AI output, reported every ~15 s of 32 kHz stereo for the
+// Bring-up: the loudest sample of the AI output, reported every ~15 s of 32 kHz stereo for the
 // first minute, so a game that runs silently shows up in the log of an automated run.
 void MeterAudioBlock(const uint8_t* src, uint32_t bytes) {
     constexpr uint64_t kReportBytes = 32000ull * 2 * kBytesPerSample * 15;  // frames * channels
@@ -290,7 +290,7 @@ PPC_NATIVE_OVERRIDE_VOID(800F4400, AIInitDMA_80123fcc, (uint32_t start_addr, uin
 
 
 
-// AIRegisterDMACallback stores the callback in the guest global __AID_Callback (0x8056DE08 in NSMBW).
+// AIRegisterDMACallback stores the callback in the guest global __AID_Callback.
 // Returns the old callback pointer.
 extern "C" uint32_t AIRegisterDMACallback_80123f88(uint32_t callback)
 {

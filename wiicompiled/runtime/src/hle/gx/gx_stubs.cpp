@@ -27,12 +27,12 @@ extern "C" void GX__SetDrawSync_8016ed08(uint32_t token) {
 
 extern "C" void GX__SetDrawSync_8016e9fc(uint32_t token) { GX__SetDrawSync_8016ed08(token); }
 
-// SPM GXSetDrawSync (0x8028cc90). sysWaitDrawSync polls the PE token register through __peReg for up to
-// 100 ms; no PE is emulated and __peReg was 0, so every wait timed out (3.5 s frames when the Blooper's
-// offscreen NPCs draw, ta2_02). Draws are consumed in order here, so the token is reached at once: point
+// GXSetDrawSync. The game's wait loop polls the PE token register through __peReg for up to
+// 100 ms; no PE is emulated and __peReg was 0, so every wait timed out (3.5 s frames when
+// offscreen objects draw). Draws are consumed in order here, so the token is reached at once: point
 // __peReg at a RAM block and store the token in its token register (+0xE).
 extern "C" void Gc_GXSetDrawSync(uint32_t token) {
-    constexpr uint32_t kGxPeRegPtrAddr = 0x80279F30u;  // __peReg (SPM: r13-0x6FB0 in sysWaitDrawSync)
+    constexpr uint32_t kGxPeRegPtrAddr = 0x80279F30u;  // __peReg
     constexpr uint32_t kGxPeRegBlock = 0x80002F00u;    // low-memory debugger area; no exception vectors are installed
     try {
         Memory::Write32(kGxPeRegPtrAddr, kGxPeRegBlock);
@@ -128,7 +128,7 @@ extern "C" void GX__ClearBoundingBox_8016fecc() {
 }
 PPC_NATIVE_OVERRIDE_VOID(800ff040, GX__ClearBoundingBox_8016fecc, (), ());
 
-// GXReadBoundingBox (SPM 0x8028E26C, this SDK's order: left, top, right, bottom).
+// GXReadBoundingBox (this SDK's order: left, top, right, bottom).
 extern "C" void GX__ReadBoundingBox_Gc(uint32_t leftPtr, uint32_t topPtr, uint32_t rightPtr, uint32_t bottomPtr) {
     uint16_t l = 0, t = 0, r = 0, b = 0;
     GxBBoxRead(l, t, r, b);

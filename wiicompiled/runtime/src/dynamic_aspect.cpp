@@ -112,12 +112,11 @@ void SweepGfxNodeList(uint32_t list, bool offscreenList) {
 }
 
 // Vertical expansion rides EGG::Screen's global scale, which any screen without bit 6 imports
-// at projection-build time. MKW's offscreen passes only set bit 3 (fixed-size framebuffer canvas,
+// at projection-build time. Offscreen passes only set bit 3 (fixed-size framebuffer canvas,
 // record 2), so without this bypass they'd inherit the expansion and render vertically squashed.
 // Re-arms every scene transition since the offscreen renderer is a per-scene singleton.
 void AssertOffscreenScreenBypass() {
-    // NSMBW: the draw/offscreen lists are Mario Kart's (0x809C1830/0x809C183C fall inside
-    // NSMBW's d_enemiesNP); nothing to sweep until NSMBW's screens are mapped.
+    // Nothing to sweep: this game's draw and offscreen screen lists are not mapped.
 }
 
 void WriteEggScreenRecord(uint32_t recordAddr, uint32_t width) {
@@ -129,9 +128,8 @@ void WriteEggScreenRecord(uint32_t recordAddr, uint32_t width) {
 }
 
 void ApplyEggScreenRecords(uint32_t surfaceWidth, uint32_t surfaceHeight) {
-    // NSMBW: these EGG::Screen records, projection scales and refresh calls are Mario Kart
-    // addresses. The host-side viewport policy (Aurora/VI aspect lock) still applies; the guest
-    // side stays untouched until NSMBW's EGG::Screen statics are mapped.
+    // The host-side viewport policy (Aurora/VI aspect lock) still applies; the guest side stays
+    // untouched because this game's EGG::Screen statics are not mapped.
     (void)surfaceWidth;
     (void)surfaceHeight;
     return;

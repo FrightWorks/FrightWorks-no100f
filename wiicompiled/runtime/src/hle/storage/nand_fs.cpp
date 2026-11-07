@@ -1,5 +1,5 @@
-// NAND/ISFS HLE: redirects Wii NAND paths (for NSMBW, /title/00010000/534d4e45/data/...) to
-// <nand_root>\title\00010000\534d4e45\data\... on the host.
+// NAND/ISFS HLE: redirects Wii NAND paths (/title/<id hi>/<id lo>/data/...) to
+// <nand_root>\title\<id hi>\<id lo>\data\... on the host.
 
 #include "nand_internal.h"
 
@@ -199,8 +199,8 @@ static RiivolutionSaveRedirect g_riivolutionSaveRedirect;
 static const RiivolutionSaveRedirect& GetRiivolutionSaveRedirect() {
     // The active pack's <savegame> patch, resolved against the virtual SD root
     // exactly like Dolphin resolves it for Riivolution launches. This keeps
-    // the recomp's save in the same folder a Dolphin/WheelWizard launch of the
-    // pack uses (e.g. .../Riivolution/WheelWizard/riivolution/save/RetroWFC/RMCP).
+    // the recomp's save in the same folder a Dolphin launch of the
+    // pack uses.
     std::call_once(g_riivolutionSaveRedirectOnce, []() {
         const auto& redirect = RuntimeRiivolution::GetSaveRedirect();
         if (!redirect) {

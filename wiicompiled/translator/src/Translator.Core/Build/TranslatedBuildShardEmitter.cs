@@ -229,10 +229,10 @@ public static partial class TranslatedBuildShardEmitter
         shards.AddRange(WriteFunctionShards(
             outputRoot, "mod_portable_sensitive", portableSensitiveBase,
             Math.Min(24, Math.Max(1, portableSensitiveBase.Length)), modTraits,
-            "Retro Rewind profile", weightedSequential: false));
+            "mod product profile", weightedSequential: false));
         shards.AddRange(WriteFunctionShards(
             outputRoot, "mod_shards", modRecords, options.ModShardCount, modTraits,
-            "Retro Rewind mod", weightedSequential: false));
+            "mod", weightedSequential: false));
 
         var baseRegistration = WriteRegistrationShards(
             outputRoot, "base", activeBase, baseTraits, options.RegistrationShardCount).ToList();
@@ -607,7 +607,7 @@ public static partial class TranslatedBuildShardEmitter
         Directory.CreateDirectory(directory);
         // Groups own disjoint records and distinct files, so they build concurrently; results are
         // collected positionally to keep the emitted list byte-for-byte deterministic. Never widen
-        // this parallelism across WriteFunctionShards calls, base and Retro Rewind share records.
+        // this parallelism across WriteFunctionShards calls, base and mod share records.
         var emitted = new ShardInfo?[groups.Count];
         Parallel.For(0, groups.Count, index =>
         {

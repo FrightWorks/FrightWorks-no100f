@@ -288,7 +288,7 @@ bool GxDumpFrame() {
     const uint32_t f = GxPresentedFrames();
     return f >= static_cast<uint32_t>(t) && f <= static_cast<uint32_t>(t) + 1;
 }
-// SPM bring-up: drawdump.txt beside the exe holds a frame number; that frame's GXBegin calls are logged.
+// Bring-up: drawdump.txt beside the exe holds a frame number; that frame's GXBegin calls are logged.
 static void GxDumpBegin(uint32_t t, uint32_t vf, uint32_t nv) {
     static int32_t target = [] {
         std::ifstream in("drawdump.txt"); int32_t f = -1; in >> f; return f;
