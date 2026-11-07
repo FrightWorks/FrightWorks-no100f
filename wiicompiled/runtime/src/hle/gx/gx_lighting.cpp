@@ -2,7 +2,6 @@
 #include "gx_internal.h"
 #include "runtime_log.h"
 extern "C" unsigned g_spmAudit[8];  // aurora command_processor (SPM diagnostics)
-extern "C" int g_spmSweepDump;
 bool SpmAuroraDlRecording();  // gx_init.cpp: material lists are recorded at map load
 
 #include <cstdio>

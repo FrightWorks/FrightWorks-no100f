@@ -258,11 +258,6 @@ bool ReadSample(uint32_t chan, WiiRemoteInput::KpadSample& sample) {
         return false;
     }
     NetplayUi::FilterGameInput(chan, sample);
-    // The startup cover (settings_overlay) waits for A or 2; the press itself never reaches the game.
-    constexpr uint32_t kWpadA = 0x0800u, kWpadTwo = 0x0100u;
-    if (settings_overlay::StartupScreenVisible() && (sample.hold & (kWpadA | kWpadTwo)) != 0) {
-        settings_overlay::NotifyStrapInputAccepted();
-    }
     if (InputBindings::InputBlocked()) {
         sample.hold = 0;
         sample.clHold = 0;
@@ -292,10 +287,6 @@ extern "C" int32_t KPAD__Read_HLE(uint32_t chan, uint32_t statusPtr, uint32_t co
         return 0;
     }
 }
-#if 0  // SCOOBY: KPADRead: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012C0, KPAD__Read_HLE, int32_t, (uint32_t chan, uint32_t statusPtr, uint32_t count),
-         (chan, statusPtr, count));
-#endif
 
 // KPADReadEx: KPADRead plus an optional s32* error out-parameter. In NSMBW both are thin wrappers
 // around KPADiRead, and the main input path (EGG::CoreControllerMgr, call at 0x802BCE0C) uses this
@@ -313,10 +304,6 @@ extern "C" int32_t KPAD__ReadEx_HLE(uint32_t chan, uint32_t statusPtr, uint32_t 
     }
     return read;
 }
-#if 0  // SPM: KPADReadEx: name not in SPM
-PPC_NATIVE_OVERRIDE(800012C4, KPAD__ReadEx_HLE, int32_t,
-         (uint32_t chan, uint32_t statusPtr, uint32_t count, uint32_t errPtr), (chan, statusPtr, count, errPtr));
-#endif
 
 // KPADGetUnifiedWpadStatus: the raw WPAD status behind KPADStatus. The game
 // reads the Classic Controller's buttons, sticks and triggers from here. The
@@ -341,9 +328,3 @@ extern "C" int32_t KPAD__GetUnifiedWpadStatus_HLE(uint32_t chan, uint32_t status
     }
     return have ? 1 : 0;
 }
-#if 0  // NSMBW: KPADGetUnifiedWpadStatus is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019812c: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800012C8, KPAD__GetUnifiedWpadStatus_HLE, int32_t,
-         (uint32_t chan, uint32_t statusPtr, uint32_t count), (chan, statusPtr, count));
-#endif
-#endif

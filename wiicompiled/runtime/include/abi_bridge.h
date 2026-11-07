@@ -23,19 +23,10 @@ inline void InvokeIndirectCpu(uint32_t target, CpuContext* ctx);
 // Some game-facing runtime options alter arguments at well-defined ABI
 // boundaries. Keep this independent of the dispatch mechanism: generated
 // static calls deliberately bypass InvokeDirectCpu for performance.
-// (used for the path mask filtering in ScnRenderer::createPath: depth of
-// field is always removed, bloom when the user disabled it)
+// No option needs it in this game.
 inline void ApplyRuntimeCallOptions(uint32_t target, CpuContext* ctx) {
-#if 0  // NSMBW: MKW-only. 0x8023BD38 was Mario Kart's ScnRenderer::createPath; in NSMBW that
-       // address is an unrelated function, so rewriting its r4 would corrupt it.
-    if (target == 0x8023BD38u) {
-        // ScnRenderer::createPath receives the post-processing path mask in r4.
-        ctx->gpr[4] = RuntimeGameGraphicsOptions::FilterScnRendererPathMask(ctx->gpr[4]);
-    }
-#else
     (void)target;
     (void)ctx;
-#endif
 }
 
 // Persistent per-thread CPU context used across translated function calls.

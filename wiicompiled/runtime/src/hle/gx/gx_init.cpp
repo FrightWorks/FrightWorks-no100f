@@ -86,11 +86,6 @@ extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
 
     return kFifoObjAddr;
 }
-#if 0  // NO100F: the game's own GXInit runs (it builds its gxData at 0x8026C5A0, which its unhooked GX code reads;
-       // this HLE put gxData and the FifoObj at fixed addresses inside NO100F's main stack). Aurora is set up
-       // in the GXInitFifoBase hook below; hardware registers are the emulated MMIO register file.
-PPC_NATIVE_OVERRIDE(800FB508, GX__Init_8016b850, uint32_t, (uint32_t fifoBase, uint32_t fifoSize), (fifoBase, fifoSize));
-#endif
 
 // NO100F GXInitFifoBase: GXInit calls it once with its own FIFO before anything is drawn, so the first call also
 // initializes Aurora. kGXDataPtrAddr points the runtime's shadow gxData bookkeeping (not this game's layout) at a
@@ -123,9 +118,6 @@ extern "C" void GX__SetGPFifo_8016cb2c(uint32_t fa) { GXSetGPFifo((GXFifoObj*)Gu
 PPC_NATIVE_OVERRIDE_VOID(800fc88c, GX__SetGPFifo_8016cb2c, (uint32_t fa), (fa));
 
 extern "C" void __GX__SaveFifo_8016cdbc(uint32_t fa) { GXSaveCPUFifo((GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj))); }
-#if 0  // SCOOBY: __GXSaveFifo: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000110c, __GX__SaveFifo_8016cdbc, (uint32_t fa), (fa));
-#endif
 
 extern "C" void GX__GetCPUFifo_8016cf10(uint32_t fa) { auto* d=(GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj)); auto* s=GXGetCPUFifo(); if(d&&s) std::memcpy(d,s,sizeof(GXFifoObj)); }
 PPC_NATIVE_OVERRIDE_VOID(800fce98, GX__GetCPUFifo_8016cf10, (uint32_t fa), (fa));
@@ -182,9 +174,6 @@ extern "C" void __GX__PEInit_8016ee14()
         }
     } catch (const ::Memory::AccessViolation&) {}
 }
-#if 0  // NO100F: the game's own __GXPEInit installs its real PE handlers
-PPC_NATIVE_OVERRIDE_VOID(800FE184, __GX__PEInit_8016ee14, (), ());
-#endif
 
 // ============================================================================
 // Display List Recording
@@ -267,9 +256,6 @@ extern "C" void GX__BeginDisplayList_80172e00(uint32_t la, uint32_t s) {
         GX__SetCPUFifo_8016c94c(0x80521E70);
     } catch (...) {}
 }
-#if 0  // SCOOBY: GXBeginDisplayList: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001114, GX__BeginDisplayList_80172e00, (uint32_t la, uint32_t s), (la, s));
-#endif
 
 extern "C" uint32_t GX__EndDisplayList_80172eb4() {
     try {
@@ -344,9 +330,6 @@ extern "C" uint32_t GX__EndDisplayList_80172eb4() {
         return 0;
     }
 }
-#if 0  // SCOOBY: GXEndDisplayList: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001118, GX__EndDisplayList_80172eb4, uint32_t, (), ());
-#endif
 
 // ============================================================================
 // Flush

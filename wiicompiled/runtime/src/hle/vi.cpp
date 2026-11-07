@@ -16,7 +16,6 @@
 #include "platform/host_platform.h"
 #include "runtime_log.h"
 #include "guest_profiler.h"
-#include "spm_map_sweep.h"
 
 #include <dolphin/gx/GXAurora.h>
 #include <dolphin/vi.h>
@@ -398,7 +397,7 @@ static std::atomic<bool> s_presentSequenceActive{false};
 // watchdog that dumps every guest thread's state if none arrived after 12 s and again after 30 s, so
 // a boot that stalls in a wait loop shows where each thread is parked.
 static std::atomic<uint32_t> s_presentedXfbFrames{0};
-extern "C" { extern int g_spmDrawDump; extern int g_spmCullOff; extern int g_spmSweepDump; extern unsigned g_spmDrawIdx; extern unsigned g_spmDrawLimit; }  // aurora command_processor (SPM bring-up diagnostics)
+extern "C" { extern int g_spmDrawDump; extern int g_spmCullOff; extern unsigned g_spmDrawIdx; extern unsigned g_spmDrawLimit; }  // aurora command_processor (SPM bring-up diagnostics)
 static uint32_t SpmPresentedFramesLocal() { return s_presentedXfbFrames.load(std::memory_order_relaxed); }
 static uint32_t (*const g_spmFramesFn)() = &SpmPresentedFramesLocal;
 
@@ -511,7 +510,6 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
     StartStallWatchdogOnce();
     LogGuestModulesOnce();
     LogSceneChanges();
-    SpmMapSweep::Tick(ctx, s_presentedXfbFrames.load(std::memory_order_relaxed));
 
     uint32_t preCb = 0;
     uint32_t postCb = 0;
@@ -626,11 +624,11 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
         const bool shouldSubmit = frameActive && (shouldPresentXfb || shouldPresentBlack);
 
         if (shouldSubmit) {
-            if (!isBlack || settings_overlay::StartupScreenVisible()) {
+            if (!isBlack) {
                 // Normal presentation: draw overlay on top of GX content
                 settings_overlay::Draw();
             }
-            // Outside startup, VI black remains a pure black presentation.
+            // VI black remains a pure black presentation.
             // Unpaced: this present already runs in retrace context.
             VI_HLE_PresentFrame(shouldPresentXfb, false);
         } else if (g_auroraFrameHadWork.load(std::memory_order_acquire) && !shouldPresentXfb && !isBlack) {
@@ -849,7 +847,7 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
             static const int32_t dumpTarget = [] { std::ifstream in("drawdump.txt"); int32_t f = -1; in >> f; return f; }();
             static const bool cullTest = std::ifstream("depth_test.txt").good();
             if (g_spmDrawDump) std::fflush(nullptr);  // games are killed by test scripts: get the dump to disk
-            g_spmDrawDump = ((dumpTarget >= 0 && pf == static_cast<uint32_t>(dumpTarget)) || g_spmSweepDump) ? 1 : 0;
+            g_spmDrawDump = (dumpTarget >= 0 && pf == static_cast<uint32_t>(dumpTarget)) ? 1 : 0;
             static const int envTest = [] { const char* e = std::getenv("SPM_CULL_TEST"); return e ? std::atoi(e) : 0; }();  // 1 = no culling, 2 = no depth test (diagnostic)
             static const unsigned drawLimit = [] { const char* e = std::getenv("SPM_DRAW_LIMIT"); return e ? static_cast<unsigned>(std::atoi(e)) : ~0u; }();
             g_spmDrawLimit = drawLimit;
@@ -1036,7 +1034,6 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
             times.lastPresentEnd = now;
         }
     }
-    settings_overlay::AdvancePresentedFrame();
     g_auroraFrameActive.store(false, std::memory_order_release);
     g_auroraFrameHadWork.store(false, std::memory_order_release);
     if (presentedXfb) {
@@ -1107,33 +1104,18 @@ extern "C" void VIInit_caseD_0_HLE_801b9934(CpuContext* ctx)
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_0_801b9934 stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0  // SPM: 0x801b9934: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(8000106C, VIInit_caseD_0_HLE_801b9934, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VIInit_caseD_1_HLE_801b993c(CpuContext* ctx)
 {
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_1_801b993c stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0  // SPM: 0x801b993c: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(80001070, VIInit_caseD_1_HLE_801b993c, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VIInit_caseD_2_HLE_801b9944(CpuContext* ctx)
 {
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_2_801b9944 stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0  // SPM: 0x801b9944: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(80001074, VIInit_caseD_2_HLE_801b9944, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 // -----------------------------------------------------------------------------
 // VISetPreRetraceCallback (0x801BC3E0)
@@ -1180,9 +1162,6 @@ extern "C" void VIGetDTVStatus_HLE_801bad38(CpuContext* ctx)
 {
     ViSetR3(ctx, 0); // return 0 -> not ready / disabled
 }
-#if 0  // SCOOBY: VIGetDTVStatus: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001080, VIGetDTVStatus_HLE_801bad38, (CpuContext* ctx), (ctx));
-#endif
 
 // -----------------------------------------------------------------------------
 // VIConfigure & related helpers: translate GXRenderModeObj into guest globals.
@@ -1318,11 +1297,6 @@ extern "C" void VIGetNextFrameBuffer_HLE_801bab24(CpuContext* ctx)
     ViSetR3(ctx, fb);
     VI_HLE_PollRetrace(ctx);
 }
-#if 0  // NSMBW: VIGetNextFrameBuffer is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801bab24: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(80001088, VIGetNextFrameBuffer_HLE_801bab24, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VISetBlack_HLE_801bab2c(CpuContext* ctx)
 {
@@ -1364,9 +1338,6 @@ extern "C" void VIGetNextField_HLE_801babac(CpuContext* ctx)
     ViSetR3(ctx, fieldOdd ? 1 : 0);
     VI_HLE_PollRetrace(ctx);
 }
-#if 0  // SCOOBY: VIGetNextField: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000108C, VIGetNextField_HLE_801babac, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void VIGetCurrentLine_HLE_801bac48(CpuContext* ctx)
 {
@@ -1450,9 +1421,6 @@ PPC_NATIVE_OVERRIDE_VOID(8010AFA0, VIWaitForRetrace_HLE_801b99ec, (CpuContext* c
 // VIGetScanMode (SPM 0x8028211C): reads the VI clock/DTV registers on hardware. The host has no
 // cable, so report interlaced (VI_INTERLACE = 0), the mode every NTSC console supports.
 extern "C" uint32_t VIGetScanMode_HLE() { return 0; }
-#if 0  // SCOOBY: VIGetScanMode: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001090, VIGetScanMode_HLE, uint32_t, (), ());
-#endif
 
 
 uint32_t SpmPresentedFrames() { return g_spmFramesFn(); }

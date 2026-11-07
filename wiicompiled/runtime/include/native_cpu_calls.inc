@@ -62,9 +62,6 @@ MKW_KNOWN_TYPED_NATIVE(0x8016BD60u, GX__SetCullMode_8016f3b8, cpu->gpr[3]);
 MKW_KNOWN_TYPED_NATIVE(0x8016CD8Cu, GX__SetNumChans_8017054c, cpu->gpr[3]);
 MKW_KNOWN_TYPED_NATIVE(0x8016CDC8u, GX__SetChanCtrl_80170570, cpu->gpr[3], cpu->gpr[4], cpu->gpr[5], cpu->gpr[6], cpu->gpr[7], cpu->gpr[8], cpu->gpr[9]);
 MKW_KNOWN_TYPED_NATIVE(0x8016D0A4u, GX__InitTexObj_801707f8, cpu->gpr[3], cpu->gpr[4], cpu->gpr[5], cpu->gpr[6], cpu->gpr[7], cpu->gpr[8], cpu->gpr[9], cpu->gpr[10]);
-#if 0  // SCOOBY: GXInitTexObjLOD: name not in Scooby
-MKW_KNOWN_TYPED_NATIVE(0x8028EC78u, GX__InitTexObjLOD_80170a4c, cpu->gpr[3], cpu->gpr[4], cpu->gpr[5], static_cast<float>(cpu->fpr[1].d), static_cast<float>(cpu->fpr[2].d), static_cast<float>(cpu->fpr[3].d), cpu->gpr[6], cpu->gpr[7], cpu->gpr[8]);
-#endif
 MKW_KNOWN_TYPED_NATIVE(0x8016D60Cu, GX__InvalidateTexAll_80171110);
 MKW_KNOWN_TYPED_NATIVE(0x8016D48Cu, GX__LoadTexObj_80170f2c, cpu->gpr[3], cpu->gpr[4]);
 MKW_KNOWN_TYPED_NATIVE(0x8016DD9Cu, GX__SetNumIndStages_80171b38, cpu->gpr[3]);
@@ -94,11 +91,5 @@ template <> struct KnownNativeCpuCall<addr> { \
     static constexpr void (*Entry)(CpuContext*) = &fn; \
 }
 
-#if 0  // SPM: DrawQuad__Q34nw4r3lyt6detailFRCQ34nw4r4math4VEC2RCQ34nw4r3lyt4SizeUcPA4_CQ34nw4r4math4VEC2PCQ34nw4r2ut5Color: name not in SPM
-MKW_KNOWN_NATIVE_CPU_CALL(0x802B6C80u, nw4r__lyt__detail__DrawQuad_800847c0);
-#endif
-#if 0  // SPM: DrawQuad__Q34nw4r3lyt6detailFRCQ34nw4r4math4VEC2RCQ34nw4r3lyt4SizeUcPA4_CQ34nw4r4math4VEC2PCQ34nw4r2ut5ColorUc: name not in SPM
-MKW_KNOWN_NATIVE_CPU_CALL(0x802B71E0u, nw4r__lyt__detail__DrawQuad_80084d20);
-#endif
 
 #undef MKW_KNOWN_NATIVE_CPU_CALL

@@ -39,14 +39,6 @@ extern "C" void SPM_GXSetDrawSync(uint32_t token) {
         Memory::Write16(kSpmPeRegBlock + 0xEu, static_cast<uint16_t>(token));
     } catch (const ::Memory::AccessViolation&) {}
 }
-#if 0  // SCOOBY: GXSetDrawSync: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001188, SPM_GXSetDrawSync, (uint32_t token), (token));
-#endif
-#if 0  // NSMBW: GXSetDrawSync is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8016e9fc: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(8000118c, GX__SetDrawSync_8016e9fc, (uint32_t token), (token));
-#endif
-#endif
 
 extern "C" void GX__FinishInterruptHandler_8016ed94() {
     try {
@@ -74,9 +66,6 @@ PPC_NATIVE_OVERRIDE_VOID(800fdf14, GX__PixModeSync_8016eb70, (), ());
 // ============================================================================
 
 extern "C" void __GX__InitRevisionBits_8016b720() {}
-#if 0  // SCOOBY: __GXInitRevisionBits: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001190, __GX__InitRevisionBits_8016b720, (), ());
-#endif
 
 // ============================================================================
 // Texture State Management - Aurora handles internally
@@ -160,11 +149,6 @@ extern "C" void GX__ReadBoundingBox_SPM(uint32_t leftPtr, uint32_t topPtr, uint3
     } catch (const Memory::AccessViolation&) {
     }
 }
-#if 0  // SCOOBY: GXReadBoundingBox: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000119C, GX__ReadBoundingBox_SPM,
-                         (uint32_t leftPtr, uint32_t topPtr, uint32_t rightPtr, uint32_t bottomPtr),
-                         (leftPtr, topPtr, rightPtr, bottomPtr));
-#endif
 
 // ============================================================================
 // FIFO/State Management - No-ops
@@ -179,6 +163,3 @@ extern "C" void GX__SetDirtyState_8016ee78() {
 extern "C" void GX__ResetWriteGatherPipe_8016e6b0() {
     // WPAR reset - not needed on host
 }
-#if 0  // SCOOBY: GXResetWriteGatherPipe: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800011a4, GX__ResetWriteGatherPipe_8016e6b0, (), ());
-#endif
