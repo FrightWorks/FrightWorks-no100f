@@ -8,7 +8,7 @@ using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using ScoobyReMasked;
+using FrightWorks;
 using Rectangle = System.Drawing.Rectangle;
 
 // Layout regression checks for the launcher, on its real window and pages, without a screen (Avalonia's headless

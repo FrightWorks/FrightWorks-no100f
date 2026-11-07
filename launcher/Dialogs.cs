@@ -4,7 +4,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Questions and messages in the launcher's own colours (Avalonia has no message box; the old launcher's update and
 // Xbox questions already looked like this). Every dialog is modal over the launcher, or on its own before it opens.

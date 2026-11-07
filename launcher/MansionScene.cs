@@ -12,7 +12,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // The launcher's main screen: a stormy night sky with lightning, the mansion (launcher/art, made by
 // tools/launcher-art/make_launcher_art.py) whose windows light up, draw their curtains and show the odd silhouette,

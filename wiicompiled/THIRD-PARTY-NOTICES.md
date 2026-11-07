@@ -157,7 +157,7 @@ trees themselves (fetched by `Launcher/Prepare-Dependencies.ps1`) so end-user bu
 ## Launcher (`launcher/`) - NuGet packages built into `FrightWorks.exe`
 
 The launcher is an Avalonia application. Its packages are restored from nuget.org at build time (versions as
-restored for the current build: `launcher/ScoobyReMasked.Launcher.csproj` and `obj/project.assets.json`) and
+restored for the current build: `launcher/FrightWorks.Launcher.csproj` and `obj/project.assets.json`) and
 end up inside the single-file `FrightWorks.exe`, with their native libraries unpacked next to it when it
 starts. Where a row says Windows or Linux, it is only used there.
 

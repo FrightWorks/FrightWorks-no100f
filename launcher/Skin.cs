@@ -14,7 +14,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.Imaging;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Colours, fonts, drawing helpers and the themed controls of the launcher (night purples, lime and cream, as on the
 // signs). Sizes are in device-independent pixels: Avalonia scales them with the monitor's display scaling.
@@ -41,7 +41,7 @@ static class Skin
     public static readonly FontFamily Display = new("avares://FrightWorks/fonts#Luckiest Guy");
     static readonly Typeface DisplayFace = new(Display);
 
-    public static Stream? Resource(string name) => typeof(Skin).Assembly.GetManifestResourceStream("ScoobyReMasked." + name);
+    public static Stream? Resource(string name) => typeof(Skin).Assembly.GetManifestResourceStream("FrightWorks." + name);
 
     public static Bitmap? LoadBitmap(string name)
     {

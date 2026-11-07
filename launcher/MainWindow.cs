@@ -8,9 +8,9 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using static ScoobyReMasked.Skin;
+using static FrightWorks.Skin;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // The launcher window: the haunted mansion (MansionScene) whose signs are the menu. Play starts the game; Settings,
 // Mods and Extras open a board over the left of the house. Everything it changes goes to Config.toml (DataPaths),

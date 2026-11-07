@@ -7,7 +7,7 @@ using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // The Avalonia application: Fluent's dark theme recoloured in the launcher's purples, lime and cream, and the start
 // (an offer to copy an earlier version's files first, then the launcher window).
