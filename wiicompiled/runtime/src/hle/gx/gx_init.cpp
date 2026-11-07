@@ -87,13 +87,13 @@ extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
     return kFifoObjAddr;
 }
 #if 0  // NO100F: the game's own GXInit runs (it builds its gxData at 0x8026C5A0, which its unhooked GX code reads;
-       // this HLE put gxData and the FifoObj at Unmasked addresses, inside NO100F's main stack). Aurora is set up
+       // this HLE put gxData and the FifoObj at fixed addresses inside NO100F's main stack). Aurora is set up
        // in the GXInitFifoBase hook below; hardware registers are the emulated MMIO register file.
 PPC_NATIVE_OVERRIDE(800FB508, GX__Init_8016b850, uint32_t, (uint32_t fifoBase, uint32_t fifoSize), (fifoBase, fifoSize));
 #endif
 
 // NO100F GXInitFifoBase: GXInit calls it once with its own FIFO before anything is drawn, so the first call also
-// initializes Aurora. kGXDataPtrAddr points the runtime's shadow gxData bookkeeping (Wii/Unmasked offsets) at a
+// initializes Aurora. kGXDataPtrAddr points the runtime's shadow gxData bookkeeping (not this game's layout) at a
 // scratch block, away from the game's real gxData.
 extern "C" void No100f_GXInitFifoBase(uint32_t fa, uint32_t ba, uint32_t s) {
     static bool auroraReady = false;

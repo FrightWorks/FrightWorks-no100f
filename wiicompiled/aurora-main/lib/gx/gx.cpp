@@ -979,7 +979,7 @@ MappedRenderState map_logical_render_state() noexcept {
 namespace {
 void apply_logical_render_state() noexcept;
 // The mapped viewport/scissor bake in the render-target scale. A game that sets its viewport once and then changes
-// the VI mode (Scooby-Doo! Unmasked: 640x480 -> 640x448) resizes the target afterwards; re-map after every resize
+// the VI mode (for example 640x480 -> 640x448) resizes the target afterwards; re-map after every resize
 // (it stopped 448*2.25 rows into a 448*2.41-row target: a black strip at the bottom).
 void reapply_after_resize() { apply_logical_render_state(); }
 

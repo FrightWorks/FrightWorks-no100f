@@ -2373,7 +2373,7 @@ void InitializeRuntimeSettings() noexcept {
     g_displayMode = static_cast<int>(aurora_get_display_mode());
     aurora_set_disable_copy_filter(g_disableCopyFilter);
     aurora_set_skip_unready_pipelines(g_skipUnreadyPipelines);
-    // Scooby-Doo! Unmasked: no startup cover (see the initializers of these flags).
+    // No startup cover (see the initializers of these flags).
     g_strapInputAccepted.store(true, std::memory_order_relaxed);
     g_startupDismissFrame.store(0, std::memory_order_relaxed);
     g_bootShadersReady.store(true, std::memory_order_relaxed);

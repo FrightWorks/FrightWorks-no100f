@@ -548,11 +548,8 @@ Memory::Config Memory::Config::WiiDefaults() {
         .sizeBytes = Memory::kMem2Size,
     });
 
-    // Kamek module overlay: 2 MiB above MEM1, which the game believes ends at 0x81800000, so this
-    // costs no arena space (unlike the old in-arena reservation that shrank the race scene heaps).
-    // Base must stay within +/-32 MiB of every DOL/StaticR hook site for Kamek Rel24 branches to encode.
-    // Scooby-Doo! Unmasked: the same spot holds the pre-relocated logic modules, so 24 MiB (see
-    // hle/scooby_logic.cpp and projects/scooby/tools/build_logic_overlay.py).
+    // Overlay for translated modules: 24 MiB above MEM1, which the game believes ends at 0x81800000, so this
+    // costs no arena space. Base must stay within +/-32 MiB of every DOL hook site for Kamek Rel24 branches to encode.
     config.regions.push_back(RegionConfig{
         .name = "MEM1_KAMEK_OVERLAY",
         .baseAddress = 0x81800000,

@@ -135,7 +135,7 @@ MKW_MEMORY_FORCE_INLINE uint32_t ConvertPpcDoubleToSingleBits(double value) {
 
 // lfs is an exact single->double widening on Gekko whatever FPSCR[NI] says. A host float->double cast is exact
 // for normal numbers, but under the DAZ the runtime sets to model NI it zeroes denormals (and it quiets SNaNs):
-// Scooby-Doo! Unmasked copies 8-byte variants holding pointers through lfs/stfs, and a 0x8029xxxx stack pointer is
+// Game code can copy 8-byte variants holding pointers through lfs/stfs, and a 0x8029xxxx stack pointer is
 // a negative single denormal, so it came back as 0x80000000. Zero/denormal/Inf/NaN take Dolphin's ConvertToDouble.
 MKW_MEMORY_FORCE_INLINE double PpcSingleBitsToDouble(uint32_t bits) {
     const uint32_t exp = bits & 0x7F800000u;
