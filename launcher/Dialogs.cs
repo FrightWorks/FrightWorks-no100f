@@ -11,6 +11,7 @@ namespace ScoobyReMasked;
 static class Dialogs
 {
     public enum Answer { Yes, No, Cancel }
+    internal static Func<Window?, string, Task>? MessageOverride;
 
     // The index of the button pressed, or -1 when the window was closed (Escape or the title bar's X).
     public static async Task<int> Choose(Window? owner, string windowTitle, string? heading, IEnumerable<string> paragraphs,
@@ -52,7 +53,7 @@ static class Dialogs
         Choose(owner, MainWindow.AppTitle, heading, paragraphs, buttons);
 
     public static Task Message(Window? owner, string text) =>
-        Choose(owner, MainWindow.AppTitle, null, Paragraphs(text), ("OK", true));
+        MessageOverride?.Invoke(owner, text) ?? Choose(owner, MainWindow.AppTitle, null, Paragraphs(text), ("OK", true));
 
     public static async Task<bool> YesNo(Window? owner, string text) =>
         await Choose(owner, MainWindow.AppTitle, null, Paragraphs(text), ("Yes", true), ("No", false)) == 0;

@@ -74,6 +74,29 @@ void aurora_set_frame_interpolation_fps(uint32_t targetFps);
 void aurora_set_vsync(bool enabled);
 // HDR (scRGB) output; call before aurora_initialize.
 void aurora_set_hdr(bool enabled, float paperWhiteNits, float peakNits);
+// Live game-picture brightness. Does not change the startup HDR enable/surface selection.
+// Returns false for non-finite targets or values outside the saved settings' nit ranges.
+bool aurora_set_hdr_brightness(float paperWhiteNits, float peakNits);
+typedef enum AuroraHdrCalibrationStatus {
+  AURORA_HDR_CALIBRATION_READY,
+  AURORA_HDR_CALIBRATION_OUTPUT_OFF,
+  AURORA_HDR_CALIBRATION_UNSUPPORTED_BACKEND,
+  AURORA_HDR_CALIBRATION_DISPLAY_OFF,
+  AURORA_HDR_CALIBRATION_DISPLAY_UNKNOWN,
+  // HDR is on in the settings, but startup found Windows HDR off for the display, so the game shows the SDR picture.
+  AURORA_HDR_CALIBRATION_STAYED_SDR,
+} AuroraHdrCalibrationStatus;
+typedef struct AuroraHdrCalibration {
+  // Normalized client-area rectangles: left, top, right, bottom. Empty rectangles disable the patches.
+  float paperRect[4];
+  float peakRect[4];
+  float paperWhiteNits;
+  float peakNits;
+} AuroraHdrCalibration;
+AuroraHdrCalibrationStatus aurora_get_hdr_calibration_status();
+const char* aurora_get_hdr_display_name();
+// Calibration patches are independent of the live game-picture brightness.
+void aurora_set_hdr_calibration(const AuroraHdrCalibration* calibration);
 bool aurora_get_vsync();
 uint32_t aurora_get_frame_interpolation_fps();
 

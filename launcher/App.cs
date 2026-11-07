@@ -117,7 +117,11 @@ sealed class App : Application
             if (shots < 0 && !selftest)
             {
                 await DataImport.OfferAtStart(paths, MainWindow.AppTitle, window);
-                if (window.IsVisible) window.CompleteStartup();
+                if (window.IsVisible)
+                {
+                    window.CompleteStartup();
+                    await window.InitializeHdrDefaults();
+                }
             }
         }
         catch (Exception e)

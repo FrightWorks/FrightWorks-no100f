@@ -8,21 +8,22 @@ namespace ScoobyReMasked;
 // Windows only: the game doesn't pick a fullscreen monitor elsewhere yet (MainWindow.MonitorChoice).
 static class Monitors
 {
-    public sealed record Monitor(string Id, string Label);
+    public sealed record Monitor(string Id, string Label, string DeviceName = "");
 
     public static List<Monitor> List()
     {
         if (!OperatingSystem.IsWindows()) return new List<Monitor>();
         var targets = Targets();
-        var screens = Screens().OrderByDescending(s => s.Primary).Where(s => targets.ContainsKey(s.DeviceName)).ToList();
+        var screens = DesktopScreens().OrderByDescending(s => s.Primary).Where(s => targets.ContainsKey(s.DeviceName)).ToList();
         var labels = Labels(screens.Select(s => (targets[s.DeviceName].name, s.Bounds, s.Primary)).ToList());
-        return screens.Select((s, i) => new Monitor(targets[s.DeviceName].id, labels[i])).ToList();
+        return screens.Select((s, i) => new Monitor(targets[s.DeviceName].id, labels[i], s.DeviceName)).ToList();
     }
 
     // The desktop's monitors in Windows' order (what WinForms' Screen.AllScreens gave): device name, bounds, main.
-    static List<(string DeviceName, Rectangle Bounds, bool Primary)> Screens()
+    internal static List<(string DeviceName, Rectangle Bounds, bool Primary)> DesktopScreens()
     {
         var list = new List<(string, Rectangle, bool)>();
+        if (!OperatingSystem.IsWindows()) return list;
         EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (monitor, _, _, _) =>
         {
             var info = new MonitorInfoEx { Size = Marshal.SizeOf<MonitorInfoEx>() };
@@ -32,6 +33,15 @@ static class Monitors
             return true;
         }, IntPtr.Zero);
         return list;
+    }
+
+    internal static string? DisplayFromRectangle(Rectangle bounds)
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        var rect = new Rect32 { Left = bounds.Left, Top = bounds.Top, Right = bounds.Right, Bottom = bounds.Bottom };
+        var monitor = MonitorFromRect(ref rect, 2 /* MONITOR_DEFAULTTONEAREST */);
+        var info = new MonitorInfoEx { Size = Marshal.SizeOf<MonitorInfoEx>() };
+        return monitor != IntPtr.Zero && GetMonitorInfo(monitor, ref info) ? info.Device : null;
     }
 
     // "VS248 (1920x1080, above right)": name, size and place relative to the main monitor. Monitors whose labels would
@@ -158,6 +168,7 @@ static class Monitors
     delegate bool MonitorEnumProc(IntPtr monitor, IntPtr dc, IntPtr rect, IntPtr data);
 
     [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonitorEnumProc callback, IntPtr data);
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromRect(ref Rect32 rect, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetMonitorInfoW")] static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfoEx info);
     [DllImport("user32.dll")] static extern int GetDisplayConfigBufferSizes(uint flags, out uint pathCount, out uint modeCount);
     [DllImport("user32.dll")] static extern int QueryDisplayConfig(uint flags, ref uint pathCount, [Out] DisplayPath[] paths, ref uint modeCount, [Out] DisplayMode[] modes, IntPtr topology);

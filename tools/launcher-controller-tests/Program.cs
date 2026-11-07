@@ -82,12 +82,87 @@ static class LauncherControllerTests
         {
             Pure(config);
             Run(new DataPaths(fixture, game), config);
+            Hdr(new DataPaths(fixture, game), config);
             Check(errors.Count == 0, "Unexpected routed error: " + string.Join("; ", errors.Select(e => e.ToString())));
             Console.WriteLine($"PASS {checks} controller assertions (headless, services disabled; no SDL/game/native UI).");
             return 0;
         }
         catch (Exception e) { Console.Error.WriteLine(e); return 1; }
         finally { Fault.Override = null; Directory.Delete(fixture, true); }
+    }
+
+    // The HDR window (#116) with the pad (#115): the Display page's button opens it as a registered modal, the left stick
+    // steps each slider by its coarse step and the D-pad by 0.1 nit, ends clamp, the HDR dropdown uses the themed popup,
+    // Back closes it. The fixture file is put back afterwards.
+    static void Hdr(DataPaths paths, string config)
+    {
+        string saved = File.ReadAllText(config);
+        var w = new MainWindow(null, paths, false);
+        Fault.Owner = w;
+        w.Show(); Pump();
+        void Stick(HdrWindow hdr, LauncherButtons buttons, bool coarse)
+        {
+            w.navigation.Feed(hdr, new[] { new ControllerSample(1, LauncherButtons.None) }, time += 20, false);
+            w.navigation.Feed(hdr, new[] { new ControllerSample(1, buttons, coarse) }, time += 20, false);
+            Pump();
+            w.navigation.Feed(hdr, new[] { new ControllerSample(1, LauncherButtons.None) }, time += 20, false);
+        }
+        try
+        {
+            Press(w, LauncherButtons.Next);
+            Press(w, LauncherButtons.Confirm);
+            Check(w.boards["settings"].IsVisible, "Controller did not open Settings for the HDR checks.");
+            var adjust = Button(w, "Adjust HDR");
+            Check(ControllerNavigation.Targets(w.boards["settings"]).Contains(adjust), "Adjust HDR is not a controller target.");
+            adjust.Focus(NavigationMethod.Directional);
+            Press(w, LauncherButtons.Confirm);
+            var hdr = w.navigation.Modal as HdrWindow;
+            Check(hdr != null && hdr.IsVisible && hdr.Owner == w, "Adjust HDR did not open the HDR window as the registered modal.");
+            Check(hdr!.PaperSlider.IsFocused, "The HDR window did not start on the paper white slider.");
+            double paper = hdr.PaperSlider.Value, peak = hdr.PeakSlider.Value;
+            Stick(hdr, LauncherButtons.Right, true);
+            Check(Math.Abs(hdr.PaperSlider.Value - (paper + 10)) < 1e-6 && Math.Abs(hdr.PeakSlider.Value - peak) < 1e-6,
+                  "Left stick did not step paper white by 10 nits.");
+            Stick(hdr, LauncherButtons.Right, false);
+            Check(Math.Abs(hdr.PaperSlider.Value - (paper + 10.1)) < 1e-6, "D-pad did not step paper white by 0.1 nit.");
+            Check(new GameConfig(config).Get("video", "hdr_paper_white_nits") == HdrSettings.Raw((decimal)Math.Round(paper + 10.1, 1)),
+                  "A pad step on paper white was not saved with its precision.");
+            hdr.PaperSlider.Value = 1000;
+            Stick(hdr, LauncherButtons.Right, true);
+            Check(hdr.PaperSlider.Value == 1000, "Left stick stepped paper white past its maximum.");
+            hdr.PaperSlider.Value = 85;
+            Stick(hdr, LauncherButtons.Left, true);
+            Check(hdr.PaperSlider.Value == 80, "Left stick stepped paper white below its minimum.");
+            Press(w, LauncherButtons.Down);
+            Check(hdr.PeakSlider.IsFocused, "Down did not move from paper white to peak highlights.");
+            Stick(hdr, LauncherButtons.Right, true);
+            Check(Math.Abs(hdr.PeakSlider.Value - (peak + 100)) < 1e-6, "Left stick did not step peak highlights by 100 nits.");
+            Stick(hdr, LauncherButtons.Left, false);
+            Check(Math.Abs(hdr.PeakSlider.Value - (peak + 99.9)) < 1e-6, "D-pad did not step peak highlights by 0.1 nit.");
+            Check(new GameConfig(config).Get("video", "hdr_paper_white_nits") == "80" &&
+                  new GameConfig(config).Get("video", "unknown") == "42", "HDR pad steps lost the paper white value or an unknown key.");
+            // The HDR dropdown is the themed popup, and a pad choice (including the same value) is committed.
+            Press(w, LauncherButtons.Up); Press(w, LauncherButtons.Up);
+            var enabled = hdr.GetVisualDescendants().OfType<ThemedCombo>().Single();
+            Check(enabled.IsFocused, "Up did not reach the HDR dropdown.");
+            Press(w, LauncherButtons.Confirm);
+            var popup = w.navigation.Modal!;
+            Check(popup != hdr && popup.Title == "HDR", "The HDR dropdown did not open the controller popup.");
+            Press(w, LauncherButtons.Down);
+            Press(w, LauncherButtons.Confirm);
+            Check(w.navigation.Modal == hdr && new GameConfig(config).Get("video", "hdr") == "true", "Choosing HDR On with the pad did not save it.");
+            Press(w, LauncherButtons.Confirm);
+            Press(w, LauncherButtons.Confirm);
+            Check(w.navigation.Modal == hdr && new GameConfig(config).Get("video", "hdr") == "true", "Choosing the same HDR value with the pad changed it.");
+            Press(w, LauncherButtons.Back);
+            Check(w.navigation.Modal == null && !hdr.IsVisible, "Back did not close the HDR window.");
+            Check(adjust.IsFocused, "Closing the HDR window did not return focus to Adjust HDR.");
+        }
+        finally
+        {
+            w.Close(); Pump(); Fault.Owner = null;
+            File.WriteAllText(config, saved);
+        }
     }
 
     static void Pure(string path)
