@@ -47,7 +47,7 @@ uint32_t CourseSelectMenuObject();
 int CourseMenuCursor();
 // The SELECT_CURSOR object (the menus' corner brackets), 0 without one.
 uint32_t SelectCursorObject();
-// NSMBW_DUMP_STATES debugging: the StateIDs held by the listed profiles' objects.
+// NO100F_DUMP_STATES debugging: the StateIDs held by the listed profiles' objects.
 std::string DumpStates();
 
 } // namespace GameMenus

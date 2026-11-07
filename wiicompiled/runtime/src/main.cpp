@@ -805,8 +805,8 @@ void ShowRuntimeFatalPopup(std::string_view category, std::string_view details) 
         return;
     }
     // NO100F_NO_POPUP: automated runs (tools/level-sweep.py) log the fatal error instead of opening a window.
-    if (std::getenv("SPM_MAP_SWEEP_FILE") || std::getenv("NO100F_NO_POPUP")) {
-        RT_LOGF(RT_TAG_RUNTIME, "[spmsweep] fatal %.*s: %.*s\n", static_cast<int>(category.size()), category.data(),
+    if (std::getenv("NO100F_NO_POPUP")) {
+        RT_LOGF(RT_TAG_RUNTIME, "[fatal] %.*s: %.*s\n", static_cast<int>(category.size()), category.data(),
                 static_cast<int>(details.size()), details.data());
         return;
     }
@@ -1399,40 +1399,40 @@ int RuntimeMain(int argc, char** argv) {
             return 0;
         }
 #if defined(__ANDROID__)
-        // Determinism testing on a phone: debug.nsmbw.det=1 turns the lockstep timing on,
-        // debug.nsmbw.dethash / detdump set NSMBW_DET_HASH / NSMBW_DET_DUMP (det_hash.h) and
-        // debug.nsmbw.script[2|3] the scripted remote (NSMBW_INPUT_SCRIPT), 91 characters each.
+        // Determinism testing on a phone: debug.no100f.det=1 turns the lockstep timing on,
+        // debug.no100f.dethash / detdump set NO100F_DET_HASH / NO100F_DET_DUMP (det_hash.h) and
+        // debug.no100f.script[2|3] the scripted remote (NO100F_INPUT_SCRIPT), 91 characters each.
         {
             const auto property = [](const char* name) {
                 char value[PROP_VALUE_MAX] = {};
                 return __system_property_get(name, value) > 0 ? std::string(value) : std::string();
             };
-            if (property("debug.nsmbw.det") == "1") {
-                setenv("NSMBW_DETERMINISTIC", "1", 1);
+            if (property("debug.no100f.det") == "1") {
+                setenv("NO100F_DETERMINISTIC", "1", 1);
             }
-            for (const auto& [prop, env] : {std::pair{"debug.nsmbw.dethash", "NSMBW_DET_HASH"},
-                                            std::pair{"debug.nsmbw.detdump", "NSMBW_DET_DUMP"},
-                                            std::pair{"debug.nsmbw.lobbytest", "NSMBW_LOBBY_TEST"},
-                                            std::pair{"debug.nsmbw.tsonly", "NSMBW_NET_TAILSCALE_ONLY"},
-                                            std::pair{"debug.nsmbw.tapscript", "NSMBW_TAP_SCRIPT"},
-                                            std::pair{"debug.nsmbw.warp", "NSMBW_WARP"},
-                                            std::pair{"debug.nsmbw.logfps", "NSMBW_LOG_FPS"},
-                                            std::pair{"debug.nsmbw.patchreadback", "NSMBW_PATCH_READBACK"}}) {
+            for (const auto& [prop, env] : {std::pair{"debug.no100f.dethash", "NO100F_DET_HASH"},
+                                            std::pair{"debug.no100f.detdump", "NO100F_DET_DUMP"},
+                                            std::pair{"debug.no100f.lobbytest", "NO100F_LOBBY_TEST"},
+                                            std::pair{"debug.no100f.tsonly", "NO100F_NET_TAILSCALE_ONLY"},
+                                            std::pair{"debug.no100f.tapscript", "NO100F_TAP_SCRIPT"},
+                                            std::pair{"debug.no100f.warp", "NO100F_WARP"},
+                                            std::pair{"debug.no100f.logfps", "NO100F_LOG_FPS"},
+                                            std::pair{"debug.no100f.patchreadback", "NO100F_PATCH_READBACK"}}) {
                 if (const std::string value = property(prop); !value.empty()) {
                     setenv(env, value.c_str(), 1);
                 }
             }
-            std::string script = property("debug.nsmbw.script") + property("debug.nsmbw.script2") +
-                                 property("debug.nsmbw.script3");
+            std::string script = property("debug.no100f.script") + property("debug.no100f.script2") +
+                                 property("debug.no100f.script3");
             if (!script.empty()) {
-                setenv("NSMBW_INPUT_SCRIPT", script.c_str(), 1);
+                setenv("NO100F_INPUT_SCRIPT", script.c_str(), 1);
             }
-            if (const std::string session = property("debug.nsmbw.sscript"); !session.empty()) {
-                setenv("NSMBW_SESSION_SCRIPT", session.c_str(), 1);
+            if (const std::string session = property("debug.no100f.sscript"); !session.empty()) {
+                setenv("NO100F_SESSION_SCRIPT", session.c_str(), 1);
             }
         }
 #endif
-        if (const char* deterministic = std::getenv("NSMBW_DETERMINISTIC");
+        if (const char* deterministic = std::getenv("NO100F_DETERMINISTIC");
             deterministic != nullptr && std::string(deterministic) == "1") {
             DetClock::Enable();
         }
@@ -1566,12 +1566,12 @@ int RuntimeMain(int argc, char** argv) {
         // visible on that first scan.
         WiiRemoteInput::ConfigureSdlHints(RuntimeConfigFile::WiiRemotesEnabled(true));
 #if defined(__ANDROID__)
-        // Graphics debugging on a phone without a rebuild: `adb shell setprop debug.nsmbw.gfx
+        // Graphics debugging on a phone without a rebuild: `adb shell setprop debug.no100f.gfx
         // validate,robust` reaches aurora's device setup as AURORA_GFX_FLAGS (webgpu/gpu.cpp).
-        // A property holds 91 characters, so debug.nsmbw.gfx2 and gfx3 continue the list.
+        // A property holds 91 characters, so debug.no100f.gfx2 and gfx3 continue the list.
         {
             std::string flags;
-            for (const char* name : {"debug.nsmbw.gfx", "debug.nsmbw.gfx2", "debug.nsmbw.gfx3"}) {
+            for (const char* name : {"debug.no100f.gfx", "debug.no100f.gfx2", "debug.no100f.gfx3"}) {
                 char value[PROP_VALUE_MAX] = {};
                 if (__system_property_get(name, value) > 0) {
                     flags += flags.empty() ? "" : ",";
@@ -1580,7 +1580,7 @@ int RuntimeMain(int argc, char** argv) {
             }
             if (!flags.empty()) {
                 setenv("AURORA_GFX_FLAGS", flags.c_str(), 1);
-                RT_LOG(RT_TAG_RUNTIME) << "debug.nsmbw.gfx flags: " << flags << std::endl;
+                RT_LOG(RT_TAG_RUNTIME) << "debug.no100f.gfx flags: " << flags << std::endl;
             }
         }
 #endif

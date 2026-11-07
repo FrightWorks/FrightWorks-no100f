@@ -8,7 +8,7 @@
 // ============================================================================
 
 extern "C" void GX__SetBlendMode_8017277c(uint32_t t, uint32_t s, uint32_t d, uint32_t op) {
-    if (SpmDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] blend %u %u %u %u\n", t, s, d, op);
+    if (GxDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] blend %u %u %u %u\n", t, s, d, op);
     GXSetBlendMode(static_cast<GXBlendMode>(t), static_cast<GXBlendFactor>(s),
                    static_cast<GXBlendFactor>(d), static_cast<GXLogicOp>(op));
 }
@@ -29,7 +29,7 @@ PPC_NATIVE_OVERRIDE_VOID(80101F70, GX__SetAlphaUpdate_801727f8, (uint32_t en), (
 // ============================================================================
 
 extern "C" void GX__SetZMode_80172824(uint32_t ce, uint32_t f, uint32_t ue) {
-    if (SpmDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] zmode %u %u %u\n", ce, f, ue);
+    if (GxDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] zmode %u %u %u\n", ce, f, ue);
     GXSetZMode(static_cast<GXBool>(ce), static_cast<GXCompare>(f), static_cast<GXBool>(ue));
 }
 PPC_NATIVE_OVERRIDE_VOID(80101FB0, GX__SetZMode_80172824, (uint32_t ce, uint32_t f, uint32_t ue), (ce, f, ue));
@@ -68,7 +68,7 @@ extern "C" void GX__SetFog_801722cc(uint32_t t, float sz, float ez, float nz, fl
 PPC_NATIVE_OVERRIDE_VOID(80101B7C, GX__SetFog_801722cc, (uint32_t t, float sz, float ez, float nz, float fz, uint32_t cp), (t, sz, ez, nz, fz, cp));
 
 extern "C" void GX__SetAlphaCompare_80172088(uint32_t c0, uint32_t r0, uint32_t op, uint32_t c1, uint32_t r1) {
-    if (SpmDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] alphacmp %u %u %u %u %u\n", c0, r0, op, c1, r1);
+    if (GxDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] alphacmp %u %u %u %u %u\n", c0, r0, op, c1, r1);
     g_alphaCompareValid = true;
     static const bool s_alphaExperiment = std::filesystem::exists("alphatest_off.txt");  // SPM bring-up experiment
     if (s_alphaExperiment && c0 == 6 && r0 == 128) { c0 = 7; op = 1; c1 = 7; }
@@ -83,13 +83,13 @@ PPC_NATIVE_OVERRIDE_VOID(8000117c, GX__SetZTexture_801720c0, (uint32_t op, uint3
 // Culling and Clipping
 // ============================================================================
 
-bool SpmAuroraDlRecording();
+bool GxAuroraDlRecording();
 extern "C" void GX__SetCullMode_8016f3b8(uint32_t m) {
-    if (SpmDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] cull %u\n", m);
+    if (GxDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] cull %u\n", m);
     { static int n = 0; const CpuContext* x = TryGetCpuContext();
       const uint32_t lr = x ? x->lr : 0;  // mapdrv/mobjdrv live around 0x80080000-0x8008C000
-      if (lr >= 0x80080000u && lr < 0x8008C000u && n++ < 4000) RT_LOGF(RT_TAG_GX, "[spmcull] mode %u lr %08X\n", m, lr); }
-    { static int k = 0; if (SpmAuroraDlRecording() && k++ < 6000) RT_LOGF(RT_TAG_GX, "[spmrec] cull %u\n", m); }
+      if (lr >= 0x80080000u && lr < 0x8008C000u && n++ < 4000) RT_LOGF(RT_TAG_GX, "[gxcull] mode %u lr %08X\n", m, lr); }
+    { static int k = 0; if (GxAuroraDlRecording() && k++ < 6000) RT_LOGF(RT_TAG_GX, "[gxrec] cull %u\n", m); }
     GXSetCullMode(static_cast<GXCullMode>(m));
 }
 PPC_NATIVE_OVERRIDE_VOID(80001180, GX__SetCullMode_8016f3b8, (uint32_t m), (m));

@@ -132,9 +132,9 @@ extern "C" void GX__SetProjection_8017301c(uint32_t ma, uint32_t pt) {
             std::memcpy(last, m, sizeof(last));
         }
     }
-    // NSMBW_LOG_ORTHO: each distinct orthographic projection's extent (finding the 2D layer's), and
+    // NO100F_LOG_ORTHO: each distinct orthographic projection's extent (finding the 2D layer's), and
     // each perspective one's aspect (x scale against y scale).
-    static const bool logOrtho = std::getenv("NSMBW_LOG_ORTHO") != nullptr;
+    static const bool logOrtho = std::getenv("NO100F_LOG_ORTHO") != nullptr;
     if (logOrtho && pt == GX_PERSPECTIVE && m[0] != 0.f) {
         static std::vector<int> seenAspects;
         const int key = static_cast<int>(m[5] / m[0] * 1000.f);
@@ -170,7 +170,7 @@ extern "C" void GX__SetProjection_8017301c(uint32_t ma, uint32_t pt) {
                          -m[7] / m[5], chain);
         }
     }
-    if (SpmDumpFrame()) {
+    if (GxDumpFrame()) {
         const CpuContext* c = TryGetCpuContext();
         RT_LOGF(RT_TAG_GX, "[drawdump] setproj type %u m0 %.4f m5 %.4f m2 %.4f m6 %.4f m10 %.4f m11 %.4f m14 %.4f lr %08X\n", pt, m[0], m[5], m[2], m[6], m[10], m[11], m[14], c ? c->lr : 0);
     }
@@ -183,7 +183,7 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
     const uint32_t* raw=(const uint32_t*)GuestToHostPtr(pa, 28); float v[7];
     SwapBeF32ArrayToHost(raw, v, 7);
     GXProjectionType pt=(v[0]!=0.f)?GX_ORTHOGRAPHIC:GX_PERSPECTIVE;
-    static const bool logOrthoV = std::getenv("NSMBW_LOG_ORTHO") != nullptr;
+    static const bool logOrthoV = std::getenv("NO100F_LOG_ORTHO") != nullptr;
     if (logOrthoV && pt == GX_PERSPECTIVE && v[1] != 0.f) {
         static std::vector<int> seenAspects;
         const int key = static_cast<int>(v[3] / v[1] * 1000.f);
@@ -225,7 +225,7 @@ extern "C" void GX__SetProjectionv_80173080(uint32_t pa) {
     }
     float m[16]={0.f}; m[0]=v[1]; m[5]=v[3]; m[10]=v[5]; m[11]=v[6];
     if(pt==GX_PERSPECTIVE){ m[2]=v[2]; m[6]=v[4]; m[14]=-1.f; } else { m[3]=v[2]; m[7]=v[4]; m[15]=1.f; }
-    if (SpmDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] setprojv type %d %.4f %.4f %.4f %.4f %.4f %.4f\n", pt == GX_ORTHOGRAPHIC ? 1 : 0, v[1], v[2], v[3], v[4], v[5], v[6]);
+    if (GxDumpFrame()) RT_LOGF(RT_TAG_GX, "[drawdump] setprojv type %d %.4f %.4f %.4f %.4f %.4f %.4f\n", pt == GX_ORTHOGRAPHIC ? 1 : 0, v[1], v[2], v[3], v[4], v[5], v[6]);
     GXSetProjection(m, pt);
     UpdateProjectionVectorFromProjV(v);
 }
@@ -254,14 +254,14 @@ static uint32_t g_vertexPnMtx = 0xFFFFFFFFu;
 static bool g_bboxActive = false;
 static int32_t g_bbox[4] = {1023, 0, 1023, 0};  // left, right, top, bottom
 
-void SpmBBoxClear() { g_bboxActive = true; g_bbox[0] = 1023; g_bbox[1] = 0; g_bbox[2] = 1023; g_bbox[3] = 0; }
-void SpmBBoxRead(uint16_t& l, uint16_t& t, uint16_t& r, uint16_t& b) {
+void GxBBoxClear() { g_bboxActive = true; g_bbox[0] = 1023; g_bbox[1] = 0; g_bbox[2] = 1023; g_bbox[3] = 0; }
+void GxBBoxRead(uint16_t& l, uint16_t& t, uint16_t& r, uint16_t& b) {
     l = static_cast<uint16_t>(g_bbox[0]); r = static_cast<uint16_t>(g_bbox[1]);
     t = static_cast<uint16_t>(g_bbox[2]); b = static_cast<uint16_t>(g_bbox[3]);
 }
-void SpmBBoxVertexMatrix(uint32_t index) { g_vertexPnMtx = index / 3u; }
-void SpmBBoxPosition(const float* p, int count) {
-    if (SpmDumpFrame()) {
+void GxBBoxVertexMatrix(uint32_t index) { g_vertexPnMtx = index / 3u; }
+void GxBBoxPosition(const float* p, int count) {
+    if (GxDumpFrame()) {
         static int n = 0;
         if (n++ < 80) {
             const float* m = g_pnMtx[g_currentPnMtx < 10u ? g_currentPnMtx : 0u];

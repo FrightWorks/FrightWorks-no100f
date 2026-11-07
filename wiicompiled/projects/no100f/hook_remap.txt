@@ -99,15 +99,15 @@
 8016CD8C -> 800FF744  GXSetNumChans                            hle\gx\gx_lighting.cpp
 8016CDC8 -> 800FF790  GXSetChanCtrl                            hle\gx\gx_lighting.cpp
 8028D6A4 -> 80001130  PARKED (PARKED)                          (no
-8016B584 -> 80001134  PARKED (GXAbortFrame)                    hle\gx\gx_nsmbw.cpp
-8016B798 -> 800FDF38  GXPokeAlphaMode                          hle\gx\gx_nsmbw.cpp
-8016B7AC -> 800FDF4C  GXPokeAlphaRead                          hle\gx\gx_nsmbw.cpp
-8016B7CC -> 800FDF60  GXPokeAlphaUpdate                        hle\gx\gx_nsmbw.cpp
-8016B7E4 -> 800FDF7C  GXPokeBlendMode                          hle\gx\gx_nsmbw.cpp
-8016B848 -> 800FE004  GXPokeColorUpdate                        hle\gx\gx_nsmbw.cpp
-8016B860 -> 800FE020  GXPokeDstAlpha                           hle\gx\gx_nsmbw.cpp
-8016B884 -> 800FE034  GXPokeDither                             hle\gx\gx_nsmbw.cpp
-8016B89C -> 800FE050  GXPokeZMode                              hle\gx\gx_nsmbw.cpp
+8016B584 -> 80001134  PARKED (GXAbortFrame)                    hle\gx\gx_extra.cpp
+8016B798 -> 800FDF38  GXPokeAlphaMode                          hle\gx\gx_extra.cpp
+8016B7AC -> 800FDF4C  GXPokeAlphaRead                          hle\gx\gx_extra.cpp
+8016B7CC -> 800FDF60  GXPokeAlphaUpdate                        hle\gx\gx_extra.cpp
+8016B7E4 -> 800FDF7C  GXPokeBlendMode                          hle\gx\gx_extra.cpp
+8016B848 -> 800FE004  GXPokeColorUpdate                        hle\gx\gx_extra.cpp
+8016B860 -> 800FE020  GXPokeDstAlpha                           hle\gx\gx_extra.cpp
+8016B884 -> 800FE034  GXPokeDither                             hle\gx\gx_extra.cpp
+8016B89C -> 800FE050  GXPokeZMode                              hle\gx\gx_extra.cpp
 8016E90C -> 80101E2C  GXSetBlendMode                           hle\gx\gx_pixel.cpp
 8016E960 -> 80101F30  GXSetColorUpdate                         hle\gx\gx_pixel.cpp
 8016E98C -> 80101F70  GXSetAlphaUpdate                         hle\gx\gx_pixel.cpp

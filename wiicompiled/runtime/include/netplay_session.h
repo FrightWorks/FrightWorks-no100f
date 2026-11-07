@@ -29,8 +29,8 @@ struct Config {
     int saveFile = 0;
 };
 
-// NSMBW_NETPLAY="id=<n>;slot=<n>;players=<n>;delay=<n>;port=<n>;host=<ip:port>" (testing), or
-// debug.nsmbw.net on Android. False when no session is configured.
+// NO100F_NETPLAY="id=<n>;slot=<n>;players=<n>;delay=<n>;port=<n>;host=<ip:port>" (testing), or
+// debug.no100f.net on Android. False when no session is configured.
 bool LoadConfigFromEnvironment(Config& out);
 
 // Turns deterministic mode on and makes the session the source of every frame's input. Must run

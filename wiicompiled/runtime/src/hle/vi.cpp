@@ -397,9 +397,9 @@ static std::atomic<bool> s_presentSequenceActive{false};
 // watchdog that dumps every guest thread's state if none arrived after 12 s and again after 30 s, so
 // a boot that stalls in a wait loop shows where each thread is parked.
 static std::atomic<uint32_t> s_presentedXfbFrames{0};
-extern "C" { extern int g_spmDrawDump; extern int g_spmCullOff; extern unsigned g_spmDrawIdx; extern unsigned g_spmDrawLimit; }  // aurora command_processor (SPM bring-up diagnostics)
-static uint32_t SpmPresentedFramesLocal() { return s_presentedXfbFrames.load(std::memory_order_relaxed); }
-static uint32_t (*const g_spmFramesFn)() = &SpmPresentedFramesLocal;
+extern "C" { extern int g_gxDrawDump; extern int g_gxCullOff; extern unsigned g_gxDrawIdx; extern unsigned g_gxDrawLimit; }  // aurora command_processor (SPM bring-up diagnostics)
+static uint32_t GxPresentedFramesLocal() { return s_presentedXfbFrames.load(std::memory_order_relaxed); }
+static uint32_t (*const g_gxFramesFn)() = &GxPresentedFramesLocal;
 
 void StartStallWatchdogOnce() {
     static std::once_flag once;
@@ -809,7 +809,7 @@ void PaceToRetraceBoundary(Clock::time_point deadline) {
 // Single owner of the Aurora frame presentation sequence: seals the active frame, optionally paces the
 // producer to the VI retrace boundary, and pre-warms the next frame. Paced from GXCopyDisp; unpaced for
 // the retrace-context black/boot present path in AdvanceRetrace.
-// NSMBW_LOG_FPS (debug.nsmbw.logfps on Android): every two seconds, the frames presented and where
+// NO100F_LOG_FPS (debug.no100f.logfps on Android): every two seconds, the frames presented and where
 // each frame's time went: the game (guest code and GX command building), aurora_end_frame (encoding,
 // submission, and waiting on the GPU when it falls behind) and pacing to the retrace. A game share near
 // the frame budget is CPU-bound; a large end_frame share is GPU-bound.
@@ -822,7 +822,7 @@ struct FrameTimes {
 };
 
 static bool LogFpsEnabled() {
-    static const bool on = std::getenv("NSMBW_LOG_FPS") != nullptr;
+    static const bool on = std::getenv("NO100F_LOG_FPS") != nullptr;
     return on;
 }
 
@@ -846,13 +846,13 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
             const uint32_t pf = s_presentedXfbFrames.fetch_add(1, std::memory_order_relaxed) + 1;
             static const int32_t dumpTarget = [] { std::ifstream in("drawdump.txt"); int32_t f = -1; in >> f; return f; }();
             static const bool cullTest = std::ifstream("depth_test.txt").good();
-            if (g_spmDrawDump) std::fflush(nullptr);  // games are killed by test scripts: get the dump to disk
-            g_spmDrawDump = (dumpTarget >= 0 && pf == static_cast<uint32_t>(dumpTarget)) ? 1 : 0;
-            static const int envTest = [] { const char* e = std::getenv("SPM_CULL_TEST"); return e ? std::atoi(e) : 0; }();  // 1 = no culling, 2 = no depth test (diagnostic)
-            static const unsigned drawLimit = [] { const char* e = std::getenv("SPM_DRAW_LIMIT"); return e ? static_cast<unsigned>(std::atoi(e)) : ~0u; }();
-            g_spmDrawLimit = drawLimit;
-            g_spmDrawIdx = 0;
-            g_spmCullOff = envTest ? envTest : ((cullTest && pf >= 6900u) ? 2 : 0);
+            if (g_gxDrawDump) std::fflush(nullptr);  // games are killed by test scripts: get the dump to disk
+            g_gxDrawDump = (dumpTarget >= 0 && pf == static_cast<uint32_t>(dumpTarget)) ? 1 : 0;
+            static const int envTest = [] { const char* e = std::getenv("NO100F_CULL_TEST"); return e ? std::atoi(e) : 0; }();  // 1 = no culling, 2 = no depth test (diagnostic)
+            static const unsigned drawLimit = [] { const char* e = std::getenv("NO100F_DRAW_LIMIT"); return e ? static_cast<unsigned>(std::atoi(e)) : ~0u; }();
+            g_gxDrawLimit = drawLimit;
+            g_gxDrawIdx = 0;
+            g_gxCullOff = envTest ? envTest : ((cullTest && pf >= 6900u) ? 2 : 0);
         }
         // SPM bring-up: with drawdump.txt present, report any guest write into the DOL's
         // read-only sections (.rodata/.sdata2) once the game has been running a while.
@@ -1075,7 +1075,7 @@ void VI_HLE_SetXfbReady(uint32_t xfbAddr) {
 static void SeedViStateForInit(CpuContext* ctx, const char* who)
 {
     RT_LOG(RT_TAG_VI) << who << " called: seeding VI state (HLE)" << std::endl;
-    GuestProfiler::OnFramePresented();  // diagnostic: NSMBW_PROFILE can sample boot hangs before the first frame
+    GuestProfiler::OnFramePresented();  // diagnostic: NO100F_PROFILE can sample boot hangs before the first frame
     {
         std::lock_guard<std::mutex> lock(g_viMutex);
         EnsureInitializedLocked();
@@ -1423,4 +1423,4 @@ PPC_NATIVE_OVERRIDE_VOID(8010AFA0, VIWaitForRetrace_HLE_801b99ec, (CpuContext* c
 extern "C" uint32_t VIGetScanMode_HLE() { return 0; }
 
 
-uint32_t SpmPresentedFrames() { return g_spmFramesFn(); }
+uint32_t GxPresentedFrames() { return g_gxFramesFn(); }

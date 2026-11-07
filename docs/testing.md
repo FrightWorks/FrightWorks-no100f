@@ -296,8 +296,8 @@ useful:
 - **Logs**: `Play\UserData\Logs\<time>\console.log`; the newest one shows which level files load (`[dvdread] ...
   xNNN.HIP`). Runtime messages (`RT_LOGF`) go to stderr: launch with
   `Start-Process "Play\FrightWorks Game.exe" -WorkingDirectory Play -RedirectStandardError err.txt`.
-- **Scripted input** (no controller needed): set `NSMBW_INPUT_SCRIPT` before starting the game, e.g.
-  `$env:NSMBW_INPUT_SCRIPT = '10000:PLUS,12000:DOWN,13500:A'` = press Start at 10 s, D-pad down at 12 s, A at 13.5 s
+- **Scripted input** (no controller needed): set `NO100F_INPUT_SCRIPT` before starting the game, e.g.
+  `$env:NO100F_INPUT_SCRIPT = '10000:PLUS,12000:DOWN,13500:A'` = press Start at 10 s, D-pad down at 12 s, A at 13.5 s
   (ms after the game first reads input; optional third field = hold time in ms, default 150). Buttons: `A`, `B`,
   `PLUS` (Start), `ONE` (X), `TWO` (Y), `MINUS` (Z), `UP`/`DOWN`/`LEFT`/`RIGHT`.
 - **Button prompts**: `$env:BUTTON_ICONS = 'xbox'` (or `playstation`, `nintendo`) forces a prompt set; the game puts
@@ -305,7 +305,7 @@ useful:
   `python tools\make-button-icons.py --out Play\button_icons` (needs ImageMagick and the HD pack).
 - **Audio capture**: `$env:AUDIO_RAW_DUMP = 'C:\temp\out.raw'` writes the mixed output; analysis tools in
   `tools\debug\audio\`.
-- Remove test variables afterwards: `Remove-Item Env:NO100F_*, Env:AX_*, Env:NSMBW_*, Env:AUDIO_*, Env:BUTTON_ICONS -ErrorAction SilentlyContinue`.
+- Remove test variables afterwards: `Remove-Item Env:NO100F_*, Env:AX_*, Env:AUDIO_*, Env:BUTTON_ICONS -ErrorAction SilentlyContinue`.
 - **Launcher screenshots** without opening it: `& "launcher\publish\FrightWorks.exe" --shots <dir>` (Linux:
   `launcher/publish/FrightWorks --shots <dir>`) draws every page to `<dir>\<Page>.png`. The window takes the size the
   window manager gives it; for fixed sizes use the layout regression below.

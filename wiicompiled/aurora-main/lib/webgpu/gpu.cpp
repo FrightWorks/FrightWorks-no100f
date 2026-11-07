@@ -86,7 +86,7 @@ static std::array<char, 256> g_deviceLostMessage{};
 static std::atomic_bool g_initialized{false};
 
 // AURORA_GFX_FLAGS: comma-separated graphics debugging switches, read at device creation. On Android
-// the runtime fills it from `adb shell setprop debug.nsmbw.gfx ...`.
+// the runtime fills it from `adb shell setprop debug.no100f.gfx ...`.
 //   validate   keep Dawn's validation and log its errors instead of aborting on them
 //   robust     keep Dawn's bounds checks on buffer and texture access
 //   nobc       do not enable BC texture compression

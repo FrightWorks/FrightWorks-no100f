@@ -19,7 +19,7 @@ Not covered: non-GX overrides (OS/DVD/VI/pad) sharing other guest globals; `--xr
 
 ## GPU comparison traps
 
-1. **Merge before host event numbering.** `handle_draw` can merge compatible primitives into one host draw (`NSMBW_NO_MERGE=1` disables).
+1. **Merge before host event numbering.** `handle_draw` can merge compatible primitives into one host draw (`NO100F_NO_MERGE=1` disables).
 2. **DL tail trimming** (when `g_replayingDisplayList`) can clip `vtxCount`; log declared vs effective count before trusting a comparison.
 3. **Matrix layout:** without per-vertex `PNMTXIDX`, Aurora compacts the current position matrix into uniform slot 0. `currentPnMtx=0` is not identity corruption.
 4. **Inferred array sizes:** recomp POS "size" = `(maxIdx+1)*stride`, so corrupted indices fake big arrays.
