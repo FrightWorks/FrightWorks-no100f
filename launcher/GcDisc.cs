@@ -1,7 +1,7 @@
 ﻿using System.Buffers.Binary;
 using System.Text;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // A GameCube disc image (.iso/.gcm or .ciso): unencrypted, so it is read straight from the container and extracted to
 // the layout the game reads (sys/ and files/). Same output as projects/scooby tooling (gcextract.py).

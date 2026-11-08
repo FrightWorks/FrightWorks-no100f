@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
-using ScoobyReMasked.ModPatches;
+using FrightWorks.ModPatches;
 
 namespace HipPatchTests;
 

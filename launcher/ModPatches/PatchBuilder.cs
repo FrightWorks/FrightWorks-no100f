@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace ScoobyReMasked.ModPatches;
+namespace FrightWorks.ModPatches;
 
 enum PatchState { Off, Ready, Problem }
 

@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 sealed class ControllerSlider : Slider
 {

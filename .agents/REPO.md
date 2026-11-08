@@ -365,7 +365,7 @@ Never name a session `main`.
 Versions continue from upstream v1.0.2.
 A maintainer runs releases:
 
-1. Version PR: `<Version>` in `launcher/ScoobyReMasked.Launcher.csproj` and the version line in `tools/package-README.txt`.
+1. Version PR: `<Version>` in `launcher/FrightWorks.Launcher.csproj` and the version line in `tools/package-README.txt`.
 2. After the merge, on a clean `main`: local tag `v<ver>`, then `tools/package-scooby.ps1 -Build`, then `-Zip` as a second call (`-Build` resets PATH), then `-Installer`.
 3. Smoke test: the zip has no game data, saves or settings; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
 4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `FrightWorks-<ver>.zip`, every `dist\installer\*` file and the notes.

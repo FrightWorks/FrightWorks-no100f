@@ -71,7 +71,7 @@ class BuildIdTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         (self.repo / "launcher").mkdir()
-        (self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj").write_text("<Version>2.3.4</Version>")
+        (self.repo / "launcher" / "FrightWorks.Launcher.csproj").write_text("<Version>2.3.4</Version>")
         git(self.repo, "init", "-q", "-b", "work")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "x")
@@ -82,7 +82,7 @@ class BuildIdTest(unittest.TestCase):
         self.assertEqual(bid.changes, "")
 
     def test_uncommitted_change_adds_a_hash(self):
-        (self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
+        (self.repo / "launcher" / "FrightWorks.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
         bid = launch.expected_build_id(self.repo)
         self.assertRegex(str(bid), r"^2\.3\.4 work@[0-9a-f]{7}\+[0-9a-f]{4}$")
 
@@ -145,13 +145,13 @@ class BuildIdTest(unittest.TestCase):
 
     def test_uncommitted_game_change_fails(self):
         built = self.built_id()
-        (self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
+        (self.repo / "launcher" / "FrightWorks.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
         ok, msg = launch.check_build(built, launch.expected_build_id(self.repo), self.repo)
         self.assertFalse(ok)
         self.assertIn("csproj", msg)
 
     def test_a_build_made_from_uncommitted_changes_that_differ_now_fails(self):
-        csproj = self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj"
+        csproj = self.repo / "launcher" / "FrightWorks.Launcher.csproj"
         csproj.write_text("<Version>2.3.4</Version>\n")
         built = self.built_id()
         self.assertIn("+", built)

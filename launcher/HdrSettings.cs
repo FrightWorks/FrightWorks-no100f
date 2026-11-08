@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Drawing;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 static class HdrSettings
 {

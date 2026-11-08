@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
 using HipPatchTests;
-using ScoobyReMasked.ModPatches;
+using FrightWorks.ModPatches;
 
 // Tests for the launcher's mod patch code. With no arguments it needs nothing but dotnet: test data is made in code.
 // The disc modes read a real disc, and whatever they write is game data, so give them git-ignored folders:

@@ -132,7 +132,7 @@ def expected_build_id(repo=REPO) -> BuildId:
     `git diff HEAD` when tracked files differ (trailing whitespace of the diff is stripped, as cmake does)."""
     version = "0.0.0"
     m = re.search(r"<Version>([^<]+)</Version>",
-                  (Path(repo) / "launcher" / "ScoobyReMasked.Launcher.csproj").read_text(encoding="utf-8"))
+                  (Path(repo) / "launcher" / "FrightWorks.Launcher.csproj").read_text(encoding="utf-8"))
     if m:
         version = m.group(1)
     branch = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")

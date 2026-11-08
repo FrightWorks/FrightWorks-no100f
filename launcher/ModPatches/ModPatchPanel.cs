@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
 
-namespace ScoobyReMasked.ModPatches;
+namespace FrightWorks.ModPatches;
 
 // What the launcher's window does with patch mods: the status under a mod on the Mods page, the Add mod button, and the
 // build before Play. In its own file so MainWindow only needs a few calls.

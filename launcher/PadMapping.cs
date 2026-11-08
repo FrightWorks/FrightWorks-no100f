@@ -1,4 +1,4 @@
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // The gamepad button mapping in Config.toml, the same keys the game's F10 > Controls writes
 // (runtime_config.h, controller_button_names.h): [controller] a ... right = the pad button that presses that GameCube
