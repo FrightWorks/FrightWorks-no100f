@@ -154,7 +154,10 @@ Add a scene you changed with `--scenes <scene,...>` and say so in the PR.
 The pieces are in `tools/testkit/`: shared run slots (3 by default), the launch helper (own `Play/` copy, rumble off, muted, controller isolation) and the wait-until-playable routine.
 New automated game runs use them.
 
-**Not built yet:** moving `level-sweep.py` and the PowerShell scripts onto the test kit (they still take turns through `kit-common.ps1`'s `game-run.lock`, which the slots respect, so old and new scripts cannot overlap), the full sweep before a release and the asset check.
+**The level sweep** is `python tools/level-sweep.py` (`docs/testing.md`, section 4b): every level, up to 7 windows at once, on the same kit, with `fps60` on (`--fps30` for off).
+Run it before a release.
+
+**Not built yet:** moving the PowerShell scripts onto the test kit (they still take turns through `kit-common.ps1`'s `game-run.lock`, which the slots respect, so old and new scripts cannot overlap) and the asset check.
 The controller isolation was tried once on a real pad (2026-11-07): a person pressed buttons and sticks for about 40 s of a full three-job run, and all three jobs passed with the same results as without.
 The game logs no controller connects, so the proof is those results, not a log line; repeat it when the isolation changes.
 Nothing runs the smoke test automatically, so the PR says what was run.
