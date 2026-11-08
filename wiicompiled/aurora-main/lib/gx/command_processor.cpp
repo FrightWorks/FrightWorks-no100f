@@ -33,12 +33,10 @@
 
 extern "C" {
 int g_spmDrawDump = 0;
-int g_spmSweepDump = 0;
 unsigned g_spmDrawIdx = 0;
-unsigned g_spmDrawLimit = ~0u;  // diagnostic: only the first N draws of each frame are rendered (env SPM_DRAW_LIMIT)  // set by spm_map_sweep for a couple of frames (env SPM_SWEEP_DUMP=<map>)
+unsigned g_spmDrawLimit = ~0u;  // diagnostic: only the first N draws of each frame are rendered (env SPM_DRAW_LIMIT)
 int g_spmBBoxArmed = 0;
-unsigned g_spmAudit[8] = {};  // render audit for tools/sweep-spm-maps.py
-unsigned g_spmGameClear = 0;  // the game's own EFB clear colour (0xRRGGBB) while sweeping
+unsigned g_spmAudit[8] = {};  // render audit counters, shown by the diagnostic logs
 int g_spmCullOff = 0;
 }
 namespace aurora::gx {
@@ -1481,7 +1479,6 @@ static void handle_bp(u32 value, bool bigEndian) {
     u8 a = bp_get(value, 8, 8);
     g_gxState.clearColor[0] = static_cast<float>(r) / 255.f;
     g_gxState.clearColor[3] = static_cast<float>(a) / 255.f;
-    g_spmGameClear = (g_spmGameClear & 0x00FFFFu) | (u32(r) << 16);  // recorded for the sweep report only
     g_gxState.stateDirty = true;
     break;
   }
@@ -1490,7 +1487,6 @@ static void handle_bp(u32 value, bool bigEndian) {
     u8 g = bp_get(value, 8, 8);
     g_gxState.clearColor[2] = static_cast<float>(b) / 255.f;
     g_gxState.clearColor[1] = static_cast<float>(g) / 255.f;
-    g_spmGameClear = (g_spmGameClear & 0xFF0000u) | (u32(g) << 8) | b;
     g_gxState.stateDirty = true;
     break;
   }

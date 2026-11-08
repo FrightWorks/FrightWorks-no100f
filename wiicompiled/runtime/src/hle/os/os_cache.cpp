@@ -97,9 +97,6 @@ PPC_NATIVE_OVERRIDE_VOID(80104C50, DCInvalidateRange_801a1600, (uint32_t addr, u
 PPC_NATIVE_OVERRIDE_VOID(80104C80, DCFlushRange_801a162c, (uint32_t addr, uint32_t length), (addr, length));
 PPC_NATIVE_OVERRIDE_VOID(80104CB4, DCStoreRange_801a165c, (uint32_t addr, uint32_t length), (addr, length));
 PPC_NATIVE_OVERRIDE_VOID(80104CE8, DCFlushRangeNoSync_801a168c, (uint32_t addr, uint32_t length), (addr, length));
-#if 0  // SPM: DCStoreRangeNoSync: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(8000132C, DCStoreRangeNoSync_801a16b8, (uint32_t addr, uint32_t length), (addr, length));
-#endif
 
 // ----------------------------------------------------------------------------
 // CPU Cache Maintenance Stubs (DC/IC/LC)
@@ -223,32 +220,8 @@ extern "C" void LCQueueWait_HLE_801a1988(CpuContext*)
 }
 
 PPC_NATIVE_OVERRIDE_VOID(80104c3c, Cache_Maintenance_Stub, (), ()); // DCEnable
-#if 0  // SCOOBY: DCZeroRange: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001330, DCZeroRange_HLE_801a16e4, (CpuContext* ctx), (ctx)); // DCZeroRange
-#endif
 PPC_NATIVE_OVERRIDE_VOID(80104d18, Cache_Maintenance_Stub, (), ()); // ICInvalidateRange
 PPC_NATIVE_OVERRIDE_VOID(80104d50, Cache_Maintenance_Stub, (), ()); // ICFlashInvalidate
 PPC_NATIVE_OVERRIDE_VOID(80104d60, Cache_Maintenance_Stub, (), ()); // ICEnable
-#if 0  // SPM: __LCEnable: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(80001334, Cache_Maintenance_Stub, (), ()); // __LCEnable
-#endif
-#if 0  // SPM: LCEnable: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(80001338, Cache_Maintenance_Stub, (), ()); // LCEnable
-#endif
 PPC_NATIVE_OVERRIDE_VOID(80104d74, Cache_Maintenance_Stub, (), ()); // LCDisable
-#if 0  // SPM: LCLoadBlocks: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(8000133c, LCLoadBlocks_HLE_801a1894, (CpuContext* ctx), (ctx)); // LCLoadBlocks
-#endif
-#if 0  // SPM: LCStoreBlocks: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(80001340, LCStoreBlocks_HLE_801a18b8, (CpuContext* ctx), (ctx)); // LCStoreBlocks
-#endif
-#if 0  // SPM: LCStoreData: name not in SPM
-PPC_NATIVE_OVERRIDE(80001344, LCStoreData_HLE_801a18dc, uint32_t, (CpuContext* ctx), (ctx)); // LCStoreData
-#endif
-#if 0  // SPM: LCQueueLength: name not in SPM
-PPC_NATIVE_OVERRIDE(80001348, LCQueueLength_HLE_801a197c, uint32_t, (CpuContext* ctx), (ctx)); // LCQueueLength
-#endif
-#if 0  // SPM: LCQueueWait: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(8000134c, LCQueueWait_HLE_801a1988, (CpuContext* ctx), (ctx)); // LCQueueWait
-#endif
 PPC_NATIVE_OVERRIDE_VOID(80104f94, Cache_Maintenance_Stub, (), ()); // OS____CacheInit

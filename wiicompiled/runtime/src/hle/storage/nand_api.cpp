@@ -117,16 +117,10 @@ extern "C" int32_t NANDInit_HLE(void) {
 
     return NAND_RESULT_OK;
 }
-#if 0  // SCOOBY: NANDInit: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001448, NANDInit_HLE, int32_t, (void), ());
-#endif
 
 extern "C" int32_t NANDGetCurrentDir_HLE(uint32_t outPathPtr) {
     return WriteNandDataDir(outPathPtr);
 }
-#if 0  // SPM: NANDGetCurrentDir: name not in SPM
-PPC_NATIVE_OVERRIDE(8000144C, NANDGetCurrentDir_HLE, int32_t, (uint32_t outPathPtr), (outPathPtr));
-#endif
 
 extern "C" int32_t NANDCheck_HLE(uint32_t blockSize, uint32_t blockCount, uint32_t outResults) {
     const int32_t result = NandCheckContract::WriteHealthyResult(
@@ -147,9 +141,6 @@ extern "C" int32_t NANDCheck_HLE(uint32_t blockSize, uint32_t blockCount, uint32
     }
     return result;
 }
-#if 0  // SPM: NANDCheck: name not in SPM
-PPC_NATIVE_OVERRIDE(80001450, NANDCheck_HLE, int32_t, (uint32_t blockSize, uint32_t blockCount, uint32_t outResults), (blockSize, blockCount, outResults));
-#endif
 
 extern "C" int32_t NANDOpen_HLE(uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode) {
     const char* path = pathPtr ? (const char*)Memory::GetPointer(pathPtr) : nullptr;
@@ -240,9 +231,6 @@ extern "C" int32_t NANDOpen_HLE(uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t
     Memory::Write8(fileInfoPtr + 0x8a, NAND_OPEN_FLAG_OPEN);
     return NAND_RESULT_OK;
 }
-#if 0  // SCOOBY: NANDOpen: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001454, NANDOpen_HLE, int32_t, (uint32_t pathPtr, uint32_t fileInfoPtr, uint32_t mode), (pathPtr, fileInfoPtr, mode));
-#endif
 
 extern "C" int32_t NANDClose_HLE(uint32_t fileInfoPtr) {
     NSMBW_NAND_TRACE("NANDClose fileInfo=0x%08X fd=%d\n", fileInfoPtr,
@@ -276,9 +264,6 @@ extern "C" int32_t NANDClose_HLE(uint32_t fileInfoPtr) {
     Memory::Write8(fileInfoPtr + 0x8a, NAND_OPEN_FLAG_CLOSED); // Mark as closed
     return NAND_RESULT_OK;
 }
-#if 0  // SCOOBY: NANDClose: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001458, NANDClose_HLE, int32_t, (uint32_t fileInfoPtr), (fileInfoPtr));
-#endif
 
 extern "C" int32_t NANDRead_HLE(uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length) {
     NSMBW_NAND_TRACE("NANDRead fileInfo=0x%08X fd=%d len=%u\n", fileInfoPtr,
@@ -300,9 +285,6 @@ extern "C" int32_t NANDRead_HLE(uint32_t fileInfoPtr, uint32_t bufferPtr, uint32
     size_t bytesRead = std::fread(buffer, 1, length, handle->file);
     return static_cast<int32_t>(bytesRead);
 }
-#if 0  // SCOOBY: NANDRead: name not in Scooby
-PPC_NATIVE_OVERRIDE(8000145C, NANDRead_HLE, int32_t, (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length), (fileInfoPtr, bufferPtr, length));
-#endif
 
 extern "C" int32_t NANDWrite_HLE(uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length) {
     NSMBW_NAND_TRACE("NANDWrite fileInfo=0x%08X fd=%d len=%u\n", fileInfoPtr,
@@ -325,9 +307,6 @@ extern "C" int32_t NANDWrite_HLE(uint32_t fileInfoPtr, uint32_t bufferPtr, uint3
     std::fflush(handle->file);
     return static_cast<int32_t>(bytesWritten);
 }
-#if 0  // SCOOBY: NANDWrite: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001460, NANDWrite_HLE, int32_t, (uint32_t fileInfoPtr, uint32_t bufferPtr, uint32_t length), (fileInfoPtr, bufferPtr, length));
-#endif
 
 extern "C" int32_t NANDSeek_HLE(uint32_t fileInfoPtr, int32_t offset, int32_t whence) {
     if (!fileInfoPtr) {
@@ -345,9 +324,6 @@ extern "C" int32_t NANDSeek_HLE(uint32_t fileInfoPtr, int32_t offset, int32_t wh
 
     return static_cast<int32_t>(std::ftell(handle->file));
 }
-#if 0  // SPM: NANDSeek: name not in SPM
-PPC_NATIVE_OVERRIDE(80001464, NANDSeek_HLE, int32_t, (uint32_t fileInfoPtr, int32_t offset, int32_t whence), (fileInfoPtr, offset, whence));
-#endif
 
 extern "C" int32_t NANDGetLength_HLE(uint32_t fileInfoPtr, uint32_t outLengthPtr) {
     if (!fileInfoPtr || !outLengthPtr) {
@@ -363,9 +339,6 @@ extern "C" int32_t NANDGetLength_HLE(uint32_t fileInfoPtr, uint32_t outLengthPtr
     Memory::Write32(outLengthPtr, static_cast<uint32_t>(extent.size));
     return NAND_RESULT_OK;
 }
-#if 0  // SPM: NANDGetLength: name not in SPM
-PPC_NATIVE_OVERRIDE(80001468, NANDGetLength_HLE, int32_t, (uint32_t fileInfoPtr, uint32_t outLengthPtr), (fileInfoPtr, outLengthPtr));
-#endif
 
 extern "C" int32_t NANDCreate_HLE(uint32_t pathPtr, uint32_t perm, uint32_t attr) {
     const char* path = pathPtr ? (const char*)Memory::GetPointer(pathPtr) : nullptr;
@@ -391,9 +364,6 @@ extern "C" int32_t NANDCreate_HLE(uint32_t pathPtr, uint32_t perm, uint32_t attr
     
     return NAND_RESULT_OK;
 }
-#if 0  // SPM: NANDCreate: name not in SPM
-PPC_NATIVE_OVERRIDE(8000146C, NANDCreate_HLE, int32_t, (uint32_t pathPtr, uint32_t perm, uint32_t attr), (pathPtr, perm, attr));
-#endif
 
 extern "C" int32_t NANDDelete_HLE(uint32_t pathPtr) {
     const char* path = pathPtr ? (const char*)Memory::GetPointer(pathPtr) : nullptr;
@@ -414,9 +384,6 @@ extern "C" int32_t NANDDelete_HLE(uint32_t pathPtr) {
     
     return NAND_RESULT_UNKNOWN;
 }
-#if 0  // SCOOBY: NANDDelete: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001470, NANDDelete_HLE, int32_t, (uint32_t pathPtr), (pathPtr));
-#endif
 
 extern "C" int32_t NANDCreateDir_HLE(uint32_t pathPtr, uint32_t perm, uint32_t attr) {
     const char* path = pathPtr ? (const char*)Memory::GetPointer(pathPtr) : nullptr;
@@ -440,11 +407,6 @@ extern "C" int32_t NANDCreateDir_HLE(uint32_t pathPtr, uint32_t perm, uint32_t a
     
     return NAND_RESULT_UNKNOWN;
 }
-#if 0  // NSMBW: NANDCreateDir is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019bbe0: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(80001474, NANDCreateDir_HLE, int32_t, (uint32_t pathPtr, uint32_t perm, uint32_t attr), (pathPtr, perm, attr));
-#endif
-#endif
 
 extern "C" int32_t NANDMove_HLE(uint32_t srcPathPtr, uint32_t dstPathPtr) {
     // A cross-mount move is implemented as several host operations. Keep two
@@ -591,9 +553,6 @@ extern "C" int32_t NANDMove_HLE(uint32_t srcPathPtr, uint32_t dstPathPtr) {
     LogNandError("NANDMove", "FAILED error=%d message='%s'", ec.value(), ec.message().c_str());
     return NAND_RESULT_UNKNOWN;
 }
-#if 0  // SPM: NANDMove: name not in SPM
-PPC_NATIVE_OVERRIDE(80001478, NANDMove_HLE, int32_t, (uint32_t srcPathPtr, uint32_t dstPathPtr), (srcPathPtr, dstPathPtr));
-#endif
 
 extern "C" int32_t NANDGetStatus_HLE(uint32_t pathPtr, uint32_t outStatusPtr) {
     const char* path = pathPtr ? (const char*)Memory::GetPointer(pathPtr) : nullptr;
@@ -615,11 +574,6 @@ extern "C" int32_t NANDGetStatus_HLE(uint32_t pathPtr, uint32_t outStatusPtr) {
     
     return NAND_RESULT_OK;
 }
-#if 0  // NSMBW: NANDGetStatus is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8019c380: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(8000147C, NANDGetStatus_HLE, int32_t, (uint32_t pathPtr, uint32_t outStatusPtr), (pathPtr, outStatusPtr));
-#endif
-#endif
 
 extern "C" int32_t NANDGetType_HLE(uint32_t pathPtr, uint32_t outTypePtr) {
     const char* path = pathPtr ? (const char*)Memory::GetPointer(pathPtr) : nullptr;
@@ -639,9 +593,6 @@ extern "C" int32_t NANDGetType_HLE(uint32_t pathPtr, uint32_t outTypePtr) {
     Memory::Write8(outTypePtr, type);
     return NAND_RESULT_OK;
 }
-#if 0  // SPM: NANDGetType: name not in SPM
-PPC_NATIVE_OVERRIDE(80001480, NANDGetType_HLE, int32_t, (uint32_t pathPtr, uint32_t outTypePtr), (pathPtr, outTypePtr));
-#endif
 
 // ============================================================================
 // contentFastOpenNAND/contentReadNAND/contentCloseNAND: NAND-installed content (WADs) never
@@ -651,17 +602,7 @@ PPC_NATIVE_OVERRIDE(80001480, NANDGetType_HLE, int32_t, (uint32_t pathPtr, uint3
 extern "C" int32_t contentFastOpenNAND_HLE(uint32_t contentId, uint32_t outHandlePtr) {
     return ISFS_ENOENT;
 }
-#if 0  // NSMBW: contentFastOpenNAND is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8015bc80: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(80001484, contentFastOpenNAND_HLE, int32_t, (uint32_t contentId, uint32_t outHandlePtr), (contentId, outHandlePtr));
-#endif
-#endif
 
 extern "C" int32_t contentReadNAND_HLE(uint32_t handlePtr, uint32_t buffer, uint32_t length, uint32_t outReadPtr) {
     return ISFS_EINVAL;
 }
-#if 0  // NSMBW: contentReadNAND is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8015bcf8: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(80001488, contentReadNAND_HLE, int32_t, (uint32_t handlePtr, uint32_t buffer, uint32_t length, uint32_t outReadPtr), (handlePtr, buffer, length, outReadPtr));
-#endif
-#endif

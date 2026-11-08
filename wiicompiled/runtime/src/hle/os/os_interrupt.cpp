@@ -471,9 +471,6 @@ extern "C" uint32_t OSSetPowerCallback_801ab75c(CpuContext* ctx)
 }
 
 // Register the function
-#if 0  // SCOOBY: OSSetPowerCallback: name not in Scooby
-PPC_NATIVE_OVERRIDE(800013B0, OSSetPowerCallback_801ab75c, uint32_t, (CpuContext* ctx), (ctx));
-#endif
 
 PPC_NATIVE_OVERRIDE(800F9A18, EXIImm_80167f68, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
 PPC_NATIVE_OVERRIDE(800F9D14, EXIDma_80168288, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
@@ -508,12 +505,6 @@ extern "C" uint32_t IPCReadReg_80193010(uint32_t index)
 }
 
 // Register the functions
-#if 0  // SCOOBY: IPCWriteReg: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013c0, IPCWriteReg_80193020, (uint32_t index, uint32_t value), (index, value));
-#endif
-#if 0  // SCOOBY: IPCReadReg: name not in Scooby
-PPC_NATIVE_OVERRIDE(800013c4, IPCReadReg_80193010, uint32_t, (uint32_t index), (index));
-#endif
 
 // ----------------------------------------------------------------------------
 // IPCCltInit (0x802247D0): hardware parts (interrupt handler, MMIO) are stubbed, but we still
@@ -539,6 +530,3 @@ extern "C" int32_t IPCCltInit_80193478(CpuContext* ctx)
     return 0; // Success
 }
 
-#if 0  // SCOOBY: IPCCltInit: name not in Scooby
-PPC_NATIVE_OVERRIDE(800013C8, IPCCltInit_80193478, int32_t, (CpuContext* ctx), (ctx));
-#endif

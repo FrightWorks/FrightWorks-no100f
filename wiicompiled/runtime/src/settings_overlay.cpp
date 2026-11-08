@@ -3,7 +3,6 @@
 #include <string>
 #include <cstdlib>
 extern "C" uint8_t* aurora_load_png_rgba(const char* path, uint32_t* width, uint32_t* height);
-#include "netplay/game_layout.h"
 #include "netplay_lobby.h"
 #include "netplay_ui.h"
 #include "settings_overlay.h"
@@ -191,17 +190,6 @@ bool g_cursorHidden = false;
 constexpr std::array<std::string_view, 3> kDisplayModeConfigNames = {
     "windowed", "borderless", "exclusive",
 };
-
-uint64_t g_presentedFrame = 0;
-// Scooby-Doo! Night of 100 Frights: no startup cover card (it was SPM's "press A" title card); only the boot-shader wait remains.
-std::atomic_bool g_strapInputAccepted = true;
-std::atomic_uint64_t g_startupDismissFrame = 0;
-constexpr uint64_t kStrapTransitionCoverFrames = 60;
-std::atomic_bool g_bootShadersReady = true;  // Scooby: no boot cover while shaders compile; show the game at once
-bool g_bootShaderNotice = false;
-Clock::time_point g_bootShaderWaitStart{};
-constexpr uint32_t kBootShaderNoticeThreshold = 100;
-constexpr auto kBootShaderWaitLimit = std::chrono::minutes(3);
 
 // Render heights: 1x is 480 lines in every aspect (DisplaySettings), the width follows the aspect.
 constexpr std::array<ResolutionItem, 12> kResolutions = {{
@@ -1770,252 +1758,6 @@ void DrawShaderCompilationStatus() {
     ImGui::PopStyleVar();
 }
 
-void DrawStartupScreen() {
-    if (!StartupScreenVisible()) {
-        return;
-    }
-
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->Pos, ImGuiCond_Always);
-    ImGui::SetNextWindowSize(viewport->Size, ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(1.0f);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(0, 0, 0, 255));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoDecoration |
-                                        ImGuiWindowFlags_NoFocusOnAppearing |
-                                        ImGuiWindowFlags_NoInputs |
-                                        ImGuiWindowFlags_NoMove |
-                                        ImGuiWindowFlags_NoNav |
-                                        ImGuiWindowFlags_NoSavedSettings |
-                                        ImGuiWindowFlags_NoBringToFrontOnFocus;
-    if (ImGui::Begin("Wiicompiled Startup", nullptr, kFlags)) {
-        // The credits, in the game's own fonts when the game folder is readable (it always is once
-        // the game can start), else in the overlay's font.
-        constexpr const char* kTitle = "FrightWorks: Night of 100 Frights";
-        static const std::string kCredit =
-            no100f_credits::Line() + ". A Scooby-Doo! Night of 100 Frights PC recomp, built on WiiCompiled's code.";
-        // At the bottom of the screen.
-        constexpr const char* kReport = "";
-        // Scooby-Doo! Unmasked's own font, read from the game folder (font/papermarioset_US.bfn).
-        static const std::shared_ptr<GameLayout::Font> pmFont = GameLayout::LoadFont("papermarioset_US.bfn");
-        float startY = 0.0f;
-        float titleHeight = ImGui::GetTextLineHeight();
-        const bool gameFonts = GameLayout::FontReady(pmFont.get());
-        char shaderLine[96] = {};
-        if (g_bootShaderNotice && !g_bootShadersReady.load(std::memory_order_relaxed)) {
-            std::snprintf(shaderLine, sizeof(shaderLine), "Compiling shaders... %u to go",
-                          aurora_get_queued_pipeline_count());
-        }
-        if (gameFonts) {
-            // A chapter-card style cover: storybook sky, paper hills, the heroes around a tilted
-            // paper card, Tippi fluttering past. Sprites come from Play/startup/*.png.
-            struct Sprite { ImTextureID id{}; float w = 0, h = 0; };
-            static std::unordered_map<std::string, Sprite> sprites;
-            auto Spr = [&](const char* name) -> const Sprite& {
-                auto it = sprites.find(name);
-                if (it != sprites.end()) return it->second;
-                Sprite sp;
-                uint32_t w = 0, h = 0;
-                if (uint8_t* rgba = aurora_load_png_rgba((std::string("startup/") + name + ".png").c_str(), &w, &h)) {
-                    sp.id = aurora_imgui_add_texture(w, h, rgba);
-                    sp.w = float(w);
-                    sp.h = float(h);
-                    std::free(rgba);
-                }
-                return sprites.emplace(name, sp).first->second;
-            };
-            ImDrawList* list = ImGui::GetWindowDrawList();
-            const GameLayout::View view = GameLayout::GameView();
-            const float t = static_cast<float>(ImGui::GetTime());
-            const ImVec2 o = viewport->Pos, sz = viewport->Size;
-            const float k = view.scale;
-            auto S = [&](float x, float y) { return ImVec2(view.centerX + x * k, view.centerY - y * k); };
-            // Sprite of height `hgt` layout units centred at (x, y), tilted by `ang`, optionally mirrored.
-            auto Draw = [&](const char* name, float x, float y, float hgt, float ang, bool flip, uint32_t col = IM_COL32_WHITE) {
-                const Sprite& sp = Spr(name);
-                if (!sp.id || sp.h <= 0) return;
-                const float hw = hgt * sp.w / sp.h * 0.5f, hh = hgt * 0.5f;
-                const float c = std::cos(ang), sn = std::sin(ang);
-                auto P = [&](float dx, float dy) { return S(x + dx * c - dy * sn, y + dx * sn + dy * c); };
-                const float u0 = flip ? 1.f : 0.f, u1 = flip ? 0.f : 1.f;
-                list->AddImageQuad(sp.id, P(-hw, hh), P(hw, hh), P(hw, -hh), P(-hw, -hh), ImVec2(u0, 0), ImVec2(u1, 0),
-                                   ImVec2(u1, 1), ImVec2(u0, 1), col);
-            };
-            auto Shadow = [&](float x, float y, float w) {
-                const ImVec2 c = S(x, y);
-                ImVec2 pts[24];
-                for (int j = 0; j < 24; ++j)
-                    pts[j] = ImVec2(c.x + std::cos(j * 0.2618f) * w * k, c.y + std::sin(j * 0.2618f) * w * 0.18f * k);
-                list->AddConvexPolyFilled(pts, 24, IM_COL32(20, 50, 20, 90));
-            };
-            // Sky, halftone dots, drifting paper clouds.
-            list->AddRectFilledMultiColor(o, ImVec2(o.x + sz.x, o.y + sz.y), IM_COL32(64, 150, 230, 255),
-                                          IM_COL32(64, 150, 230, 255), IM_COL32(170, 222, 255, 255),
-                                          IM_COL32(170, 222, 255, 255));
-            const float dot = std::max(6.0f, 14.0f * k);
-            for (float y = o.y + sz.y * 0.3f; y < o.y + sz.y; y += dot * 1.6f)
-                for (float x = o.x + std::fmod(y, dot * 1.6f); x < o.x + sz.x; x += dot * 1.6f)
-                    list->AddCircleFilled(ImVec2(x, y), dot * 0.2f * (y - o.y) / sz.y, IM_COL32(255, 255, 255, 55), 8);
-            for (int i = 0; i < 5; ++i) {
-                const float span = sz.x + 400.0f * k;
-                const float cx = o.x + std::fmod(i * span / 5.0f + t * (12.0f + i * 4.0f) * k, span) - 200.0f * k;
-                const float cy = o.y + sz.y * (0.08f + 0.06f * (i % 3));
-                const float r = (26.0f + 7.0f * (i % 2)) * k;
-                for (int j = 0; j < 3; ++j)
-                    list->AddCircleFilled(ImVec2(cx + (j - 1) * r * 1.1f + 3 * k, cy + (j == 1 ? -r * 0.35f : 0.f) + 3 * k), r, IM_COL32(40, 80, 140, 60), 24);
-                for (int j = 0; j < 3; ++j)
-                    list->AddCircleFilled(ImVec2(cx + (j - 1) * r * 1.1f, cy + (j == 1 ? -r * 0.35f : 0.f)), r, IM_COL32(255, 255, 255, 240), 24);
-            }
-            for (int i = 0; i < 9; ++i) {
-                const float r = (110.0f + 40.0f * (i % 3)) * k;
-                const ImVec2 c(o.x + sz.x * i / 8.0f, o.y + sz.y + r * 0.35f);
-                list->AddCircleFilled(c, r + 4 * k, IM_COL32(20, 40, 20, 255), 48);
-                list->AddCircleFilled(c, r, (i % 2) ? IM_COL32(86, 178, 74, 255) : IM_COL32(64, 150, 64, 255), 48);
-            }
-            // The card.
-            const float bob = std::sin(t * 1.6f) * 3.0f;
-            const float ang = -0.025f + std::sin(t * 0.9f) * 0.006f;
-            auto R = [&](float x, float y, float dx, float dy) {
-                const float c = std::cos(ang), sn = std::sin(ang);
-                return S(dx + x * c - y * sn, dy + bob + x * sn + y * c);
-            };
-            const float hw = 270.0f, hh = 140.0f, cardY = 20.0f;
-            auto Q = [&](float dx, float dy, uint32_t col) {
-                list->AddQuadFilled(R(-hw, cardY + hh, dx, dy), R(hw, cardY + hh, dx, dy), R(hw, cardY - hh, dx, dy), R(-hw, cardY - hh, dx, dy), col);
-            };
-            Q(12, -12, IM_COL32(0, 0, 0, 80));
-            Q(0, 0, IM_COL32(255, 252, 240, 255));
-            // Ruled lines, like a page from the Light Prognosticus.
-            for (int i = 0; i < 6; ++i) {
-                const float ly = cardY + hh - 50.0f - i * 40.0f;
-                list->AddLine(R(-hw + 20, ly, 0, 0), R(hw - 20, ly, 0, 0), IM_COL32(170, 200, 230, 110), 2.0f * k);
-            }
-            list->AddQuad(R(-hw, cardY + hh, 0, 0), R(hw, cardY + hh, 0, 0), R(hw, cardY - hh, 0, 0), R(-hw, cardY - hh, 0, 0), IM_COL32(24, 18, 12, 255), 6.0f * k);
-            list->AddTriangleFilled(R(hw - 40, cardY - hh, 0, 0), R(hw, cardY - hh + 40, 0, 0), R(hw - 40, cardY - hh + 40, 0, 0), IM_COL32(214, 206, 186, 255));
-            list->AddTriangle(R(hw - 40, cardY - hh, 0, 0), R(hw, cardY - hh + 40, 0, 0), R(hw - 40, cardY - hh + 40, 0, 0), IM_COL32(24, 18, 12, 255), 3.0f * k);
-            // Text, shrunk to fit inside the card.
-            const float maxW = 2 * hw - 70.0f;
-            auto Fit = [&](const std::u16string& u, float size) {
-                const float w = GameLayout::MeasureText(*pmFont, u, size);
-                return w > maxW ? size * maxW / w : size;
-            };
-            auto Outlined = [&](const char* text, float y, float size, uint32_t top, uint32_t bottom, float ink) {
-                const auto u = GameLayout::Utf16(text);
-                const float fs = Fit(u, size);
-                for (int j = 0; j < 12; ++j) {
-                    const float a = j * 0.5236f;
-                    GameLayout::DrawText(list, view, *pmFont, u, std::cos(a) * ink, y + bob + std::sin(a) * ink, fs,
-                                         0x18120CFFu, 0x18120CFFu, 1.0f, 1, 1);
-                }
-                GameLayout::DrawText(list, view, *pmFont, u, 0.0f, y + bob, fs, top, bottom, 1.0f, 1, 1);
-            };
-            Outlined("FRIGHTWORKS", cardY + 88.0f, 40.0f, 0xFFF26BFFu, 0xFF9A1EFFu, 3.0f);
-            Outlined("Night of 100 Frights", cardY + 32.0f, 48.0f, 0xFF5A4AFFu, 0xC81E1EFFu, 3.0f);
-            {
-                const auto u = GameLayout::Utf16(kCredit);
-                GameLayout::DrawText(list, view, *pmFont, u, 0.0f, cardY - 22.0f + bob, Fit(u, 17.0f), 0x3A2A18FFu,
-                                     0x3A2A18FFu, 1.0f, 1, 1);
-                // How to reach the settings, along the card's bottom edge.
-                const auto hint = GameLayout::Utf16("F10 = settings   F11 = fullscreen / window   F2 = screenshot");
-                GameLayout::DrawText(list, view, *pmFont, hint, 0.0f, cardY - hh + 16.0f + bob, Fit(hint, 12.0f),
-                                     0x6A5A48FFu, 0x6A5A48FFu, 1.0f, 1, 1);
-            }
-            if (shaderLine[0] != '\0') {
-                const float bw = 180.0f, by = cardY - 70.0f;
-                list->AddRectFilled(R(-bw, by + 10, 0, 0), R(bw, by - 10, 0, 0), IM_COL32(24, 18, 12, 255), 5.0f * k);
-                list->AddRectFilled(R(-bw + 4, by + 6, 0, 0), R(bw - 4, by - 6, 0, 0), IM_COL32(250, 240, 210, 255), 3.0f * k);
-                const float p = std::fmod(t * 0.6f, 1.0f);
-                const float sx = -bw + 4 + p * (2 * bw - 58);
-                list->AddRectFilled(R(sx, by + 6, 0, 0), R(sx + 50, by - 6, 0, 0), IM_COL32(255, 196, 40, 255), 3.0f * k);
-                const auto u = GameLayout::Utf16(shaderLine);
-                GameLayout::DrawText(list, view, *pmFont, u, 0.0f, by - 26.0f + bob, Fit(u, 15.0f), 0x3A2A18FFu, 0x3A2A18FFu,
-                                     1.0f, 1, 1);
-            } else {
-                const float pop = 1.0f + 0.06f * std::sin(t * 5.0f);
-                const auto u = GameLayout::Utf16("Press A or 2 to start!");
-                const float fs = Fit(u, 26.0f) * pop;
-                const float w = GameLayout::MeasureText(*pmFont, u, fs);
-                Draw("button2", -w * 0.5f - 22.0f, cardY - 80.0f + bob, 34.0f * pop, 0.0f, false);
-                for (int j = 0; j < 12; ++j) {
-                    const float a = j * 0.5236f;
-                    GameLayout::DrawText(list, view, *pmFont, u, 14.0f + std::cos(a) * 2.5f, cardY - 80.0f + bob + std::sin(a) * 2.5f, fs,
-                                         0xFFFFFFFFu, 0xFFFFFFFFu, 1.0f, 1, 1);
-                }
-                GameLayout::DrawText(list, view, *pmFont, u, 14.0f, cardY - 80.0f + bob, fs, 0x3D8BFFFFu, 0x1A3FA0FFu, 1.0f, 1, 1);
-            }
-            // The heroes flank the card; Peach waves from the hills.
-            Shadow(-345.0f, -118.0f, 62.0f);
-            Draw("mario", -345.0f, -32.0f + std::abs(std::sin(t * 2.2f)) * 10.0f, 170.0f, -0.06f + std::sin(t * 2.2f) * 0.03f, false);
-            Shadow(345.0f, -118.0f, 58.0f);
-            Draw("luigi", 345.0f, -36.0f + std::abs(std::sin(t * 2.2f + 1.3f)) * 12.0f, 160.0f, 0.06f + std::sin(t * 2.2f + 1.3f) * 0.03f, false);
-            Draw("peach", -150.0f, -175.0f + std::sin(t * 1.4f) * 4.0f, 110.0f, std::sin(t * 1.4f) * 0.04f, false);
-            // Bowser stomps in from the bottom right, in front of the card.
-            Shadow(200.0f, -232.0f, 70.0f);
-            Draw("bowser", 200.0f, -160.0f + std::abs(std::sin(t * 1.3f)) * 6.0f, 150.0f, -0.04f + std::sin(t * 1.3f) * 0.03f, false);
-            Draw("pixl", 40.0f, -185.0f + std::sin(t * 2.6f) * 8.0f, 60.0f, std::sin(t * 1.9f) * 0.15f, false);
-            // Tippi loops around the card, trailing sparkles.
-            const float tx = std::sin(t * 0.7f) * 330.0f, ty = 200.0f + std::sin(t * 1.4f) * 30.0f;
-            for (int j = 1; j <= 5; ++j) {
-                const float tt = t - j * 0.12f;
-                Draw("sparkle", std::sin(tt * 0.7f) * 330.0f, 200.0f + std::sin(tt * 1.4f) * 30.0f, 34.0f - j * 4.0f, tt * 2.0f, false,
-                     IM_COL32(255, 255, 255, 220 - j * 35));
-            }
-            Draw("tippi", tx, ty + std::sin(t * 9.0f) * 3.0f, 64.0f, std::cos(t * 0.7f) * 0.25f, std::cos(t * 0.7f) < 0.0f);
-            // Twinkles scattered over the sky.
-            const float tw[6][2] = {{-330, 165}, {-210, 230}, {250, 235}, {360, 150}, {-60, 245}, {110, 175}};
-            for (int j = 0; j < 6; ++j) {
-                const float s2 = 0.5f + 0.5f * std::sin(t * 2.4f + j * 1.7f);
-                Draw("sparkle", tw[j][0], tw[j][1], 26.0f * s2 + 6.0f, t + j, false, IM_COL32(255, 255, 255, int(120 + 135 * s2)));
-            }
-            startY = view.centerY + 200.0f * k;
-            titleHeight = 0.0f;
-        } else {
-            ImGui::SetWindowFontScale(1.25f);
-            const ImVec2 titleSize = ImGui::CalcTextSize(kTitle);
-            startY = std::max(0.0f, viewport->Size.y * 0.3f);
-            ImGui::SetCursorPos(ImVec2(std::max(0.0f, (viewport->Size.x - titleSize.x) * 0.5f), startY));
-            ImGui::TextUnformatted(kTitle);
-            ImGui::SetWindowFontScale(1.0f);
-            const float wrapWidth = std::min(viewport->Size.x - 48.0f, 640.0f);
-            ImGui::SetCursorPos(ImVec2((viewport->Size.x - wrapWidth) * 0.5f, startY + titleSize.y * 2.0f));
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrapWidth);
-            ImGui::TextUnformatted(kCredit.c_str());
-            ImGui::PopTextWrapPos();
-            startY = ImGui::GetCursorPosY();
-            const ImVec2 reportSize = ImGui::CalcTextSize(kReport);
-            ImGui::SetCursorPos(ImVec2(std::max(0.0f, (viewport->Size.x - reportSize.x) * 0.5f),
-                                       viewport->Size.y - reportSize.y - 24.0f));
-            ImGui::TextUnformatted(kReport);
-            titleHeight = 0.0f;
-        }
-        const ImVec2 titleSize{0.0f, titleHeight};
-        if (!gameFonts && shaderLine[0] != '\0') {
-            ImGui::SetWindowFontScale(0.9f);
-            const float lineX = std::max(0.0f, (viewport->Size.x - ImGui::CalcTextSize(shaderLine).x) * 0.5f);
-            ImGui::SetCursorPos(ImVec2(lineX, startY + titleSize.y * 1.8f));
-            ImGui::TextUnformatted(shaderLine);
-        }
-    }
-    ImGui::End();
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor();
-}
-
-void UpdateBootShaderState() {
-    if (g_bootShadersReady.load(std::memory_order_relaxed)) {
-        return;
-    }
-    const auto now = Clock::now();
-    if (g_bootShaderWaitStart == Clock::time_point{}) {
-        g_bootShaderWaitStart = now;
-    }
-    const uint32_t queued = aurora_get_queued_pipeline_count();
-    g_bootShaderNotice |= queued > kBootShaderNoticeThreshold;
-    if (queued == 0 || now - g_bootShaderWaitStart > kBootShaderWaitLimit) {
-        g_bootShadersReady.store(true, std::memory_order_release);
-    }
-}
-
 void DrawExitPrompt() {
     using namespace OverlayTheme;
     constexpr const char* kTitle = "Quit the game?";
@@ -2550,7 +2292,7 @@ void PersistDisplayModeIfChanged() {
 void ApplyInputBlockState() {
     g_gameInputHeldBack = g_gameInputHeldBack && PadButtonDown();
     const bool blocked = controller_mapping_wizard::IsActive() || g_rebind.active || g_gameInputHeldBack ||
-                         g_exitPromptOpen || g_topBarVisible || StartupScreenVisible() || no100f_devmenu::BlocksInput();
+                         g_exitPromptOpen || g_topBarVisible || no100f_devmenu::BlocksInput();
     PADBlockInput(blocked);
     InputBindings::SetInputBlocked(blocked);
 }
@@ -2582,12 +2324,6 @@ void InitializeRuntimeSettings() noexcept {
     g_displayMode = static_cast<int>(aurora_get_display_mode());
     aurora_set_disable_copy_filter(g_disableCopyFilter);
     aurora_set_skip_unready_pipelines(g_skipUnreadyPipelines);
-    // No startup cover (see the initializers of these flags).
-    g_strapInputAccepted.store(true, std::memory_order_relaxed);
-    g_startupDismissFrame.store(0, std::memory_order_relaxed);
-    g_bootShadersReady.store(true, std::memory_order_relaxed);
-    g_bootShaderNotice = false;
-    g_bootShaderWaitStart = {};
     PADBlockInput(false);
     InputBindings::SetInputBlocked(false);
 }
@@ -2918,7 +2654,7 @@ const char* LeftBumperLabel(const std::string& folder) {
 void DrawHotkeyGuide() {
     using namespace OverlayTheme;
     uint32_t mode = 0, state = 0, movie = 0;
-    const bool show = !StartupScreenVisible() && !g_topBarVisible && !no100f_devmenu::IsOpen() &&
+    const bool show = !g_topBarVisible && !no100f_devmenu::IsOpen() &&
                       Memory::TryRead32(no100f_game_state::kModeAddress, mode) &&
                       Memory::TryRead32(no100f_game_state::kStateAddress, state) &&
                       Memory::TryRead32(no100f_game_state::kMovieAddress, movie) &&
@@ -2991,7 +2727,7 @@ float g_creditsPillAlpha = 0.0f;
 void DrawCreditsPill() {
     using namespace OverlayTheme;
     uint32_t movie = 0;
-    const bool show = !StartupScreenVisible() && !g_topBarVisible &&
+    const bool show = !g_topBarVisible &&
                       no100f_game_state::g_creditsMovie.load(std::memory_order_relaxed) &&
                       Memory::TryRead32(no100f_game_state::kMovieAddress, movie) && movie != 0;
     const float step = ImGui::GetIO().DeltaTime / 0.5f;
@@ -3067,10 +2803,7 @@ void Draw() noexcept {
     ApplyConfiguredMappings();
     PersistDisplayModeIfChanged();
     UpdateCursorAutoHide();
-    UpdateBootShaderState();
-    if (!StartupScreenVisible()) {
-        DrawShaderCompilationStatus();
-    }
+    DrawShaderCompilationStatus();
     NetplayUi::Draw();
     DrawFpsOverlay();
     if (no100f_devmenu::Enabled()) {
@@ -3086,23 +2819,6 @@ void Draw() noexcept {
     DrawExitPrompt();
     controller_mapping_wizard::Draw();
     ApplyInputBlockState();
-    DrawStartupScreen();
     aurora_set_hdr_calibration(&g_hdrCalibrationFrame);
 }
-
-bool StartupScreenVisible() noexcept {
-    return !g_strapInputAccepted.load(std::memory_order_acquire) ||
-           !g_bootShadersReady.load(std::memory_order_acquire) ||
-           g_presentedFrame < g_startupDismissFrame.load(std::memory_order_relaxed);
-}
-
-void NotifyStrapInputAccepted() noexcept {
-    bool expected = false;
-    if (g_strapInputAccepted.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-        g_startupDismissFrame.store(g_presentedFrame + kStrapTransitionCoverFrames,
-                                    std::memory_order_release);
-    }
-}
-
-void AdvancePresentedFrame() noexcept { ++g_presentedFrame; }
 } // namespace settings_overlay

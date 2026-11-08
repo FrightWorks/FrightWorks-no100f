@@ -371,7 +371,3 @@ extern "C" void AXFXReverbStdExpCallback_8012b830(CpuContext* ctx) {
     ReverbStd::Render(stateAddr, frame);
 }
 
-#if 0  // SPM: AXFXReverbStdExpCallback: name not in SPM
-REGISTER_NATIVE_FUNCTION_AS(0x800010B0, AXFXReverbStdExpCallback_8012b830,
-                            "AXFXReverbStdExpCallback_8012b830");
-#endif

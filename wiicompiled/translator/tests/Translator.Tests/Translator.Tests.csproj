@@ -29,7 +29,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="TestAssets\RetroWfcPayload\binary\payload.RMCPD00.bin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!--

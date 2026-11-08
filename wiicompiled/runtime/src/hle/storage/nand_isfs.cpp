@@ -426,20 +426,12 @@ extern "C" int32_t NAND_IOS_Open_HLE(uint32_t pathPtr, uint32_t mode) {
     int32_t fd = AllocateFd(hostPath, file, mode);
     return fd;
 }
-#if 0  // SCOOBY: IOS_Open: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014EC, NAND_IOS_Open_HLE, int32_t, (uint32_t pathPtr, uint32_t mode), (pathPtr, mode));
-#endif
 
 extern "C" void NAND_IOS_OpenBody_HLE_801938FC(CpuContext* ctx) {
     const int32_t result = NAND_IOS_Open_HLE(ctx->gpr[3], ctx->gpr[4]);
     ctx->gpr[3] = static_cast<uint32_t>(result);
     ctx->gpr[1] = ctx->gpr[1] + 32u;
 }
-#if 0  // NSMBW: NAND_IOS_OpenBody is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801938fc: no NSMBW symbol at this address
-REGISTER_NATIVE_FUNCTION_AS(0x800014F0, NAND_IOS_OpenBody_HLE_801938FC, "NAND_IOS_OpenBody_HLE_801938FC");
-#endif
-#endif
 
 extern "C" int32_t NAND_IOS_Close_HLE(uint32_t fd) {
     if (fd == ISFS_DEV_FD) {
@@ -468,9 +460,6 @@ extern "C" int32_t NAND_IOS_Close_HLE(uint32_t fd) {
     CloseFd(fd);
     return ISFS_OK;
 }
-#if 0  // SCOOBY: IOS_Close: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014F4, NAND_IOS_Close_HLE, int32_t, (uint32_t fd), (fd));
-#endif
 
 extern "C" int32_t NAND_IOS_Read_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t length) {
     auto* handle = GetHandle(fd);
@@ -494,9 +483,6 @@ extern "C" int32_t NAND_IOS_Read_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t l
     
     return static_cast<int32_t>(bytesRead);
 }
-#if 0  // SCOOBY: IOS_Read: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014f8, NAND_IOS_Read_HLE, int32_t, (uint32_t fd, uint32_t bufferPtr, uint32_t length), (fd, bufferPtr, length));
-#endif
 
 extern "C" int32_t NAND_IOS_Write_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t length) {
     auto* handle = GetHandle(fd);
@@ -521,9 +507,6 @@ extern "C" int32_t NAND_IOS_Write_HLE(uint32_t fd, uint32_t bufferPtr, uint32_t 
     
     return static_cast<int32_t>(bytesWritten);
 }
-#if 0  // SCOOBY: IOS_Write: name not in Scooby
-PPC_NATIVE_OVERRIDE(800014fc, NAND_IOS_Write_HLE, int32_t, (uint32_t fd, uint32_t bufferPtr, uint32_t length), (fd, bufferPtr, length));
-#endif
 
 extern "C" int32_t NAND_IOS_Seek_HLE(uint32_t fd, int32_t offset, int32_t whence) {
     auto* handle = GetHandle(fd);
@@ -540,9 +523,6 @@ extern "C" int32_t NAND_IOS_Seek_HLE(uint32_t fd, int32_t offset, int32_t whence
     handle->position = static_cast<uint32_t>(std::ftell(handle->file));
     return static_cast<int32_t>(handle->position);
 }
-#if 0  // SPM: IOS_Seek: name not in SPM
-PPC_NATIVE_OVERRIDE(80001500, NAND_IOS_Seek_HLE, int32_t, (uint32_t fd, int32_t offset, int32_t whence), (fd, offset, whence));
-#endif
 
 // ============================================================================
 // IOS_Ioctl HLE - Handles filesystem commands
@@ -831,9 +811,6 @@ extern "C" void NAND_IOS_Ioctl_Entry_HLE(CpuContext* ctx) {
     ctx->gpr[3] = static_cast<uint32_t>(
         NAND_IOS_Ioctl_HLE(fd, cmd, inBufPtr, inLen, outBufPtr, outLen));
 }
-#if 0  // SCOOBY: IOS_Ioctl: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001504, NAND_IOS_Ioctl_Entry_HLE, (CpuContext* ctx), (ctx));
-#endif
 
 // ============================================================================
 // ISFS_OpenLib - Initialize ISFS
@@ -940,9 +917,6 @@ extern "C" void ISFS_OpenLib_HLE_80169BCC(CpuContext* ctx) {
     ctx->gpr[3] = static_cast<uint32_t>(ISFS_OpenLib_Initialize(ctx));
 }
 
-#if 0  // SCOOBY: ISFS_OpenLib: name not in Scooby
-REGISTER_NATIVE_FUNCTION_AS(0x80001508, ISFS_OpenLib_HLE_80169BCC, "ISFS_OpenLib_HLE_80169BCC");
-#endif
 
 // ============================================================================
 // IOS_Ioctlv HLE - Vector Ioctl for complex ISFS operations
@@ -1141,6 +1115,3 @@ extern "C" void NAND_IOS_Ioctlv_Entry_HLE(CpuContext* ctx) {
     ctx->gpr[3] = static_cast<uint32_t>(
         NAND_IOS_Ioctlv_HLE(fd, cmd, numIn, numOut, vectorPtr));
 }
-#if 0  // SCOOBY: IOS_Ioctlv: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000150C, NAND_IOS_Ioctlv_Entry_HLE, (CpuContext* ctx), (ctx));
-#endif

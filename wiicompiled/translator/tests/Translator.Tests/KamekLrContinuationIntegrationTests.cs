@@ -237,7 +237,7 @@ public sealed class KamekLrContinuationIntegrationTests
             var output = Path.Combine(root, "mod");
             string[] args = ["translate-mod", "--project", projectPath, "--code-pul", pulPath,
                 "--base-manifest", manifestPath, "--out", output, "--module-guest-base", $"0x{Module:X8}",
-                "--module-link-base", $"0x{Module:X8}", "--skip-retro-wfc", "--emit-cpp", "--threads", "1"];
+                "--module-link-base", $"0x{Module:X8}", "--emit-cpp", "--threads", "1"];
             var entryPoint = typeof(TranslationProjectConfig).Assembly.EntryPoint!;
             var exitCode = Assert.IsType<int>(entryPoint.Invoke(null, [args]));
             Assert.Equal(0, exitCode);

@@ -19,9 +19,6 @@
 #include "system_bridge.h"
 
 extern "C" void func_80107AC0(CpuContext* ctx);
-#if 0  // NSMBW: MKW StaticR.rel prolog
-extern "C" void func_8055531C(CpuContext* ctx);
-#endif
 
 extern "C" void OSInitAlarm_RecompModLateInit_801a961c(CpuContext* ctx) {
     func_80107AC0(ctx);
@@ -29,19 +26,7 @@ extern "C" void OSInitAlarm_RecompModLateInit_801a961c(CpuContext* ctx) {
 
 REGISTER_NATIVE_FUNCTION_AS(0x80107AC0, OSInitAlarm_RecompModLateInit_801a961c, "OSInitAlarm_RecompModLateInit_801a961c");
 
-#if 0  // NSMBW: MKW StaticR.rel prolog wrapper (Retro Rewind mod init); NSMBW has no StaticR
-extern "C" void StaticRProlog_RecompModInit_8055531c(CpuContext* ctx) {
-    RecompMod::RunMemoryInitializers();
-    func_8055531C(ctx);
-    RecompMod::RunPostRelInitializers();
-}
-#endif
 
-#if 0  // NSMBW: StaticRProlog_RecompModInit is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8055531c: no NSMBW symbol at this address
-REGISTER_NATIVE_FUNCTION_AS(0x80001364, StaticRProlog_RecompModInit_8055531c, "StaticRProlog_RecompModInit_8055531c");
-#endif
-#endif
 
 namespace {
 std::string ReadGuestCStringLimited(uint32_t address, size_t limit = 4096) {
@@ -113,12 +98,6 @@ extern "C" uint32_t BTM_IsDeviceUp_HLE_8013a300(CpuContext* ctx)
     return 1;
 }
 
-#if 0  // SCOOBY: GKI_delay: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000136C, GKI_delay_HLE_801301b4, (CpuContext* ctx), (ctx));
-#endif
-#if 0  // SCOOBY: BTM_IsDeviceUp: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001370, BTM_IsDeviceUp_HLE_8013a300, uint32_t, (CpuContext* ctx), (ctx));
-#endif
 
 // Serial Interface (SI) - GameCube controller ports; stubbed since we don't emulate the MMIO.
 
@@ -235,9 +214,6 @@ extern "C" uint32_t __OSInitSTM_HLE_801ab848(CpuContext* ctx)
 }
 
 // Register the function
-#if 0  // SCOOBY: __OSInitSTM: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001378, __OSInitSTM_HLE_801ab848, uint32_t, (CpuContext* ctx), (ctx));
-#endif
 
 
 extern "C" void OS____PSInit_801a04a0()
@@ -341,9 +317,6 @@ PPC_NATIVE_OVERRIDE_VOID(800013a0, PPCMthid2_8012e638, (CpuContext* ctx), (ctx))
 
 PPC_SPR_STUB_BODY(PPCMfwpar_8012e640,
                   "PPCMfwpar called (stubbed) - Move From Write Pipe Address Register")
-#if 0  // SCOOBY: PPCMfwpar: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013a4, PPCMfwpar_8012e640, (), ());
-#endif
 
 // The gather pipe address never moves here; NO100F's GXResetWriteGatherPipe calls this many times a frame.
 extern "C" void PPCMtwpar_8012e64c() {}
@@ -353,6 +326,3 @@ PPC_SPR_STUB_BODY(PPCDisableSpeculation_8012e654, "PPCDisableSpeculation called 
 PPC_NATIVE_OVERRIDE_VOID(800f8c58, PPCDisableSpeculation_8012e654, (), ());
 
 PPC_SPR_STUB_BODY(PPCMthid4_8012e684, "PPCMthid4 called (stubbed) - Move To HID4")
-#if 0  // SCOOBY: PPCMthid4: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013a8, PPCMthid4_8012e684, (), ());
-#endif

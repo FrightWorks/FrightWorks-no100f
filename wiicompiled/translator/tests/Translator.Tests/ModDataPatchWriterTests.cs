@@ -143,7 +143,6 @@ public sealed class ModDataPatchWriterTests
             [],
             moduleImage,
             digest,
-            null,
             (uint)moduleImage.Length,
             0x40u,
             0x81700000u,
