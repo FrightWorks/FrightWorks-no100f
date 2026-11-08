@@ -1,4 +1,5 @@
 // ROM-free integration probe. Links the actual maintained Aurora renderer.
+#include "gfx/bloom.hpp"
 #include "gfx/common.hpp"
 #include "gfx/clear.hpp"
 #include "gfx/efb_ram_copy.hpp"
@@ -6,6 +7,7 @@
 #include "gfx/scene_stage.hpp"
 #include "gfx/pipeline_cache.hpp"
 #include "gfx/texture.hpp"
+#include "gfx/texture_replacement.hpp"
 #include "gx/gx.hpp"
 #include "gx/fifo.hpp"
 #include "gx/command_processor.hpp"
@@ -890,6 +892,73 @@ void check_efb(unsigned x, unsigned y, std::array<int, 3> expected, const char* 
   }
 }
 
+// What the bloom's scene adds: nothing, an opaque black see-through quad in front of the left quad's outer edge
+// (columns 0 to 6, drawn in the see-through tail), or the right quad drawn see-through (in the tail) instead of solid.
+enum class BloomExtra { None, Cover, TailRight };
+
+// The bloom's scene: two equally bright white quads over black, 4 units away, the left one (columns 8 to 23) textured
+// with `lightTexture`, the right one (40 to 55) with `plainTexture`, then a faint see-through quad in a corner (so the
+// frame has a see-through tail, and a scene stage), and `extra`.
+void draw_bloom_frame(GXTexObj& lightTexture, GXTexObj& plainTexture, BloomExtra extra = BloomExtra::None) {
+  gx::set_cutout_mode(gx::CutoutMode::TwoPassAll);
+  gx::g_gxState.clearColor = {0.f, 0.f, 0.f, 1.f};
+  require(gfx::begin_frame(), "Bloom frame begin failed");
+  gfx::push_draw_command(gfx::clear::DrawData{.pipeline = gfx::pipeline_ref(gfx::clear::PipelineConfig{}),
+                                              .color = {0.f, 0.f, 0.f, 1.f},
+                                              .depth = gx::clear_depth_value()});
+  alignas(32) static std::array<uint8_t, 32768> fifo;
+  GXInit(fifo.data(), fifo.size());
+  gx::g_gxState.viewportPolicy = AURORA_VIEWPORT_NATIVE;
+  GXSetViewport(0.f, 0.f, 64.f, 64.f, 0.f, 1.f);
+  GXSetScissor(0, 0, 64, 64);
+  GXSetCullMode(GX_CULL_NONE);
+  GXSetColorUpdate(true);
+  GXSetAlphaUpdate(true);
+  GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_COPY);
+  GXSetNumTexGens(1);
+  GXSetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+  GXSetNumChans(1);
+  GXSetNumTevStages(1);
+  GXSetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+  GXSetTevOp(GX_TEVSTAGE0, GX_MODULATE);
+  GXSetChanCtrl(GX_COLOR0A0, false, GX_SRC_REG, GX_SRC_VTX, GX_LIGHT_NULL, GX_DF_NONE, GX_AF_NONE);
+  const float projection[]{0.f, 1.f, 0.f, 1.f, 0.f, -0.01f, -0.1f};
+  GXSetProjectionv(projection);
+  const float identity[3][4]{{1.f, 0.f, 0.f, 0.f}, {0.f, 1.f, 0.f, 0.f}, {0.f, 0.f, 1.f, 0.f}};
+  GXLoadPosMtxImm(identity, GX_PNMTX0);
+  GXSetCurrentMtx(GX_PNMTX0);
+  GXClearVtxDesc();
+  GXSetVtxDesc(GX_VA_POS, GX_DIRECT);
+  GXSetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+  GXSetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+  GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0);
+  GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+  GXSetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
+  constexpr float z = -4.f;
+  const auto quad = [&](float left, float right, float top, float bottom, std::array<u8, 4> color) {
+    GXBegin(GX_QUADS, GX_VTXFMT0, 4);
+    for (const auto& xy :
+         std::array<std::array<float, 2>, 4>{{{left, top}, {right, top}, {right, bottom}, {left, bottom}}}) {
+      GXPosition3f32(xy[0] * -z, xy[1] * -z, z);
+      GXColor4u8(color[0], color[1], color[2], color[3]);
+      GXTexCoord2f32(0.f, 0.f);
+    }
+    GXEnd();
+  };
+  GXSetZMode(true, GX_LEQUAL, true);
+  GXLoadTexObj(&lightTexture, GX_TEXMAP0);
+  quad(-.75f, -.25f, .25f, -.25f, {255, 255, 255, 255});
+  GXLoadTexObj(&plainTexture, GX_TEXMAP0);
+  GXSetZMode(true, GX_LEQUAL, extra != BloomExtra::TailRight);
+  quad(.25f, .75f, .25f, -.25f, {255, 255, 255, 255});
+  GXSetZMode(true, GX_LEQUAL, false);
+  quad(.9f, .95f, .95f, .9f, {0, 255, 0, 16});
+  if (extra == BloomExtra::Cover)
+    quad(-1.f, -.8f, .5f, -.5f, {0, 0, 0, 255});
+  gx::fifo::drain();
+  submit(true, false, false, true);
+}
+
 // Draws the scene until its pipelines are built (unready ones are skipped), then once more to read.
 void settle_stage_frame(StageScene scene) {
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
@@ -1346,6 +1415,78 @@ int main(int argc, char** argv) {
       std::printf(
           "Actual Aurora ink outlines: silhouette inked on the quad's own side, Bold wider with thin things kept, no camera "
           "no stage, view black on white, off clean\n");
+    }
+    // Bloom: of two equally bright white quads, the one whose texture is on the light list glows past its outer edge
+    // (column 5, three left of the left quad; column 58, three right of the right quad) and the other does not, either
+    // way round, also when it is drawn see-through; a see-through surface drawn in front covers the glow; the source
+    // view shows the light quad alone; off, nothing changes and the targets are freed.
+    {
+      alignas(32) static std::array<uint8_t, 64> leftTexels;
+      alignas(32) static std::array<uint8_t, 64> rightTexels;
+      leftTexels.fill(255);
+      rightTexels.fill(255);
+      rightTexels[0] = 254; // another texture, as white
+      GXTexObj leftTexture{};
+      GXTexObj rightTexture{};
+      GXInitTexObj(&leftTexture, leftTexels.data(), 4, 4, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, false);
+      GXInitTexObj(&rightTexture, rightTexels.data(), 4, 4, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, false);
+      const auto key = [](const GXTexObj& texture) {
+        const auto name =
+            gfx::texture_replacement::build_texture_replacement_name(*reinterpret_cast<const GXTexObj_*>(&texture));
+        return name.substr(0, name.rfind('.'));
+      };
+      const auto settle = [&](BloomExtra extra = BloomExtra::None) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        for (unsigned frame = 0; frame < 2 || gfx::queued_pipeline_count() != 0; ++frame) {
+          require(std::chrono::steady_clock::now() < deadline, "Bloom pipelines were not built");
+          draw_bloom_frame(leftTexture, rightTexture, extra);
+          webgpu::g_instance.ProcessEvents();
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        draw_bloom_frame(leftTexture, rightTexture, extra);
+      };
+      settle();
+      const auto plainLeft = read_efb(5, 32);
+      const auto plainRight = read_efb(58, 32);
+      check_efb(16, 32, {255, 255, 255}, "bloom off, left quad");
+      gfx::bloom::set_strength(1.f);
+      gfx::bloom::set_light_textures({key(leftTexture)});
+      settle();
+      const int leftGlows = read_efb(5, 32)[0];
+      const int rightStill = read_efb(58, 32)[0];
+      const int uncovered = read_efb(3, 32)[0];
+      require(gfx::bloom::holds_targets(), "Bloom has no targets while on");
+      // A see-through surface in front covers the glow as it covers the light (the glow goes under the tail).
+      settle(BloomExtra::Cover);
+      const int covered = read_efb(3, 32)[0];
+      gfx::bloom::set_light_textures({key(rightTexture)});
+      settle();
+      const int leftStill = read_efb(5, 32)[0];
+      const int rightGlows = read_efb(58, 32)[0];
+      // A light drawn in the see-through tail glows too.
+      settle(BloomExtra::TailRight);
+      const int tailGlows = read_efb(58, 32)[0];
+      std::printf(
+          "Actual Aurora bloom (0-255, outer edges, plain %d %d): left listed %d %d, right listed %d %d, right "
+          "see-through %d; beside the left quad %d, covered %d\n",
+          plainLeft[0], plainRight[0], leftGlows, rightStill, leftStill, rightGlows, tailGlows, uncovered, covered);
+      require(leftGlows > rightStill + 10 && rightGlows > leftStill + 10, "Bloom: the glow does not follow the list");
+      require(leftGlows > plainLeft[0] + 10, "Bloom: the light texture does not glow");
+      require(uncovered > 10 && covered <= 3, "Bloom: a see-through surface in front does not cover the glow");
+      require(tailGlows > leftStill + 10, "Bloom: a see-through light does not glow");
+      gfx::bloom::set_strength(0.f);
+      gfx::bloom::set_view(2);
+      settle();
+      check_efb(48, 32, {255, 255, 255}, "bloom source view, listed quad");
+      check_efb(16, 32, {0, 0, 0}, "bloom source view, other quad");
+      gfx::bloom::set_view(0);
+      settle();
+      check_efb(5, 32, plainLeft, "bloom off again, left edge");
+      require(!gfx::bloom::holds_targets(), "Bloom targets kept after it was turned off");
+      gfx::bloom::set_light_textures({});
+      std::printf(
+          "Actual Aurora bloom: the listed texture glows either way round and see-through, covered by a "
+          "see-through surface in front, source view, off restores\n");
     }
     // An alpha-blended surface moves like any other. It owns the depth only on a GPU that can blend the 32-bit float
     // target; elsewhere (AURORA_GFX_FLAGS=nofloat32blend hides the feature) it leaves the depth behind it.

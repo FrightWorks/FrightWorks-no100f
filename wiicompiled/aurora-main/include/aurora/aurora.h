@@ -148,6 +148,8 @@ typedef struct {
   float ambientOcclusion;
   // Cartoon ink outlines at start (see aurora_set_ink_outlines); 0 = off.
   int inkOutlines;
+  // Bloom at start (see aurora_set_bloom); 0 = off.
+  float bloom;
 } AuroraConfig;
 
 typedef enum {
@@ -259,6 +261,16 @@ float aurora_get_ambient_occlusion();
 #define AURORA_HAS_INK_OUTLINES 1
 void aurora_set_ink_outlines(int level);
 int aurora_get_ink_outlines();
+// Bloom: the game's lights glow softly around themselves, before the HUD. 0 = off to 1 = full; AuroraConfig::bloom at
+// start. Its debug view: 0 off, 1 the glow alone, 2 its source (the light draws alone). Both take effect at the next
+// frame. The lights are the draws that sample one of the game's light textures: the list replaces the last, by texture
+// pack name without ".dds" ("tex1_64x64_0123456789abcdef_14").
+#define AURORA_HAS_BLOOM 1
+void aurora_set_bloom(float strength);
+float aurora_get_bloom();
+void aurora_set_light_textures(const char* const* keys, uint32_t count);
+void aurora_set_bloom_view(int mode);
+int aurora_get_bloom_view();
 
 typedef enum {
   AURORA_METALFX_DISABLED,

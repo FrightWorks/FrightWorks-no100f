@@ -50,6 +50,9 @@ struct TextureRef {
   // Dev menu (F8): the texture's replacement file name without extension, for the texture log (static
   // textures only; empty for EFB copies and other runtime textures).
   std::string debugKey;
+  // The bloom (gfx/bloom.hpp): whether this is one of the game's light textures, as of that list's version.
+  uint32_t lightListVersion = 0;
+  bool lightTexture = false;
 
   TextureRef(wgpu::Texture texture, wgpu::TextureView sampleTextureView, wgpu::TextureView attachmentTextureView,
              wgpu::Extent3D size, wgpu::TextureFormat format, uint32_t mipCount, u32 gxFormat)

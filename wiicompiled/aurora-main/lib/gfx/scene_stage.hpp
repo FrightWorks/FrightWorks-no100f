@@ -15,7 +15,8 @@ namespace aurora::gfx::scene_stage {
 // back (cut-out mode "game" or "cut", or nothing see-through or cut out) has no stage, and neither has a frame submitted
 // in parts (common.cpp end_batch_impl): it shows without the stage's effects, otherwise the same.
 
-// Whether anything uses the stage: with nothing, the pass is not split and nothing is recorded.
+// Whether anything uses the stage (its own effects, or the bloom: bloom.hpp): with nothing, the pass is not split and
+// nothing is recorded.
 bool wanted() noexcept;
 
 // Solid surfaces the game draws a second time, see-through: its two-layer materials (the f001 dock house: the walls

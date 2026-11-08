@@ -62,6 +62,7 @@
 #endif
 
 #include "netplay_ui.h"
+#include "no100f_light_textures.h"
 #include "netplay_start.h"
 #include "netplay_session.h"
 #include "frame_input.h"
@@ -1511,6 +1512,7 @@ int RuntimeMain(int argc, char** argv) {
         auroraConfig.motionBlur = RuntimeConfigFile::MotionBlurShutter(RuntimeConfigFile::MotionBlur());
         auroraConfig.ambientOcclusion = static_cast<float>(std::clamp(RuntimeConfigFile::AmbientOcclusion(), 0, 100)) / 100.0f;
         auroraConfig.inkOutlines = std::clamp(RuntimeConfigFile::InkOutlines(), 0, 2);
+        auroraConfig.bloom = static_cast<float>(std::clamp(RuntimeConfigFile::Bloom(), 0, 100)) / 100.0f;
         // Dolphin-style custom textures. Aurora indexes <userPath>/texture_replacements
         // once during aurora_initialize, so both knobs only take effect on the next launch.
         // Dumps name each unmatched texture the way its replacement would have to be named,
@@ -1595,6 +1597,7 @@ int RuntimeMain(int argc, char** argv) {
         if (RuntimeConfigFile::DisplayMode("borderless") != "windowed") {
             aurora_set_fullscreen_monitor(RuntimeConfigFile::FullscreenDisplay().c_str());
         }
+        no100f_light_textures::Apply();  // before the first textures are drawn
         const AuroraInfo auroraInfo = aurora_initialize(0, nullptr, &auroraConfig);
         if (auroraInfo.initializationStatus != AURORA_INITIALIZATION_SUCCESS) {
             throw std::runtime_error(auroraInfo.initializationError != nullptr

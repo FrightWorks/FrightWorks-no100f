@@ -1,5 +1,6 @@
 #include "scene_stage.hpp"
 
+#include "bloom.hpp"
 #include "../gx/gx.hpp"
 #include "../internal.hpp"
 #include "tracy/Tracy.hpp"
@@ -474,7 +475,7 @@ std::optional<Mat4x4<float>> inverse(const Mat4x4<float>& matrix) {
 
 bool wanted() noexcept {
   return g_viewMode.load(std::memory_order_relaxed) != 0 || g_aoStrength.load(std::memory_order_relaxed) > 0.f ||
-         g_inkLevel.load(std::memory_order_relaxed) != 0;
+         g_inkLevel.load(std::memory_order_relaxed) != 0 || bloom::wanted();
 }
 
 void set_ink_outlines(int level) noexcept {

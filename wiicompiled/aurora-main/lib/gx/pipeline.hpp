@@ -18,6 +18,9 @@ struct DrawData {
   uint32_t dstAlpha;
   HashType particleSortGroup;
   float particleDepth;
+  // It samples one of the game's light textures (lit windows, fire, lamp light cones): the bloom glows from these draws
+  // (gfx/bloom.hpp).
+  bool emitsLight;
 };
 
 constexpr uint32_t GXPipelineConfigVersion = 20;

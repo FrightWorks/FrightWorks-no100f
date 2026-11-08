@@ -1,10 +1,10 @@
-#include <set>
 #include <cstdio>
 #include <exception>
 #include <absl/container/flat_hash_set.h>
 #include <array>
 #include "command_processor.hpp"
 
+#include "../gfx/bloom.hpp"
 #include "../gfx/common.hpp"
 #include "../gfx/scene_stage.hpp"
 #include "../dolphin/gx/__gx.h"
@@ -2847,6 +2847,20 @@ static bool ordered_world_state() noexcept {
          g_gxState.depthCompare && (g_gxState.depthFunc == GX_LESS || g_gxState.depthFunc == GX_LEQUAL);
 }
 
+// Whether a world draw (perspective) samples one of the game's light textures, for the bloom (gfx/bloom.hpp).
+static bool samples_light_texture(const ShaderInfo& info) noexcept {
+  if (!gfx::bloom::wanted() || g_gxState.projType != GX_PERSPECTIVE) {
+    return false;
+  }
+  for (u32 i = 0; i < MaxTextures; ++i) {
+    const auto& bind = g_gxState.textures[i];
+    if (info.sampledTextures.test(i) && bind && gfx::bloom::is_light_texture(*bind.ref)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // A surface as the scene stage's two-layer rule knows it: its geometry and position matrix.
 static HashType stage_surface(HashType geometrySignature) noexcept {
   const auto& matrix = g_gxState.pnMtx[g_gxState.currentPnMtx].pos;
@@ -3390,6 +3404,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
       .expandedPrimitive = prim == GX_LINES || prim == GX_LINESTRIP || prim == GX_POINTS,
       .bindGroups = bindGroups,
       .dstAlpha = pipelineState.dstAlpha,
+      .emitsLight = samples_light_texture(info),
   };
   const auto cutoutMode = cutout_mode();
   const bool enhancedCutouts = cutoutMode == CutoutMode::TwoPass || cutoutMode == CutoutMode::TwoPassAll;

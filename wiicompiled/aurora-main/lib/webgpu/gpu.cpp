@@ -490,7 +490,8 @@ static TextureWithSampler create_depth_texture(uint32_t width, uint32_t height) 
   const auto format = g_graphicsConfig.depthFormat;
   const wgpu::TextureDescriptor textureDescriptor{
       .label = "Depth texture",
-      .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding,
+      // CopySrc: the bloom keeps the depth at the scene stage, to draw the game's lights again against (gfx/bloom.hpp).
+      .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopySrc,
       .dimension = wgpu::TextureDimension::e2D,
       .size = size,
       .format = format,

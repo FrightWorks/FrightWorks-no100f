@@ -23,7 +23,7 @@ may follow.
 ## Features
 
 - Up to 4K, true widescreen (16:9, fill, cinematic 2.39:1) or original 4:3
-- 30 or 60 fps, MSAA anti-aliasing, motion blur, ambient occlusion, cartoon ink outlines, HDR
+- 30 or 60 fps, MSAA anti-aliasing, motion blur, ambient occlusion, cartoon ink outlines, bloom, HDR
 - Added Creeper window animation from the XBOX edition of the game to the Mystic Manor's Mystery Machine courtyard
 - Built-in HD texture pack (can be switched off)
 - Gamepads and keyboard, remappable in the launcher (**Settings** > **Controls**) or in game (**F10** > Controls);

@@ -24,6 +24,7 @@
 #include "no100f_devmenu_state.h"
 #include "no100f_devmenu_progress.h"
 #include "no100f_game_state.h"
+#include "no100f_light_textures.h"
 #include "no100f_recorder.h"
 #include "no100f_resources.h"
 #include "build_info.h"
@@ -1427,6 +1428,10 @@ void DrawDiagnostics() {
 //                       3 the ambient occlusion alone, 4 the ink outlines alone
 //   ao PERCENT          ambient occlusion strength for this run (0 off to 100; the setting is not changed)
 //   ink LEVEL           ink outlines for this run: 0 off, 1 thin, 2 bold (the setting is not changed)
+//   bloom PERCENT       bloom strength for this run (0 off to 100; the setting is not changed)
+//   bloomview MODE      bloom view: 0 off, 1 the glow alone, 2 its source (the light draws alone)
+//   lighttex add|del KEY | list | clear   the bloom's light textures for this run (texture pack names without .dds;
+//                       no100f_light_textures.cpp), "list" to devmenu.log
 void PollCommandFile() {
     static uint32_t tick = 0;
     if (++tick % 30 != 0) return;
@@ -1586,6 +1591,33 @@ void PollCommandFile() {
             aurora_set_ink_outlines(std::atoi(arg.c_str()));
             g_status = "ink outlines " + std::to_string(aurora_get_ink_outlines());
 #endif
+#ifdef AURORA_HAS_BLOOM
+        } else if (cmd == "bloom") {
+            aurora_set_bloom(static_cast<float>(std::atoi(arg.c_str())) / 100.0f);
+            g_status = "bloom " + std::to_string(static_cast<int>(aurora_get_bloom() * 100.0f + 0.5f)) + "%";
+        } else if (cmd == "bloomview") {
+            aurora_set_bloom_view(std::atoi(arg.c_str()));
+            g_status = "bloom view " + std::to_string(aurora_get_bloom_view());
+        } else if (cmd == "lighttex") {
+            auto& list = no100f_light_textures::List();
+            std::istringstream ss(arg);
+            std::string op, key;
+            ss >> op >> key;
+            if (op == "add" && !key.empty()) {
+                if (std::find(list.begin(), list.end(), key) == list.end()) list.push_back(key);
+            } else if (op == "del" && !key.empty()) {
+                list.erase(std::remove(list.begin(), list.end(), key), list.end());
+            } else if (op == "clear") {
+                list.clear();
+            }
+            if (op != "add" && op != "del" && op != "clear" && op != "list") {
+                g_status = "lighttex add|del KEY | list | clear";
+            } else {
+                no100f_light_textures::Apply();
+                g_status = "light textures (" + std::to_string(list.size()) + "):";
+                for (const auto& k : list) g_status += " " + k;
+            }
+#endif
         } else if (cmd == "freecam") {
             SetFreecam(arg == "on");
         } else if (cmd == "cam") {
@@ -1709,6 +1741,18 @@ void DrawStatus() {
                               "drawn after it keep their colour. Depth: the solid scene's distance (near = white).\n"
                               "Occlusion: the ambient occlusion alone (white = none), at full strength.\n"
                               "Outlines: the ink outlines alone (Bold when they are off).");
+    }
+#endif
+#ifdef AURORA_HAS_BLOOM
+    {
+        // What the bloom makes glow: what the game draws see-through over its solid scene.
+        static const char* const kBloomViews[] = {"Off", "Glow", "Source"};
+        int bloomView = aurora_get_bloom_view();
+        ImGui::SetNextItemWidth(OverlayTheme::Px(160.0f));
+        if (ImGui::Combo("Bloom view", &bloomView, kBloomViews, 3)) aurora_set_bloom_view(bloomView);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Glow: the bloom alone over black, at full strength.\n"
+                              "Source: what glows (what the see-through world draws added over the solid scene).");
     }
 #endif
 #ifdef AURORA_HAS_MOTION_VECTORS

@@ -6,6 +6,7 @@
 #include "gfx/texture_replacement.hpp"
 #include "gfx/efb_ram_copy.hpp"
 #include "gfx/motion_effects.hpp"
+#include "gfx/bloom.hpp"
 #include "gfx/scene_stage.hpp"
 #include "gx/fifo.hpp"
 #include "gx/shader_info.hpp"
@@ -941,6 +942,7 @@ AuroraInfo initialize(int argc, char* argv[], const AuroraConfig& config) {
   gfx::motion::set_blur(g_config.motionBlur);
   gfx::scene_stage::set_ambient_occlusion(g_config.ambientOcclusion);
   gfx::scene_stage::set_ink_outlines(g_config.inkOutlines);
+  gfx::bloom::set_strength(g_config.bloom);
 #endif
   if (g_config.maxTextureAnisotropy == 0) {
     g_config.maxTextureAnisotropy = 16;
@@ -2592,6 +2594,41 @@ void aurora_set_ink_outlines(int level) {
 int aurora_get_ink_outlines() {
 #ifdef AURORA_ENABLE_GX
   return aurora::gfx::scene_stage::ink_outlines();
+#else
+  return 0;
+#endif
+}
+void aurora_set_bloom(float strength) {
+#ifdef AURORA_ENABLE_GX
+  aurora::gfx::bloom::set_strength(strength);
+#endif
+}
+float aurora_get_bloom() {
+#ifdef AURORA_ENABLE_GX
+  return aurora::gfx::bloom::strength();
+#else
+  return 0.f;
+#endif
+}
+void aurora_set_light_textures(const char* const* keys, uint32_t count) {
+#ifdef AURORA_ENABLE_GX
+  std::vector<std::string> list;
+  list.reserve(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    if (keys[i] != nullptr)
+      list.emplace_back(keys[i]);
+  }
+  aurora::gfx::bloom::set_light_textures(list);
+#endif
+}
+void aurora_set_bloom_view(int mode) {
+#ifdef AURORA_ENABLE_GX
+  aurora::gfx::bloom::set_view(mode);
+#endif
+}
+int aurora_get_bloom_view() {
+#ifdef AURORA_ENABLE_GX
+  return aurora::gfx::bloom::view();
 #else
   return 0;
 #endif

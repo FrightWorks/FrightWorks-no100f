@@ -412,12 +412,24 @@ sealed class MainWindow : Window
             Row("Ambient occlusion", "ambient_occlusion", levels.ToArray(), "0");
         }
         Row("Ink outlines", "ink_outlines", new[] { ("Off", "0"), ("Thin", "1"), ("Bold", "2") }, "0");
+        {
+            // Strength in percent, as in F10 (runtime_config.h kBloomLevels); a strength set by hand in Config.toml
+            // that is none of the levels is kept as its own entry.
+            var levels = new List<(string text, string raw)> { ("Off", "0"), ("Low", "40"), ("Medium", "70"), ("High", "100") };
+            if (int.TryParse(cfg.Get("video", "bloom")?.Trim(), out int saved) && saved > 0 && saved <= 100 &&
+                !levels.Exists(l => l.raw == saved.ToString()))
+            {
+                levels.Add(($"{saved}%", saved.ToString()));
+                levels.Sort((a, b) => int.Parse(a.raw).CompareTo(int.Parse(b.raw)));
+            }
+            Row("Bloom", "bloom", levels.ToArray(), "0");
+        }
         Row("Intro movies", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
         table.Add(FieldLabel("HDR"), new PlankButton("Adjust HDR", (_, _) => OpenHdr().Watch()));
         body.Children.Add(table);
         body.Children.Add(Note("Changes are saved at once and apply the next time the game starts. In the game, F10 has the " +
-                               (MonitorChoice ? "resolution, picture shape, window, fullscreen monitor, frame interpolation, motion blur, ambient occlusion and ink outline settings too, and more (sound, controls); "
-                                              : "resolution, picture shape, window, frame interpolation, motion blur, ambient occlusion and ink outline settings too, and more (sound, controls); ") +
+                               (MonitorChoice ? "resolution, picture shape, window, fullscreen monitor, frame interpolation, motion blur, ambient occlusion, ink outline and bloom settings too, and more (sound, controls); "
+                                              : "resolution, picture shape, window, frame interpolation, motion blur, ambient occlusion, ink outline and bloom settings too, and more (sound, controls); ") +
                                "F11 switches between fullscreen and a window, and F2 saves a screenshot." +
                                (MonitorChoice ? " Fullscreen monitor also applies when F11 goes fullscreen from a window." : "")));
 

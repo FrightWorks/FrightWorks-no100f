@@ -89,6 +89,9 @@ timing), `mvview MODE [SCALE]` (motion vectors view: 0 off, 1 motion only, 2 ove
 for full color), `stageview MODE` (scene stage view: 0 off, 1 tint what is drawn before the stage, 2 the solid scene's
 depth, 3 the ambient occlusion alone, 4 the ink outlines alone), `ao PERCENT` (ambient occlusion strength for this run,
 the setting unchanged), `ink LEVEL` (ink outlines for this run: 0 off, 1 thin, 2 bold, the setting unchanged),
+`bloom PERCENT` (bloom strength for this run, the setting unchanged), `bloomview MODE` (0 off, 1 the glow alone, 2 its
+source: the light draws alone), `lighttex add|del KEY | list | clear` (the bloom's light textures for this run, by
+texture pack name; `NO100F_TEXLOG=1` logs every texture a level draws to `devmenu_texlog.csv`),
 `cutscene` (`cutscene yes|no control yes|no`).
 
 **Player tab:** `player`, `health 1..5`, `snacks 0..99999` read/change live stats. Balance edits are separate from
