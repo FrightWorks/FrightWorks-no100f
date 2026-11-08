@@ -103,6 +103,7 @@ class SweepTest(FakeGameCase):
         self.lit = False
         r = self.one()
         self.assertEqual(r["outcome"], "failed: picture", r)
+        self.assertIn("0.0% of the pixels lit", r["detail"])  # says what was found, not "is not black"
 
     def test_slow_frame_rate_fails_and_the_picture_check_still_ran(self):
         r = self.one(FAKE_FPS="12")

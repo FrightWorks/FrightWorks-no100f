@@ -64,4 +64,6 @@ class Recorder:
         if png is None:
             self.not_run(name, "no screenshot tool on this OS")
             return
-        self.require(not checkmod.png_is_blank(png), name, f"{png.name} is not black")
+        lit, total = checkmod.png_pixels_lit(png)
+        blank = checkmod.png_is_blank(png)
+        self.require(not blank, name, f"{png.name}: {lit / total:.1%} of the pixels lit" + (" (black: only the dev overlay?)" if blank else ""))
