@@ -10,7 +10,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Input is dispatched only inside this launcher's active window or one of its registered dialogs.
 sealed class ControllerNavigation : IDisposable

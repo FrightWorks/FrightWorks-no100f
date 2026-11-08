@@ -1,4 +1,4 @@
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 [Flags]
 enum LauncherButtons

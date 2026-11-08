@@ -1,6 +1,6 @@
-"""Keep the runtime's HLE hooks in step with the target MAP, by name. Replaces remap_parked.py.
+"""Keep the runtime's HLE hooks in step with the target MAP, by name.
 
-hook_remap.txt (written by remap_hooks.py) lists every hook: Unmasked address -> current address, name or PARKED
+hook_remap.txt lists every hook: first address -> current address, name or PARKED
 (name). For each named hook, the wanted address is MAP[name] when the MAP names that function, else a parked dead
 address (0x80001000 + 4n, unique per hook). Hooks whose current address differs from the wanted one are rewritten in
 the runtime sources, and the report is rewritten. Run after every MAP change (manual fixes included).

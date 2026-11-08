@@ -7,7 +7,7 @@ Behaviour comes from the environment, FAKE_MODE:
   hang_once   like hang the first time (marker file in FAKE_STATE_DIR), normal afterwards
   crash       exits with code 3 after a moment
   fault       prints AccessViolation on stderr, keeps running
-Other: FAKE_FPS (a frame rate: prints a `[vi] fps N:` line to stderr every half second once in play, as NSMBW_LOG_FPS does),
+Other: FAKE_FPS (a frame rate: prints a `[vi] fps N:` line to stderr every half second once in play, as NO100F_LOG_FPS does),
 FAKE_BOOT_DELAY (seconds before the game is in play), FAKE_BUILD_ID (printed to console.log), FAKE_CUTSCENE (0 = none),
 FAKE_DIALOGUE (N: after the pan, no cutscene and no control until N plain `a` presses, as a "PRESS A TO CONTINUE" box),
 FAKE_DEAD (1: `player` answers "dead/dying", as while Scooby is killed and the screen fades).
@@ -41,7 +41,7 @@ console = open(logdir / "console.log", "w", encoding="utf-8")
 console.write(f"FrightWorks {os.environ.get('FAKE_BUILD_ID', '0.0.0 fake@0000000')}\n")
 console.write(f"[dvdread] DATA\\files\\XX\\{boot}.HIP\n")
 console.flush()
-assert os.environ.get("NSMBW_INPUT_SCRIPT"), "dummy pad script missing"
+assert os.environ.get("NO100F_INPUT_SCRIPT"), "dummy pad script missing"
 assert os.environ.get("SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT"), "controller isolation missing"
 assert "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS" not in os.environ
 
@@ -83,7 +83,7 @@ while True:
     if mode == "crash" and now > 1.0:
         sys.exit(3)
     if mode == "fault" and now > 1.0 and not os.path.exists("fault-printed"):
-        print("MKW AccessViolation at 0x80001234", file=sys.stderr, flush=True)
+        print("AccessViolation at 0x80001234", file=sys.stderr, flush=True)
         open("fault-printed", "w").close()
     if fake_fps and in_play() and time.time() - last_fps_line >= 0.5:
         print(f"[vi] fps {float(fake_fps):.1f}: game 1.00 ms (stand-in)", file=sys.stderr, flush=True)

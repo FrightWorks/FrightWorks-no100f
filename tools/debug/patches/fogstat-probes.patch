@@ -1,5 +1,5 @@
 diff --git a/wiicompiled/aurora-main/lib/gx/command_processor.cpp b/wiicompiled/aurora-main/lib/gx/command_processor.cpp
-index 6d098c6..5ce9a26 100644
+index 14edf90..4dc4537 100644
 --- a/wiicompiled/aurora-main/lib/gx/command_processor.cpp
 +++ b/wiicompiled/aurora-main/lib/gx/command_processor.cpp
 @@ -1,4 +1,5 @@
@@ -8,15 +8,15 @@ index 6d098c6..5ce9a26 100644
  #include <cstdio>
  #include <exception>
  #include <absl/container/flat_hash_set.h>
-@@ -38,6 +39,7 @@ int g_spmBBoxArmed = 0;
- unsigned g_spmAudit[8] = {};  // render audit for tools/sweep-spm-maps.py
- unsigned g_spmGameClear = 0;  // the game's own EFB clear colour (0xRRGGBB) while sweeping
- int g_spmCullOff = 0;
+@@ -36,6 +37,7 @@ unsigned g_gxDrawLimit = ~0u;  // diagnostic: only the first N draws of each fra
+ int g_gxBBoxArmed = 0;
+ unsigned g_gxAudit[8] = {};  // render audit counters, shown by the diagnostic logs
+ int g_gxCullOff = 0;
 +int (*g_no100fGuestBacktrace)(char* out, int size) = nullptr;  // FOGCOV PROBE: set by the runtime
  }
  namespace aurora::gx {
  GXState::CopyTextureRef* find_copy_texture_for_texobj(const GXTexObj_& obj) noexcept;  // gx.cpp
-@@ -2083,6 +2085,7 @@ static u32 calculate_last_vtx_size(GXVtxFmt fmt) {
+@@ -2079,6 +2081,7 @@ static u32 calculate_last_vtx_size(GXVtxFmt fmt) {
    return vtxSize;
  }
  
@@ -24,8 +24,8 @@ index 6d098c6..5ce9a26 100644
  static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
                                   gfx::Range vertRange, uint16_t usedPnMtxMask,
                                   HashType matrixTopologySignature,
-@@ -2860,6 +2863,138 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
-   spm_bbox_accumulate(fmt, vertices, vtxCount, vtxSize, true);
+@@ -2871,6 +2874,138 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
+   gx_bbox_accumulate(fmt, vertices, vtxCount, vtxSize, true);
    if (!has_complete_primitive(prim, vtxCount)) return true;
    if (!g_gxState.zFreeze) update_zfreeze_reference(prim, fmt, vertices, vtxCount, vtxSize, true);
 +  {  // FOGCOV PROBE: while Play/fogstat.txt exists, per frame and per raw blended triangle batch kind: triangles, mean vertex
@@ -93,7 +93,7 @@ index 6d098c6..5ce9a26 100644
 +      auto viewW = [&](const u8* v) {  // distance in front of the camera (-view z) of one DIRECT f32 position
 +        const u8* pp = v + matrix_index_prefix_size(fmt);
 +        float pos[3];
-+        for (int c = 0; c < 3; ++c) pos[c] = spm_bbox_comp(pp + c * 4, GX_F32, 0, true);
++        for (int c = 0; c < 3; ++c) pos[c] = gx_bbox_comp(pp + c * 4, GX_F32, 0, true);
 +        const u32 mi = (vd[GX_VA_PNMTXIDX] == GX_DIRECT ? v[0] : g_gxState.currentPnMtx) / 3u;
 +        float m[12];
 +        std::memcpy(m, &g_gxState.pnMtx[mi % MaxPnMtx].pos, sizeof(m));
@@ -137,7 +137,7 @@ index 6d098c6..5ce9a26 100644
 +            const u8* v = vertices + (i + k) * vtxSize;
 +            const u8* pp = v + matrix_index_prefix_size(fmt);
 +            for (int j = 0; j < 3; ++j) {
-+              const float x = spm_bbox_comp(pp + j * 4, GX_F32, 0, true);
++              const float x = gx_bbox_comp(pp + j * 4, GX_F32, 0, true);
 +              c[j] += x / 6.f; lo[j] = std::min(lo[j], x); hi[j] = std::max(hi[j], x);
 +            }
 +            al += alphaOf(v) / 6.f;
@@ -163,7 +163,7 @@ index 6d098c6..5ce9a26 100644
  
    // This entry point bypasses process(), so it owns the renderer lock itself.
    std::unique_lock gpuLock(aurora::renderer_gpu_mutex());
-@@ -2885,10 +3020,12 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
+@@ -2896,10 +3031,12 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
          (untextured ? (e[1] <= -0.99f || e[3] >= 0.99f)
                      : e[1] <= -0.99f && e[3] >= 0.99f && g_gxState.blendMode == GX_BM_BLEND && g_gxState.blendFacSrc == GX_BL_SRCALPHA);
    }
@@ -176,8 +176,8 @@ index 6d098c6..5ce9a26 100644
    g_rawFullscreenOverlay = false;
    return true;
  }
-@@ -3195,6 +3332,44 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
-     const unsigned i = g_spmDrawIdx++;
+@@ -3160,6 +3297,44 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
+     const unsigned i = g_gxDrawIdx++;
      if (i >= skipDraws.first && i <= skipDraws.second) return;
    }
 +  {  // FOGSTAT PROBE: while Play/fogstat.txt exists, one line per frame (300 per toggle) counting blended non-list draws
@@ -222,10 +222,10 @@ index 6d098c6..5ce9a26 100644
    // 2 = skip ortho draws textured with a 256x256 RGBA8 (restore of the EFB corner the shadow is rendered in).
    static const int shadowTest = [] { const char* e = std::getenv("NO100F_SHADOW_TEST"); return e ? std::atoi(e) : 0; }();
 diff --git a/wiicompiled/runtime/src/hle/gx/gx_dl.cpp b/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
-index d0689bb..255126e 100644
+index 531ed49..9ff7afa 100644
 --- a/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
 +++ b/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
-@@ -1321,6 +1321,23 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+@@ -1324,6 +1324,23 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
      return false;
  }
  
@@ -248,4 +248,4 @@ index d0689bb..255126e 100644
 +
  extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes) {
      if (nbytes == 0 || listAddr == 0) return;
-     static const int s_skipId = std::getenv("SPM_SKIP_MATDL") ? std::atoi(std::getenv("SPM_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>
+     static const int s_skipId = std::getenv("NO100F_SKIP_MATDL") ? std::atoi(std::getenv("NO100F_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>

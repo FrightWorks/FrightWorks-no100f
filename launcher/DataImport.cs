@@ -4,7 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Bringing the player's files over from an earlier copy of the game: a FrightWorks or Scooby-Doo: Refrightened zip
 // folder (data\UserData, or Play\UserData in old Refrightened ones), or Documents\MarioWiiSaveData (where a FrightWorks
@@ -143,8 +143,8 @@ static class DataImport
         }
         if (!paths.Portable && OperatingSystem.IsWindows())
         {
-            var nsmbw = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MarioWiiSaveData");
-            if (IsThisGamesConfig(Path.Combine(nsmbw, "Config.toml"))) candidates.Add(Make(nsmbw, nsmbw));
+            var oldData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MarioWiiSaveData");
+            if (IsThisGamesConfig(Path.Combine(oldData, "Config.toml"))) candidates.Add(Make(oldData, oldData));
         }
         return candidates.Where(c => !SameFolder(c.UserData, paths.UserData))
                          .OrderByDescending(c => LastUsed(c.UserData)).FirstOrDefault();

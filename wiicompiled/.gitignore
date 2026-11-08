@@ -1,7 +1,6 @@
 /generated/
 /Assets/
 /assets/
-/PulsarPacks/
 *.dol
 *.rel
 *.szs
@@ -76,5 +75,5 @@ output.txt
 # Operating System
 .DS_Store
 
-# NSMBW: pinned third-party dependency sources (Launcher/Prepare-Dependencies.ps1)
+# Pinned third-party dependency sources (Launcher/Prepare-Dependencies.ps1)
 /Dependencies/

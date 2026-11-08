@@ -423,12 +423,12 @@ extern "C" uint32_t OSSetPowerCallback_801ab75c(CpuContext* ctx)
     const uint32_t newCallback = cpu->gpr[3];
     const uint32_t r13 = cpu->gpr[13];
 
-    // __OSDefaultPowerCallback in NSMBW
+    // __OSDefaultPowerCallback
     constexpr uint32_t kDefaultCallbackAddr = 0x80276544u;
 
     // Offsets from R13 (SDA2)
-    const uint32_t kCallbackPtrAddr = r13 - 0x7348u;    // PowerCallback (SPM)
-    const uint32_t kHandlerActiveAddr = r13 - 0x7350u;  // StmEhRegistered (SPM)
+    const uint32_t kCallbackPtrAddr = r13 - 0x7348u;    // PowerCallback
+    const uint32_t kHandlerActiveAddr = r13 - 0x7350u;  // StmEhRegistered
 
     RT_LOG(RT_TAG_OS) << "OSSetPowerCallback_801ab75c called: newCB=0x"
               << std::hex << newCallback << std::dec << std::endl;
@@ -471,9 +471,6 @@ extern "C" uint32_t OSSetPowerCallback_801ab75c(CpuContext* ctx)
 }
 
 // Register the function
-#if 0  // SCOOBY: OSSetPowerCallback: name not in Scooby
-PPC_NATIVE_OVERRIDE(800013B0, OSSetPowerCallback_801ab75c, uint32_t, (CpuContext* ctx), (ctx));
-#endif
 
 PPC_NATIVE_OVERRIDE(800F9A18, EXIImm_80167f68, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
 PPC_NATIVE_OVERRIDE(800F9D14, EXIDma_80168288, uint32_t, (uint32_t channel, uint32_t buffer, uint32_t length, uint32_t type, uint32_t callback), (channel, buffer, length, type, callback));
@@ -508,12 +505,6 @@ extern "C" uint32_t IPCReadReg_80193010(uint32_t index)
 }
 
 // Register the functions
-#if 0  // SCOOBY: IPCWriteReg: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013c0, IPCWriteReg_80193020, (uint32_t index, uint32_t value), (index, value));
-#endif
-#if 0  // SCOOBY: IPCReadReg: name not in Scooby
-PPC_NATIVE_OVERRIDE(800013c4, IPCReadReg_80193010, uint32_t, (uint32_t index), (index));
-#endif
 
 // ----------------------------------------------------------------------------
 // IPCCltInit (0x802247D0): hardware parts (interrupt handler, MMIO) are stubbed, but we still
@@ -524,11 +515,11 @@ extern "C" int32_t IPCCltInit_80193478(CpuContext* ctx)
 {
     RT_LOG(RT_TAG_OS) << "IPCCltInit_80193478 called: calling IPCInit for buffer setup" << std::endl;
     
-    // Sets IPCBufferLo/Hi + Initialized (NSMBW 0x8056E004/B0/A0) from __OSGetIPCBufferLo/Hi.
+    // Sets IPCBufferLo/Hi + Initialized from __OSGetIPCBufferLo/Hi.
     InvokeIndirectCpu(0x80295074u, ctx);
 
     // Advance the buffer lo pointer by 0x1000 (iosHeap size), matching real IPCCltInit.
-    uint32_t bufferLo = Memory::Read32(ctx->gpr[13] - 0x6F24u); // SPM IPCBufferLo (IPCGetBufferLo)
+    uint32_t bufferLo = Memory::Read32(ctx->gpr[13] - 0x6F24u); // IPCBufferLo (IPCGetBufferLo)
     uint32_t newBufLo = bufferLo + 0x1000; // Advance by 4KB for iosHeap
     Memory::Write32(ctx->gpr[13] - 0x6F24u, newBufLo);
     
@@ -539,6 +530,3 @@ extern "C" int32_t IPCCltInit_80193478(CpuContext* ctx)
     return 0; // Success
 }
 
-#if 0  // SCOOBY: IPCCltInit: name not in Scooby
-PPC_NATIVE_OVERRIDE(800013C8, IPCCltInit_80193478, int32_t, (CpuContext* ctx), (ctx));
-#endif

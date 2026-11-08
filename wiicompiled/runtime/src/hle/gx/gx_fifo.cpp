@@ -108,9 +108,9 @@ int HleGxState::GetExpectedCompCount(GXAttr attr, const VtxAttrFmt& fmt) {
 }
 
 static void ApplyAuroraVtxStateForRawBegin(GXVtxFmt fmt) {
-    // SPM: never publish the GX_VA_NBT row. It has no VAT of its own, and publishing its default
+    // Never publish the GX_VA_NBT row. It has no VAT of its own, and publishing its default
     // (cnt 1, F32) after GX_VA_NRM turned Aurora's normals into NBT (60-byte vertices) while the
-    // stream carried 36-byte ones, so every paper-character draw was dropped as truncated.
+    // stream carried 36-byte ones, so every draw of that kind was dropped as truncated.
     PublishAuroraVtxState(fmt, AuroraVtxPublishOptions{/*includeNbt=*/false,
                                                        /*fmtLoopFirst=*/0,
                                                        /*fmtLoopLast=*/25});
@@ -310,7 +310,7 @@ void SubmitAttribute(GXAttr attr, float* comps, const VtxAttrFmt& fmt, const u32
         if (rawComps && fmt.type != GX_F32) {
             for (int i = 0; i < n; ++i) bb[i] = ConvertCompToFloat(rawComps[i], fmt.type, fmt.frac);
         }
-        SpmBBoxPosition(bb, n);
+        GxBBoxPosition(bb, n);
     }
     auto r8 = [rawComps](int idx) { return static_cast<u8>(rawComps[idx]); };
     auto rs8 = [rawComps](int idx) { return static_cast<s8>(rawComps[idx]); };
@@ -718,7 +718,7 @@ void HleFifoWrite(u32 val, uint32_t sizeBytes) {
             u32 raw = 0;
             if (!consumeBytes(1, raw)) break;
             if (!recordOnly) {
-                if (attr == GX_VA_PNMTXIDX) SpmBBoxVertexMatrix(raw);
+                if (attr == GX_VA_PNMTXIDX) GxBBoxVertexMatrix(raw);
                 GXMatrixIndex1u8(attr, static_cast<u8>(raw));
             }
             finishVertexIfNeeded(attr);

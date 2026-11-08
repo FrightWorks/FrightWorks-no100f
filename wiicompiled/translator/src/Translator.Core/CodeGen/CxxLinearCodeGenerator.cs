@@ -18,10 +18,10 @@ namespace Translator.Core.CodeGen;
 public sealed partial class CxxLinearCodeGenerator
 {
     /// <summary>
-    /// <c>MKW_RESTRICT</c> tells the host compiler guest memory via <c>Memory::</c> cannot alias ctx, so
+    /// <c>RECOMP_RESTRICT</c> tells the host compiler guest memory via <c>Memory::</c> cannot alias ctx, so
     /// resident locals stay in host registers. Restrict isn't part of the type, so forward decls use plain <c>CpuContext* ctx</c>.
     /// </summary>
-    internal const string CpuContextDefinitionParameter = "CpuContext* MKW_RESTRICT ctx";
+    internal const string CpuContextDefinitionParameter = "CpuContext* RECOMP_RESTRICT ctx";
 
     internal static string FunctionDefinitionSignature(string name) =>
         $"extern \"C\" void {name}({CpuContextDefinitionParameter})";

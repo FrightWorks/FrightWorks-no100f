@@ -207,7 +207,7 @@ void WriteStdErrEarly(const char* text) {
 
 }  // namespace
 
-extern "C" int MkwHostCpuBaselineInit() {
+extern "C" int RecompHostCpuBaselineInit() {
     TextBuffer missing;
     if (!CollectMissingBaselineFeatures(missing)) {
         ReportUnsupportedCpu(missing.data);
@@ -218,13 +218,13 @@ extern "C" int MkwHostCpuBaselineInit() {
 // Priorities 0-100 are reserved for the implementation; 101 is the earliest a
 // user constructor can request, which puts this ahead of every default-priority
 // constructor in the image.
-__attribute__((constructor(101))) static void MkwHostCpuBaselineCtor() {
-    MkwHostCpuBaselineInit();
+__attribute__((constructor(101))) static void RecompHostCpuBaselineCtor() {
+    RecompHostCpuBaselineInit();
 }
 
 #else  // !defined(__x86_64__)
 
-extern "C" int MkwHostCpuBaselineInit() {
+extern "C" int RecompHostCpuBaselineInit() {
     return 0;
 }
 

@@ -1,4 +1,4 @@
-// GameCube-only hardware the Wii runtime never needed (Scooby-Doo! Unmasked, G5DE78):
+// GameCube-only hardware the Wii runtime never needed:
 //  - the reset button (PI register 0xCC003000), polled by the game's IO error check;
 //  - ARAM, the 16 MB audio/auxiliary RAM. The engine uses it as virtual memory (engine.ini GCVMSARAMSize) and
 //    for streamed audio. Here it is a host buffer; AR DMA and ARQ requests copy at once and queue their
@@ -16,7 +16,7 @@ extern "C" void GxNotifyGuestRamDmaWrite(uint32_t addr, uint32_t size);   // hle
 
 #include "guest_profiler.h"
 extern "C" uint32_t OSGetResetButtonState_Gc() {
-    GuestProfiler::OnFramePresented();  // diagnostic: lets NSMBW_PROFILE start before the first frame (one-shot)
+    GuestProfiler::OnFramePresented();  // diagnostic: lets NO100F_PROFILE start before the first frame (one-shot)
     return 0;  // never pressed
 }
 PPC_NATIVE_OVERRIDE(80106E8C, OSGetResetButtonState_Gc, uint32_t, (), ());
@@ -97,7 +97,7 @@ PPC_NATIVE_OVERRIDE_VOID(800F5AD4, ARQInit_Gc, (), ());
 extern "C" void ARQPostRequest_Gc(uint32_t request, uint32_t owner, uint32_t type, uint32_t priority,
                                   uint32_t source, uint32_t dest, uint32_t length, uint32_t callback) {
     (void)priority;
-    // Fill the ARQRequest as the SDK does: completion callbacks read it back (G5DE78 SOUND_UpdateStreamCB picks its
+    // Fill the ARQRequest as the SDK does: completion callbacks read it back (SOUND_UpdateStreamCB picks its
     // stream by request->owner; left unset, every refill went to stream 0 and voice streams looped their first chunk).
     const uint32_t fields[][2] = {{0x00, 0}, {0x04, owner}, {0x08, type}, {0x10, source},
                                   {0x14, dest}, {0x18, length}, {0x1C, callback}};

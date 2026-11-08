@@ -186,15 +186,15 @@ inline double PpcPackPairedInline(float ps0, float ps1)
 // FPSCR[NI] is modeled by MXCSR FTZ/DAZ, so arithmetic output flushing compiles to nothing.
 // Two cases still need a software check against the mirrored bit (not STMXCSR, too hot):
 // double->single conversion (CVTSD2SS isn't covered by FTZ) and raw lane pass-through moves.
-inline bool MkwHostNiActiveInline() noexcept
+inline bool RecompHostNiActiveInline() noexcept
 {
-    return g_mkwHostNiActive;
+    return g_recompHostNiActive;
 }
 
 inline float PpcForceSingleValueInline(double value)
 {
     // FPSCR[NI] flushes an exact pre-round single-subnormal even when rounding would promote it
-    // to the smallest normal. g_mkwNiFlushThreshold (2^-126 active, 0.0 inactive) turns the
+    // to the smallest normal. g_recompNiFlushThreshold (2^-126 active, 0.0 inactive) turns the
     // flush into a branchless mask: a set compare lane keeps just the sign bit, a clear lane
     // passes the value to the double->float conversion. DAZ/FZ (set exactly when NI is) makes
     // the compare itself treat a subnormal as zero, matching the mask's answer.
@@ -202,14 +202,14 @@ inline float PpcForceSingleValueInline(double value)
     const __m128d v = _mm_set_sd(value);
     const __m128d signMask = _mm_set_sd(-0.0);
     const __m128d magnitude = _mm_andnot_pd(signMask, v);
-    const __m128d flush = _mm_cmplt_sd(magnitude, _mm_set_sd(g_mkwNiFlushThreshold));
+    const __m128d flush = _mm_cmplt_sd(magnitude, _mm_set_sd(g_recompNiFlushThreshold));
     const __m128d kept = _mm_andnot_pd(_mm_andnot_pd(signMask, flush), v);
     return static_cast<float>(_mm_cvtsd_f64(kept));
 #elif defined(__aarch64__)
     const float64x1_t v = vdup_n_f64(value);
     const uint64x1_t signMask = vdup_n_u64(0x8000000000000000ULL);
     const float64x1_t magnitude = vreinterpret_f64_u64(vbic_u64(vreinterpret_u64_f64(v), signMask));
-    const uint64x1_t flush = vclt_f64(magnitude, vdup_n_f64(g_mkwNiFlushThreshold));
+    const uint64x1_t flush = vclt_f64(magnitude, vdup_n_f64(g_recompNiFlushThreshold));
     const uint64x1_t signOnly = vand_u64(vreinterpret_u64_f64(v), signMask);
     const uint64x1_t kept = vbsl_u64(flush, signOnly, vreinterpret_u64_f64(v));
     return static_cast<float>(vget_lane_f64(vreinterpret_f64_u64(kept), 0));
@@ -218,7 +218,7 @@ inline float PpcForceSingleValueInline(double value)
 
 inline float PpcFlushSingleForNiInline(float value)
 {
-    if (!MkwHostNiActiveInline())
+    if (!RecompHostNiActiveInline())
         return value;
     const uint32_t bits = PpcBitCastToU32Inline(value);
     if ((bits & 0x7FFFFFFFu) < 0x00800000u) [[unlikely]]
@@ -598,7 +598,7 @@ inline double PPC_PsMulNoNiInline(double lhs, double rhs)
 // single fused rounding per lane (std::fma(float) == vfmaddps per lane), and
 // the negate-unless-NaN behavior of the nmadd/nmsub forms is expressed with
 // PpcNegateNonNanLanesInline. NI flushing is handled by MXCSR (see
-// MkwApplyHostNiMode), so the NI and NoNi entry points are identical here.
+// RecompApplyHostNiMode), so the NI and NoNi entry points are identical here.
 
 // Fused multiply-add/subtract on a pair. NEON's vfma_f32(acc, a, b) = acc + a*b has an
 // accumulator-first operand order, unlike x86's _mm_fmadd_ps(a, b, c) = a*b + c - msub is

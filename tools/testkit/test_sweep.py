@@ -95,7 +95,7 @@ class SweepTest(FakeGameCase):
         self.assertIn("AccessViolation", r["detail"])
 
     def test_crash_kinds(self):
-        self.assertEqual(sweep.crash_kind("w0: MKW AccessViolation at 0x80"), "access violation")
+        self.assertEqual(sweep.crash_kind("w0: AccessViolation at 0x80"), "access violation")
         self.assertEqual(sweep.crash_kind("w0: the game exited with code 3"), "exited")
         self.assertEqual(sweep.crash_kind("w0: OS panic: bad thing"), "panic")
 
@@ -237,11 +237,11 @@ class SweepTest(FakeGameCase):
 
     def test_the_game_logs_fps_and_is_isolated_from_real_pads(self):
         game = self.make_game()
-        self.assertEqual(game.extra_env["NSMBW_LOG_FPS"], "1")
+        self.assertEqual(game.extra_env["NO100F_LOG_FPS"], "1")
         env = launch.test_env(extra=game.extra_env)
         self.assertEqual(env["SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT"], launch.IGNORE_PADS_EXCEPT)
-        self.assertEqual(env["NSMBW_INPUT_SCRIPT"], launch.DUMMY_PAD_SCRIPT)
-        self.assertEqual(env["NSMBW_LOG_FPS"], "1")
+        self.assertEqual(env["NO100F_INPUT_SCRIPT"], launch.DUMMY_PAD_SCRIPT)
+        self.assertEqual(env["NO100F_LOG_FPS"], "1")
 
     # -- many levels
     def test_sweep_runs_all_levels_in_order_on_the_workers(self):
@@ -324,6 +324,22 @@ class SweepTest(FakeGameCase):
         self.args.fps30 = True
         sweep.write_report(self.out, [ok], self.args, "b", 1.0)
         self.assertIn("fps60 off, 30 fps", (self.out / "REPORT.md").read_text())
+
+
+class ExitCodeTest(unittest.TestCase):
+    def test_known_skips_do_not_count_against_the_run(self):
+        ok = {"level": "h001", "outcome": "passed"}
+        skipped = {"level": "s006", "outcome": "skipped (known)"}
+        self.assertEqual(sweep.exit_code([ok, skipped], 2), 0)
+        self.assertEqual(sweep.exit_code([ok, {"level": "i004", "outcome": "passed on retry"}], 2), 0)
+
+    def test_failures_and_missing_levels_are_1_and_checks_not_run_are_3(self):
+        ok = {"level": "h001", "outcome": "passed"}
+        self.assertEqual(sweep.exit_code([ok, {"level": "i004", "outcome": "failed: timeout"}], 2), 1)
+        self.assertEqual(sweep.exit_code([ok], 2), 1)                    # interrupted: a level is missing
+        notrun = {"level": "i004", "outcome": "passed (some checks not run)"}
+        self.assertEqual(sweep.exit_code([ok, notrun], 2), 3)
+        self.assertEqual(sweep.exit_code([notrun, {"level": "e001", "outcome": "failed: crash (exited)"}], 2), 1)
 
 
 class LevelListTest(unittest.TestCase):

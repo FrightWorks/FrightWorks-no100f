@@ -223,7 +223,7 @@ public sealed class ModFunctionDiscoveryTests
         const uint moduleBase = 0x81700000u;
         var code = new byte[0x20000];
 
-        // Mirrors the Retro Rewind trampoline at 0x8171FCB4: a lone backward
+        // Mirrors a mod's trampoline: a lone backward
         // branch referenced only as a callback argument to a base-game routine.
         WriteU32(code, 0x1FBC8, 0x9421FFF0u); // helper: stwu r1,-0x10(r1)
         WriteU32(code, 0x1FBCC, 0x7C0802A6u); // mflr r0

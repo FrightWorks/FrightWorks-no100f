@@ -10,6 +10,6 @@
     <PackageReference Include="Avalonia.Headless" Version="12.1.5" />
     <PackageReference Include="Avalonia.Skia" Version="12.1.5" />
     <PackageReference Include="Avalonia.BuildServices" Version="11.3.2" ExcludeAssets="all" PrivateAssets="all" />
-    <ProjectReference Include="..\..\launcher\ScoobyReMasked.Launcher.csproj" />
+    <ProjectReference Include="..\..\launcher\FrightWorks.Launcher.csproj" />
   </ItemGroup>
 </Project>

@@ -10,7 +10,7 @@
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <VersionPrefix>0.5.0</VersionPrefix>
     <Company>WiiCompiled</Company>
-    <Product>Mario Kart Wii Static Translator</Product>
+    <Product>Static Recompilation Translator</Product>
   </PropertyGroup>
 
   <ItemGroup>

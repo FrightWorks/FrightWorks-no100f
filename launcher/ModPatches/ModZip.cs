@@ -1,6 +1,6 @@
 using System.IO.Compression;
 
-namespace ScoobyReMasked.ModPatches;
+namespace FrightWorks.ModPatches;
 
 // Installs a mod from a zip. Zips are untrusted: nothing outside the mod folder, no links, size limits. Everything is
 // unpacked and checked in the cache first, and the mods folder only changes in the final move, so a bad zip leaves it as it was.

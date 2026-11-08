@@ -16,7 +16,6 @@
 #include "platform/host_platform.h"
 #include "runtime_log.h"
 #include "guest_profiler.h"
-#include "spm_map_sweep.h"
 
 #include <dolphin/gx/GXAurora.h>
 #include <dolphin/vi.h>
@@ -161,14 +160,13 @@ constexpr uint32_t kViRenderHeightAddr      = 0x8026DE36;  // HorVer.DispSizeY (
 constexpr uint32_t kViXfbWidthAddr          = 0x8026DE42;  // HorVer.FBSizeX (+0x12)
 constexpr uint32_t kViXfbHeightAddr         = 0x8026DE4C;  // HorVer+0x1C (PanSizeY)
 constexpr uint32_t kViRetraceCountAddr      = 0x80271398;  // retraceCount (NO100F r13-0x6EE8); // matches VIWaitForRetrace/handler
-constexpr uint32_t kViTimingGuardAddr       = 0x8056dd0c;  // IsInitialized+0xC = __VIDimming_All_Clear in NSMBW (offset-matched; MKW name unverified)
+constexpr uint32_t kViTimingGuardAddr       = 0x8056dd0c;  // IsInitialized+0xC (offset-matched)
 constexpr uint32_t kViPreRetraceCallback    = 0x802713A8;  // PreCB (NO100F r13-0x6ED8)
 constexpr uint32_t kViPostRetraceCallback   = 0x802713AC;  // PostCB (NO100F r13-0x6ED4)
 constexpr uint32_t kViNextFrameBufferAddr   = 0x8026DE60;  // NO100F: no CurrBufAddr in this SDK; VISetNextFrameBuffer writes HorVer.bufAddr
 constexpr uint32_t kViNextFrameBufferHwAddr = 0x8026DE60;  // HorVer.bufAddr (+0x30)
 constexpr uint32_t kViRetraceQueueAddr      = 0x802713A0;  // retraceQueue (NO100F r13-0x6EE0); // Thread queue for VIWaitForRetrace
 
-// (MKW gated the post-retrace callback on EGG::BaseSystem::sSystem at 0x80386F60; not used for NSMBW.)
 
 
 // ============================================================================
@@ -394,13 +392,13 @@ static std::atomic<bool> s_inAdvanceRetrace{false};
 // end the freshly pre-warmed empty frame and show it as a black frame group.
 static std::atomic<bool> s_presentSequenceActive{false};
 
-// NSMBW bring-up: frames the guest actually handed to the presenter (an XFB was ready), and a one-shot
+// Bring-up: frames the guest actually handed to the presenter (an XFB was ready), and a one-shot
 // watchdog that dumps every guest thread's state if none arrived after 12 s and again after 30 s, so
 // a boot that stalls in a wait loop shows where each thread is parked.
 static std::atomic<uint32_t> s_presentedXfbFrames{0};
-extern "C" { extern int g_spmDrawDump; extern int g_spmCullOff; extern int g_spmSweepDump; extern unsigned g_spmDrawIdx; extern unsigned g_spmDrawLimit; }  // aurora command_processor (SPM bring-up diagnostics)
-static uint32_t SpmPresentedFramesLocal() { return s_presentedXfbFrames.load(std::memory_order_relaxed); }
-static uint32_t (*const g_spmFramesFn)() = &SpmPresentedFramesLocal;
+extern "C" { extern int g_gxDrawDump; extern int g_gxCullOff; extern unsigned g_gxDrawIdx; extern unsigned g_gxDrawLimit; }  // aurora command_processor (Diagnostic)
+static uint32_t GxPresentedFramesLocal() { return s_presentedXfbFrames.load(std::memory_order_relaxed); }
+static uint32_t (*const g_gxFramesFn)() = &GxPresentedFramesLocal;
 
 void StartStallWatchdogOnce() {
     static std::once_flag once;
@@ -425,7 +423,7 @@ void StartStallWatchdogOnce() {
                 const bool black = g_vi.black;  // racy read; diagnostics only
                 RT_LOGF(RT_TAG_VI, "[watchdog] %d s: %u guest frame(s) presented, VI black=%d\n", seconds, frames,
                         black ? 1 : 0);
-                if (frames != 0 && !black && seconds != 30) {  // SPM bring-up: always dump at 30 s
+                if (frames != 0 && !black && seconds != 30) {  // Bring-up: always dump at 30 s
                     continue;
                 }
                 RT_LOGF(RT_TAG_VI, "[watchdog] nothing visible yet; guest threads:\n");
@@ -435,14 +433,14 @@ void StartStallWatchdogOnce() {
     });
 }
 
-// NSMBW: report where the game's own loader places its four boot RELs. The translated build was
-// pre-linked for fixed heap addresses (projects/nsmbw/tools/prelink_rels.py); a mismatch means the
+// Report where the game's own loader places its boot RELs. The translated build expects fixed
+// heap addresses; a mismatch means the
 // guest heap layout differs from hardware and translated REL code would run against wrong data.
-// Walks __OSModuleInfoList (0x800030C8) once per retrace until all four have been reported.
+// Walks __OSModuleInfoList (0x800030C8) once per retrace until all have been reported.
 void LogGuestModulesOnce() {
     struct ExpectedModule { uint32_t id; const char* name; uint32_t image; uint32_t bss; };
     static constexpr ExpectedModule kExpected[] = {
-        {1, "relF", 0x80BF6840u, 0x80F12640u},  // SPM: projects/spm/tools/prelink_spm_rel.py
+        {1, "relF", 0x80BF6840u, 0x80F12640u},  // id, name, image and bss addresses
     };
     static uint32_t s_reported = 0;  // one bit per module id
     if (s_reported == 0x2u) {
@@ -480,11 +478,10 @@ void LogGuestModulesOnce() {
     }
 }
 
-// NSMBW: log every scene switch (boot, title, world map, stage, ...) with the game's own profile name,
-// so automated bring-up runs show how far the game got without screenshots. dScene_c::m_nextScene and
-// m_nowScene are adjacent halfwords at 0x80428730; dProf_getName reads names from a pointer table.
+// Log every sequence switch (logo, title, game, ...), so automated bring-up runs show how far the
+// game got without screenshots.
 void LogSceneChanges() {
-    // SPM: seqdrv now_seq / next_seq (.sdata, r13-0x7E48 / -0x7E44) and seqWork.stage (0x804CF364).
+    // Guest words read as the current and next sequence (.sdata, r13-0x7E48 / -0x7E44) and the stage.
     static constexpr const char* kSeqNames[] = {"logo", "title", "game", "mapchange", "gameover", "load"};
     static uint32_t s_last = 0xFFFFFFFFu;
     uint32_t now = 0, next = 0, stage = 0;
@@ -511,7 +508,6 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
     StartStallWatchdogOnce();
     LogGuestModulesOnce();
     LogSceneChanges();
-    SpmMapSweep::Tick(ctx, s_presentedXfbFrames.load(std::memory_order_relaxed));
 
     uint32_t preCb = 0;
     uint32_t postCb = 0;
@@ -607,10 +603,7 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
             InvokeIndirectCpu(preCb, ctx);
         }
         if (postCb) {
-            // Mario Kart Wii gated this on EGG::BaseSystem::sSystem being non-null because its
-            // callback dereferenced it during early boot. NSMBW has no BaseSystem (its EGG is the
-            // older TSystem<...>), and none of its direct VISetPostRetraceCallback calls install a
-            // callback, so follow the SDK: call whatever callback is set.
+            // Follow the SDK: call whatever callback is set.
             InvokeIndirectCpu(postCb, ctx);
         }
     }
@@ -626,11 +619,11 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
         const bool shouldSubmit = frameActive && (shouldPresentXfb || shouldPresentBlack);
 
         if (shouldSubmit) {
-            if (!isBlack || settings_overlay::StartupScreenVisible()) {
+            if (!isBlack) {
                 // Normal presentation: draw overlay on top of GX content
                 settings_overlay::Draw();
             }
-            // Outside startup, VI black remains a pure black presentation.
+            // VI black remains a pure black presentation.
             // Unpaced: this present already runs in retrace context.
             VI_HLE_PresentFrame(shouldPresentXfb, false);
         } else if (g_auroraFrameHadWork.load(std::memory_order_acquire) && !shouldPresentXfb && !isBlack) {
@@ -811,7 +804,7 @@ void PaceToRetraceBoundary(Clock::time_point deadline) {
 // Single owner of the Aurora frame presentation sequence: seals the active frame, optionally paces the
 // producer to the VI retrace boundary, and pre-warms the next frame. Paced from GXCopyDisp; unpaced for
 // the retrace-context black/boot present path in AdvanceRetrace.
-// NSMBW_LOG_FPS (debug.nsmbw.logfps on Android): every two seconds, the frames presented and where
+// NO100F_LOG_FPS (debug.no100f.logfps on Android): every two seconds, the frames presented and where
 // each frame's time went: the game (guest code and GX command building), aurora_end_frame (encoding,
 // submission, and waiting on the GPU when it falls behind) and pacing to the retrace. A game share near
 // the frame budget is CPU-bound; a large end_frame share is GPU-bound.
@@ -824,7 +817,7 @@ struct FrameTimes {
 };
 
 static bool LogFpsEnabled() {
-    static const bool on = std::getenv("NSMBW_LOG_FPS") != nullptr;
+    static const bool on = std::getenv("NO100F_LOG_FPS") != nullptr;
     return on;
 }
 
@@ -848,15 +841,15 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
             const uint32_t pf = s_presentedXfbFrames.fetch_add(1, std::memory_order_relaxed) + 1;
             static const int32_t dumpTarget = [] { std::ifstream in("drawdump.txt"); int32_t f = -1; in >> f; return f; }();
             static const bool cullTest = std::ifstream("depth_test.txt").good();
-            if (g_spmDrawDump) std::fflush(nullptr);  // games are killed by test scripts: get the dump to disk
-            g_spmDrawDump = ((dumpTarget >= 0 && pf == static_cast<uint32_t>(dumpTarget)) || g_spmSweepDump) ? 1 : 0;
-            static const int envTest = [] { const char* e = std::getenv("SPM_CULL_TEST"); return e ? std::atoi(e) : 0; }();  // 1 = no culling, 2 = no depth test (diagnostic)
-            static const unsigned drawLimit = [] { const char* e = std::getenv("SPM_DRAW_LIMIT"); return e ? static_cast<unsigned>(std::atoi(e)) : ~0u; }();
-            g_spmDrawLimit = drawLimit;
-            g_spmDrawIdx = 0;
-            g_spmCullOff = envTest ? envTest : ((cullTest && pf >= 6900u) ? 2 : 0);
+            if (g_gxDrawDump) std::fflush(nullptr);  // games are killed by test scripts: get the dump to disk
+            g_gxDrawDump = (dumpTarget >= 0 && pf == static_cast<uint32_t>(dumpTarget)) ? 1 : 0;
+            static const int envTest = [] { const char* e = std::getenv("NO100F_CULL_TEST"); return e ? std::atoi(e) : 0; }();  // 1 = no culling, 2 = no depth test (diagnostic)
+            static const unsigned drawLimit = [] { const char* e = std::getenv("NO100F_DRAW_LIMIT"); return e ? static_cast<unsigned>(std::atoi(e)) : ~0u; }();
+            g_gxDrawLimit = drawLimit;
+            g_gxDrawIdx = 0;
+            g_gxCullOff = envTest ? envTest : ((cullTest && pf >= 6900u) ? 2 : 0);
         }
-        // SPM bring-up: with drawdump.txt present, report any guest write into the DOL's
+        // Bring-up: with drawdump.txt present, report any guest write into the DOL's
         // read-only sections (.rodata/.sdata2) once the game has been running a while.
         if (s_presentedXfbFrames.load(std::memory_order_relaxed) == 3000u && std::ifstream("drawdump.txt").good()) {
             std::ifstream dol(RuntimeConfigFile::ResolvedDvdRoot() / "sys" / "main.dol", std::ios::binary);
@@ -876,14 +869,11 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
                 RT_LOGF(RT_TAG_VI, "[rocheck] section 0x%08X checked, %d diffs shown\n", addr, reported);
             }
         }
-        // NSMBW: lift the runtime's startup cover at the game's first visible frame. Mario Kart's
-        // runtime lifted it from a StrapScene::CheckInput hook that auto-accepted its strap screen;
-        // NSMBW shows its own Wii Strap screen instead, and the player presses A as on a console.
+        // Log the game's first visible frame.
         static std::once_flag firstVisibleFrame;
         if (!g_vi.black) {
             std::call_once(firstVisibleFrame, [] {
-                // The cover now stays up until the player presses A or 2 (hle/input/kpad.cpp).
-                RT_LOGF(RT_TAG_VI, "first visible guest frame presented; waiting for A or 2 to lift the startup cover\n");
+                RT_LOGF(RT_TAG_VI, "first visible guest frame presented\n");
             });
         }
     }
@@ -1036,7 +1026,6 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
             times.lastPresentEnd = now;
         }
     }
-    settings_overlay::AdvancePresentedFrame();
     g_auroraFrameActive.store(false, std::memory_order_release);
     g_auroraFrameHadWork.store(false, std::memory_order_release);
     if (presentedXfb) {
@@ -1078,7 +1067,7 @@ void VI_HLE_SetXfbReady(uint32_t xfbAddr) {
 static void SeedViStateForInit(CpuContext* ctx, const char* who)
 {
     RT_LOG(RT_TAG_VI) << who << " called: seeding VI state (HLE)" << std::endl;
-    GuestProfiler::OnFramePresented();  // diagnostic: NSMBW_PROFILE can sample boot hangs before the first frame
+    GuestProfiler::OnFramePresented();  // diagnostic: NO100F_PROFILE can sample boot hangs before the first frame
     {
         std::lock_guard<std::mutex> lock(g_viMutex);
         EnsureInitializedLocked();
@@ -1107,33 +1096,18 @@ extern "C" void VIInit_caseD_0_HLE_801b9934(CpuContext* ctx)
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_0_801b9934 stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0  // SPM: 0x801b9934: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(8000106C, VIInit_caseD_0_HLE_801b9934, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VIInit_caseD_1_HLE_801b993c(CpuContext* ctx)
 {
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_1_801b993c stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0  // SPM: 0x801b993c: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(80001070, VIInit_caseD_1_HLE_801b993c, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VIInit_caseD_2_HLE_801b9944(CpuContext* ctx)
 {
     (void)ctx;
     RT_LOG(RT_TAG_VI) << "VIInit_caseD_2_801b9944 stubbed" << std::endl;
 }
-#if 0  // NSMBW: MKW switch-case label; its function is native in NSMBW (was MKW-only)
-#if 0  // SPM: 0x801b9944: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(80001074, VIInit_caseD_2_HLE_801b9944, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 // -----------------------------------------------------------------------------
 // VISetPreRetraceCallback (0x801BC3E0)
@@ -1180,9 +1154,6 @@ extern "C" void VIGetDTVStatus_HLE_801bad38(CpuContext* ctx)
 {
     ViSetR3(ctx, 0); // return 0 -> not ready / disabled
 }
-#if 0  // SCOOBY: VIGetDTVStatus: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001080, VIGetDTVStatus_HLE_801bad38, (CpuContext* ctx), (ctx));
-#endif
 
 // -----------------------------------------------------------------------------
 // VIConfigure & related helpers: translate GXRenderModeObj into guest globals.
@@ -1237,9 +1208,9 @@ extern "C" void VIConfigure_HLE_801b9f6c(CpuContext* ctx)
     ViSetR3(ctx, 0);
 }
 
-// The VI only scans out viHeight lines of the XFB, but the presenter shows the whole display copy. Scooby-Doo!
-// Unmasked configures a 448-line VI mode BEFORE GXInit, whose __GXInitGX defaults the copy to 640x480, then
-// never sets it again (the console's VI just drops the extra lines): 32 undrawn lines showed as a band at the
+// The VI only scans out viHeight lines of the XFB, but the presenter shows the whole display copy. A game can
+// configure a 448-line VI mode BEFORE GXInit, whose __GXInitGX defaults the copy to 640x480, then
+// never set it again (the console's VI just drops the extra lines): 32 undrawn lines showed as a band at the
 // bottom. Copy (and size the XFB) as the TV shows it: on VIConfigure and again after GXInit (gx_init.cpp).
 void VI_HLE_ApplyDisplayCopyForMode() {
     CopyMode mode{};
@@ -1318,11 +1289,6 @@ extern "C" void VIGetNextFrameBuffer_HLE_801bab24(CpuContext* ctx)
     ViSetR3(ctx, fb);
     VI_HLE_PollRetrace(ctx);
 }
-#if 0  // NSMBW: VIGetNextFrameBuffer is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801bab24: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE_VOID(80001088, VIGetNextFrameBuffer_HLE_801bab24, (CpuContext* ctx), (ctx));
-#endif
-#endif
 
 extern "C" void VISetBlack_HLE_801bab2c(CpuContext* ctx)
 {
@@ -1364,9 +1330,6 @@ extern "C" void VIGetNextField_HLE_801babac(CpuContext* ctx)
     ViSetR3(ctx, fieldOdd ? 1 : 0);
     VI_HLE_PollRetrace(ctx);
 }
-#if 0  // SCOOBY: VIGetNextField: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000108C, VIGetNextField_HLE_801babac, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void VIGetCurrentLine_HLE_801bac48(CpuContext* ctx)
 {
@@ -1447,12 +1410,9 @@ extern "C" void VIWaitForRetrace_HLE_801b99ec(CpuContext* ctx)
 }
 PPC_NATIVE_OVERRIDE_VOID(8010AFA0, VIWaitForRetrace_HLE_801b99ec, (CpuContext* ctx), (ctx));
 
-// VIGetScanMode (SPM 0x8028211C): reads the VI clock/DTV registers on hardware. The host has no
+// VIGetScanMode: reads the VI clock/DTV registers on hardware. The host has no
 // cable, so report interlaced (VI_INTERLACE = 0), the mode every NTSC console supports.
 extern "C" uint32_t VIGetScanMode_HLE() { return 0; }
-#if 0  // SCOOBY: VIGetScanMode: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001090, VIGetScanMode_HLE, uint32_t, (), ());
-#endif
 
 
-uint32_t SpmPresentedFrames() { return g_spmFramesFn(); }
+uint32_t GxPresentedFrames() { return g_gxFramesFn(); }

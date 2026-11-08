@@ -637,7 +637,7 @@ void build_index() noexcept {
   }
 
   std::error_code ec;
-  // New Super Paper Bros. mods: <UserData>/mods/<name>/textures (skipped when the mod folder holds a file
+  // Texture mods: <UserData>/mods/<name>/textures (skipped when the mod folder holds a file
   // named "disabled"). The user's own folder is indexed first and try_emplace keeps the first entry, so
   // it wins over mods; among mods the alphabetically later one wins, like their disc file overrides.
   // The game's own texture_replacements (the built-in HD pack) come last, so anything of the user's wins.

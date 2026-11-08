@@ -73,8 +73,7 @@ int32_t ComputeThreadEffectivePriority(uint32_t threadPtr)
 
 bool IsThpVideoDecoderEntry(uint32_t entryFunc)
 {
-    // Mario Kart Wii's THP decoder threads (0x805529A8 / 0x80552A74) needed GQR presets.
-    // NSMBW ships no THP video and no THP player code, so no thread entry qualifies.
+    // No thread entry here needs GQR presets for THP decoding.
     (void)entryFunc;
     return false;
 }
@@ -338,7 +337,7 @@ extern "C" void OSCreateThread_HLE_801a9e84(CpuContext* ctx)
         // Match the original OSCreateThread: when a floating-point exception handler is installed
         // (__OSErrorTable[OS_ERROR_FPE] != NULL) the new thread gets FE0|FE1 in SRR1, the FPSAVED
         // state bit and an FPSCR built from __OSFpscrEnableBits.
-        constexpr uint32_t kSchedulerInitFlagAddr = 0x804F5270u;  // SPM OSCreateThread 0x80274F64: __OSErrorTable + 0x40.
+        constexpr uint32_t kSchedulerInitFlagAddr = 0x804F5270u;  // __OSErrorTable + 0x40 (OSCreateThread)
         constexpr uint32_t kThreadAttrSourceAddr = 0x80277530u;   // __OSFpscrEnableBits
         if (Memory::Contains(kSchedulerInitFlagAddr, 4) &&
             ::Memory::Read32(kSchedulerInitFlagAddr) != 0) {
@@ -395,9 +394,6 @@ extern "C" void OSCreateThread_HLE_801a9e84(CpuContext* ctx)
         cpu->gpr[3] = 0; // Return failure
     }
 }
-#if 0  // SCOOBY: OSCreateThread: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013D8, OSCreateThread_HLE_801a9e84, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void OSExitThread_HLE_801aa0f0(CpuContext* ctx)
 {
@@ -423,9 +419,6 @@ extern "C" void OSExitThread_HLE_801aa0f0(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-#if 0  // SCOOBY: OSExitThread: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(800013DC, OSExitThread_HLE_801aa0f0, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void OSCancelThread_HLE_801aa1d4(CpuContext* ctx)
 {
@@ -526,9 +519,6 @@ extern "C" void OSJoinThread_HLE_801aa3ac(CpuContext* ctx)
     OS__RestoreInterrupts_801a65d4(irqState);
     cpu->gpr[3] = result;
 }
-#if 0  // SPM: OSJoinThread: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(800013E0, OSJoinThread_HLE_801aa3ac, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void OSDetachThread_HLE_801aa4ec(CpuContext* ctx)
 {
@@ -558,9 +548,6 @@ extern "C" void OSDetachThread_HLE_801aa4ec(CpuContext* ctx)
 
     OS__RestoreInterrupts_801a65d4(irqState);
 }
-#if 0  // SPM: OSDetachThread: name not in SPM
-PPC_NATIVE_OVERRIDE_VOID(800013E4, OSDetachThread_HLE_801aa4ec, (CpuContext* ctx), (ctx));
-#endif
 
 extern "C" void OSSuspendThread_HLE_801aa6a8(CpuContext* ctx)
 {

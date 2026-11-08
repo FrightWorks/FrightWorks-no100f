@@ -9,7 +9,7 @@
 
 struct ImDrawList;
 
-// Draws New Super Mario Bros. Wii's own menu graphics on top of the game, so the network-play menus
+// Draws the game's own menu graphics on top of the game, so the network-play menus
 // look like the rest of the game: nw4r layouts (BRLYT) with their TPL textures and BRFNT fonts,
 // read from the player's disc at run time and drawn through ImGui. Covers what the game's menu
 // layouts use - picture, text, window and null panes; textures interpolated between a material's
@@ -89,8 +89,7 @@ private:
     std::vector<std::shared_ptr<Font>> m_fonts;
 };
 
-// The game's text, measured and drawn with one of its fonts ("mj2d00_MessageFont_32_I4.brfnt",
-// "mj2d01_marioFont_64_IA4.brfnt", "mj2d00_PictureFont_32_RGBA8.brfnt").
+// The game's text, measured and drawn with one of its fonts, named by file.
 std::shared_ptr<Font> LoadFont(const std::string& name);
 bool FontReady(const Font* font);
 float MeasureText(const Font& font, const std::u16string& text, float fontSize);

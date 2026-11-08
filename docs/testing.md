@@ -274,9 +274,9 @@ A fresh `Play` copy starts with an empty shader and pipeline cache (`UserData\Ca
 
 The pieces are in `tools/testkit/` and are meant for every automated game run (the smoke test and the level sweep use them; the PowerShell scripts have not been moved onto them yet):
 - `launch.py`: the one launch helper. Its own copy of `Play\` in a folder you give it (the HD pack and button icons are linked, never copied; deleting never follows a link),
-  its own `Config.toml` (windowed, rumble off, muted), the environment scrubbed of leftover `NO100F_*`, `AX_*`, `NSMBW_*`, `AUDIO_*` switches and of
+  its own `Config.toml` (windowed, rumble off, muted), the environment scrubbed of leftover `NO100F_*`, `AX_*`, `AUDIO_*` switches and of
   `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS` (never set it: SDL then refuses the game's own hint call and the game treats that as an error).
-  Controller isolation, per game process only, so your own game is unaffected: `NSMBW_INPUT_SCRIPT` set (the game reports pad 1 connected, nothing pressed) and
+  Controller isolation, per game process only, so your own game is unaffected: `NO100F_INPUT_SCRIPT` set (the game reports pad 1 connected, nothing pressed) and
   `SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0xDEAD/0xBEEF`, an ID no controller has, so a real pad's presses do not reach the game
   (tried once with a person pressing a real pad throughout a full smoke run: all three jobs passed as without; the game logs no controller connects, so there is no log line to check).
 - `slots.py`: shared run slots, 3 by default (`--slots`, or `FRIGHTWORKS_TEST_SLOTS`). `acquire(why, exclusive=True)` is for the human check and performance
@@ -302,16 +302,16 @@ keep running `--seconds` (8) more, then check:
 - alive, and no `AccessViolation`, `OS panic`, `missing_target`, `Unhandled` or `FATAL` on stderr: a fault or an exit fails the level at once (`failed: crash (access violation | panic | exited)`);
 - the dev menu says the scene is the level (`failed: in <level>`);
 - the picture is not black (a screenshot, Windows only; "not run" elsewhere). A black one is shot again up to 4 times, 3 s apart, before it fails, and a retake that was lit is noted in the report. With nobody at the pad the monsters of `o005` and `p002` catch Scooby at the spawn within seconds (health 3, 2, dead, then back at 3 about every 13 s), and the screen is black during the game's own death fade until he respawns. A picture that stays black through all five shots (12 s) still fails;
-- frame rate: the game's own `fps` lines (the sweep sets `NSMBW_LOG_FPS`) after it was playable; the median must reach `--min-fps` (default half the target: 30 at 60 fps, 15 at 30 fps).
+- frame rate: the game's own `fps` lines (the sweep sets `NO100F_LOG_FPS`) after it was playable; the median must reach `--min-fps` (default half the target: 30 at 60 fps, 15 at 30 fps).
 A level that does not become playable in `--timeout` (150 s) gets one more try from a fresh launch ("passed on retry"); a crash or a failed check is final.
 A check that could not run is "not run" (`passed (some checks not run)`, exit code 3), never a pass.
-A scene in `KNOWN_EXCEPTIONS` (in `level-sweep.py`, with the reason) is not run: `REPORT.md` lists it as "skipped (known)", never as passed, and the exit code is 3; `--include-known` runs it anyway. Today that is `s006`, the ending (`OUTTRO` cutscene, not a playable level: it is the one scene on the disc missing from the level table in `tools/debug/game/levels.md`).
+A scene in `KNOWN_EXCEPTIONS` (in `level-sweep.py`, with the reason) is not run: `REPORT.md` lists it as "skipped (known)", never as passed, but it does not count against the run (exit code 0 when everything else passed); `--include-known` runs it anyway. Today that is `s006`, the ending (`OUTTRO` cutscene, not a playable level: it is the one scene on the disc missing from the level table in `tools/debug/game/levels.md`).
 
 What the sweep sets, on top of the game's defaults (the kit's test config, the same as the smoke test): windowed 1280x720 with the render size following the window and 16:9, `skip_intro`, MSAA off (so 7 windows stay fast), HD textures off (the smoke test covers them),
 `fps60 = true` (`--fps30` sets `fps60 = false`: 30 fps), muted, rumble off. Frame interpolation is not set, so it is off: the old script wrote a target of 120.
 
 Options: `--levels h001,c003`, `--include-known`, `--workers N` (7), `--slots N` (as many as workers), `--seconds S`, `--timeout S`, `--fps30`, `--min-fps N`, `--keep`, `--exclusive` (the machine to yourself), `--out DIR`, `--activate-when-shown 0|1`, `--skip-build-check`.
-Exit codes: 0 passed, 1 a level failed, 2 wrong build, 3 only checks not run. Output: `autotest\level-sweep-<time>\` with `REPORT.md` (problems first, then one row per level: outcome, seconds, seconds to playable, fps median and min), `results.json`, `shots\<level>.png` and `logs\<level>-<attempt>.err.log` / `.console.log`.
+Exit codes: 0 passed (known exceptions skipped), 1 a level failed or is missing, 2 wrong build, 3 nothing failed but a check could not run. Output: `autotest\level-sweep-<time>\` with `REPORT.md` (problems first, then one row per level: outcome, seconds, seconds to playable, fps median and min), `results.json`, `shots\<level>.png` and `logs\<level>-<attempt>.err.log` / `.console.log`.
 Measured on one PC (2026-11-08): `h001`, `i004` and `w020` at once passed in 28 s (playable after 11-17 s, 60 fps median in each), and `i004` with `--fps30` in 19 s (30 fps). The first full run (87 levels, 7 windows, fps60) took 538 s: 83 passed and 4 failed. The four were `f003` (a dialogue box nobody dismissed), `s006` (the ending cutscene, which is not a level) and `o005` and `p002` (a black picture caught during the death fade); after the dialogue presses, the retake and the exception above, `f003`, `o005` and `p002` pass.
 
 ## 5. Dev menu (F8)
@@ -406,8 +406,8 @@ useful:
 - **Logs**: `Play\UserData\Logs\<time>\console.log`; the newest one shows which level files load (`[dvdread] ...
   xNNN.HIP`). Runtime messages (`RT_LOGF`) go to stderr: launch with
   `Start-Process "Play\FrightWorks Game.exe" -WorkingDirectory Play -RedirectStandardError err.txt`.
-- **Scripted input** (no controller needed): set `NSMBW_INPUT_SCRIPT` before starting the game, e.g.
-  `$env:NSMBW_INPUT_SCRIPT = '10000:PLUS,12000:DOWN,13500:A'` = press Start at 10 s, D-pad down at 12 s, A at 13.5 s
+- **Scripted input** (no controller needed): set `NO100F_INPUT_SCRIPT` before starting the game, e.g.
+  `$env:NO100F_INPUT_SCRIPT = '10000:PLUS,12000:DOWN,13500:A'` = press Start at 10 s, D-pad down at 12 s, A at 13.5 s
   (ms after the game first reads input; optional third field = hold time in ms, default 150). Buttons: `A`, `B`,
   `PLUS` (Start), `ONE` (X), `TWO` (Y), `MINUS` (Z), `UP`/`DOWN`/`LEFT`/`RIGHT`.
 - **Button prompts**: `$env:BUTTON_ICONS = 'xbox'` (or `playstation`, `nintendo`) forces a prompt set; the game puts
@@ -415,7 +415,7 @@ useful:
   `python tools\make-button-icons.py --out Play\button_icons` (needs ImageMagick and the HD pack).
 - **Audio capture**: `$env:AUDIO_RAW_DUMP = 'C:\temp\out.raw'` writes the mixed output; analysis tools in
   `tools\debug\audio\`.
-- Remove test variables afterwards: `Remove-Item Env:NO100F_*, Env:AX_*, Env:NSMBW_*, Env:AUDIO_*, Env:BUTTON_ICONS -ErrorAction SilentlyContinue`.
+- Remove test variables afterwards: `Remove-Item Env:NO100F_*, Env:AX_*, Env:AUDIO_*, Env:BUTTON_ICONS -ErrorAction SilentlyContinue`.
 - **Launcher screenshots** without opening it: `& "launcher\publish\FrightWorks.exe" --shots <dir>` (Linux:
   `launcher/publish/FrightWorks --shots <dir>`) draws every page to `<dir>\<Page>.png`. The window takes the size the
   window manager gives it; for fixed sizes use the layout regression below.

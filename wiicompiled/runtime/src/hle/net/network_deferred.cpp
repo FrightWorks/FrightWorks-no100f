@@ -241,7 +241,7 @@ static DeferredDnsCompletion ResolveDeferredDns(DeferredDnsWork work) {
         if (nativeResults) {
             freeaddrinfo(nativeResults);
         }
-        // The name the guest asked for is what proves whether the Retro-WFC
+        // The name the guest asked for is what proves whether a mod
         // payload's own resolver hooks rewrote the Nintendo hostname or not.
         NetFail("dns %s '%s'%s%s FAILED gai=%d result=%d",
                 DeferredDnsKindName(completion.work.kind), completion.work.node.c_str(),
@@ -627,7 +627,7 @@ static bool InitializeDeferredSyncRoute(DeferredNetworkRoute& route, uint32_t wa
     // early scheduler setup. Capture its identity before yielding so a late
     // resolver result cannot wake a stale/reused stack queue after cancellation.
     constexpr uint32_t kOSRunningContextAddr = 0x800000E4u;
-    constexpr uint32_t kDefaultThreadContextAddr = 0x8026D568u;  // NO100F  // DefaultThread (NSMBW)
+    constexpr uint32_t kDefaultThreadContextAddr = 0x8026D568u;  // NO100F  // DefaultThread
     uint32_t expectedThread = Memory::Read32(kOSRunningContextAddr);
     if (expectedThread == 0) {
         expectedThread = kDefaultThreadContextAddr;
@@ -1054,7 +1054,7 @@ bool Network_HLE_ProcessCompletions(CpuContext* cpu) {
         g_lastSocketError = result;
         // Every blocking connect settles here exactly once, whether it was
         // resolved at submission, probed, timed out or aborted by a close - so
-        // this is the single place a failed WFC connect becomes visible.
+        // this is the single place a failed connect becomes visible.
         if (result != 0) {
             char peer[INET_ADDRSTRLEN]{};
             inet_ntop(AF_INET, &work.peerAddress.sin_addr, peer, sizeof(peer));

@@ -28,7 +28,7 @@ git apply tools\debug\patches\yn-bisect-harness.patch     # before building for 
 git apply -R tools\debug\patches\yn-bisect-harness.patch  # before any PR
 ```
 
-Without it, `NSMBW_INPUT_SCRIPT` still works for buttons (`0:A:1` keeps pad 1 connected) but `STICK_*` entries do nothing,
+Without it, `NO100F_INPUT_SCRIPT` still works for buttons (`0:A:1` keeps pad 1 connected) but `STICK_*` entries do nothing,
 so scripted landings drift.
 
 ## When to use
@@ -79,7 +79,7 @@ Add a small `tools/debug/yn-bisect/<bug>-repro.ps1` that:
 | --- | --- |
 | Level | `-Boot` / `BOOT=` for the glitch room (scene IDs and names: `tools/debug/game/levels.md`) |
 | Settle | Delay until world is ready |
-| Move | `NSMBW_INPUT_SCRIPT` with `STICK_*` (keep pad “connected” so unplug pause does not freeze) |
+| Move | `NO100F_INPUT_SCRIPT` with `STICK_*` (keep pad “connected” so unplug pause does not freeze) |
 | Optional dump | Env for owner/trace logs if needed |
 | Toast | Informational “landed — do not move” only (not a Y/N question) |
 
@@ -158,7 +158,7 @@ One question → wait → clear skips/toast → next. Do not ask Y/N in chat whe
 
 0. Data integrity first (`hle-divergence-debug`): is the guest data the draw uses what the game built?
 1. Own the pixels (flat-paint/skip/flag until the glitch clears or paints on Y).
-2. Compare that draw to Dolphin (or known-good) at the first divergent stage (POS/idx → matrix → topology → TEV → projection). Beware host **merge**: one host event may sum several FIFO commands (`NSMBW_NO_MERGE=1` for mapping only).
+2. Compare that draw to Dolphin (or known-good) at the first divergent stage (POS/idx → matrix → topology → TEV → projection). Beware host **merge**: one host event may sum several FIFO commands (`NO100F_NO_MERGE=1` for mapping only).
 3. One experiment at that stage — do not pile heuristics.
 
 **Divergent-stage ladder:**

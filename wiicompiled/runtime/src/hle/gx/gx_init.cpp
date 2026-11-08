@@ -31,8 +31,8 @@ void VI_HLE_ApplyDisplayCopyForMode();  // hle/vi.cpp
 
 extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
 {
-    constexpr uint32_t kFifoObjAddr = 0x80275720u;  // FifoObj (NSMBW)
-    constexpr uint32_t kGXDataAddr = 0x802757A0u;   // gxData (NSMBW)
+    constexpr uint32_t kFifoObjAddr = 0x80275720u;  // FifoObj
+    constexpr uint32_t kGXDataAddr = 0x802757A0u;   // gxData
     constexpr uint32_t kGXDataSize = 0x5B0u;  // GameCube SDK gxData (ELF symbol size); the Wii SDK's is 0x600
 
     GXInit(GuestToHostPtr(fifoBase, fifoSize), fifoSize);
@@ -86,14 +86,9 @@ extern "C" uint32_t GX__Init_8016b850(uint32_t fifoBase, uint32_t fifoSize)
 
     return kFifoObjAddr;
 }
-#if 0  // NO100F: the game's own GXInit runs (it builds its gxData at 0x8026C5A0, which its unhooked GX code reads;
-       // this HLE put gxData and the FifoObj at Unmasked addresses, inside NO100F's main stack). Aurora is set up
-       // in the GXInitFifoBase hook below; hardware registers are the emulated MMIO register file.
-PPC_NATIVE_OVERRIDE(800FB508, GX__Init_8016b850, uint32_t, (uint32_t fifoBase, uint32_t fifoSize), (fifoBase, fifoSize));
-#endif
 
 // NO100F GXInitFifoBase: GXInit calls it once with its own FIFO before anything is drawn, so the first call also
-// initializes Aurora. kGXDataPtrAddr points the runtime's shadow gxData bookkeeping (Wii/Unmasked offsets) at a
+// initializes Aurora. kGXDataPtrAddr points the runtime's shadow gxData bookkeeping (not this game's layout) at a
 // scratch block, away from the game's real gxData.
 extern "C" void No100f_GXInitFifoBase(uint32_t fa, uint32_t ba, uint32_t s) {
     static bool auroraReady = false;
@@ -123,9 +118,6 @@ extern "C" void GX__SetGPFifo_8016cb2c(uint32_t fa) { GXSetGPFifo((GXFifoObj*)Gu
 PPC_NATIVE_OVERRIDE_VOID(800fc88c, GX__SetGPFifo_8016cb2c, (uint32_t fa), (fa));
 
 extern "C" void __GX__SaveFifo_8016cdbc(uint32_t fa) { GXSaveCPUFifo((GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj))); }
-#if 0  // SCOOBY: __GXSaveFifo: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(8000110c, __GX__SaveFifo_8016cdbc, (uint32_t fa), (fa));
-#endif
 
 extern "C" void GX__GetCPUFifo_8016cf10(uint32_t fa) { auto* d=(GXFifoObj*)GuestToHostPtr(fa, sizeof(GXFifoObj)); auto* s=GXGetCPUFifo(); if(d&&s) std::memcpy(d,s,sizeof(GXFifoObj)); }
 PPC_NATIVE_OVERRIDE_VOID(800fce98, GX__GetCPUFifo_8016cf10, (uint32_t fa), (fa));
@@ -135,10 +127,10 @@ extern "C" void __GX__FifoInit_8016d180()
     constexpr uint32_t kCpInterruptId = 0x11u;
     constexpr uint32_t kCpInterruptMask = 0x4000u;
     constexpr uint32_t kCpInterruptHandlerAddr = 0x80169e9cu;
-    constexpr uint32_t kGxCurrentThreadPtrAddr = 0x80279f58u;  // __GXCurrentThread (NSMBW)
-    constexpr uint32_t kGxThreadQueueAddr = 0x80279f60u;       // GXOverflowSuspendInProgress (NSMBW)
-    constexpr uint32_t kCpuFifoObjAddr = 0x80279F50u;  // CPUFifo (NSMBW)
-    constexpr uint32_t kGpFifoObjAddr = 0x80279F54u;   // GPFifo (NSMBW)
+    constexpr uint32_t kGxCurrentThreadPtrAddr = 0x80279f58u;  // __GXCurrentThread
+    constexpr uint32_t kGxThreadQueueAddr = 0x80279f60u;       // GXOverflowSuspendInProgress
+    constexpr uint32_t kCpuFifoObjAddr = 0x80279F50u;  // CPUFifo
+    constexpr uint32_t kGpFifoObjAddr = 0x80279F54u;   // GPFifo
     constexpr size_t kFifoObjSize = 4u;  // GameCube SDK: CPUFifo/GPFifo are GXFifoObj pointers, not inline objects
 
     __OSSetInterruptHandler_801a65f8_hle(kCpInterruptId, kCpInterruptHandlerAddr);
@@ -166,7 +158,7 @@ extern "C" void __GX__PEInit_8016ee14()
     constexpr uint32_t kPeFinishInterruptMask = 0x2000u;
     constexpr uint32_t kPeTokenHandlerAddr = 0x8016b900;
     constexpr uint32_t kPeFinishHandlerAddr = 0x8016b9cc;
-    constexpr uint32_t kPeThreadQueueAddr = 0x80279f7cu;  // FinishQueue (NSMBW)
+    constexpr uint32_t kPeThreadQueueAddr = 0x80279f7cu;  // FinishQueue
 
     __OSSetInterruptHandler_801a65f8_hle(kPeTokenInterruptId, kPeTokenHandlerAddr);
     __OSSetInterruptHandler_801a65f8_hle(kPeFinishInterruptId, kPeFinishHandlerAddr);
@@ -182,20 +174,17 @@ extern "C" void __GX__PEInit_8016ee14()
         }
     } catch (const ::Memory::AccessViolation&) {}
 }
-#if 0  // NO100F: the game's own __GXPEInit installs its real PE handlers
-PPC_NATIVE_OVERRIDE_VOID(800FE184, __GX__PEInit_8016ee14, (), ());
-#endif
 
 // ============================================================================
 // Display List Recording
 // ============================================================================
 
-static bool g_spmAuroraDlActive = false;
+static bool g_gxAuroraDlActive = false;
 // Guest lists Aurora encoded (they carry its GX_LOAD_AURORA commands, which the runtime's list walker
 // does not model), keyed by address -> size; GX__CallDisplayList hands these straight to Aurora.
 static std::mutex g_auroraDlMutex;
 static std::unordered_map<uint32_t, uint32_t> g_auroraDls;
-bool SpmAuroraDlRecording() { return g_spmAuroraDlActive; }
+bool GxAuroraDlRecording() { return g_gxAuroraDlActive; }
 void RegisterAuroraDisplayList(uint32_t addr, uint32_t size) {
     std::lock_guard<std::mutex> lock(g_auroraDlMutex);
     if (size) g_auroraDls[addr] = size; else g_auroraDls.erase(addr);
@@ -205,25 +194,25 @@ bool IsAuroraDisplayList(uint32_t addr, uint32_t size) {
     auto it = g_auroraDls.find(addr);
     return it != g_auroraDls.end() && size <= it->second + 32u;
 }
-static uint32_t g_spmAuroraDlAddr = 0;
-static uint32_t g_spmAuroraDlSize = 0;
+static uint32_t g_gxAuroraDlAddr = 0;
+static uint32_t g_gxAuroraDlSize = 0;
 extern "C" bool GXDisplayListIsEmpty();
-void SpmRecordRawVertexDisplayList() {
+void GxRecordRawVertexDisplayList() {
     // shortcut: mixed state/geometry lists retain host encoding; defer their vertices if a failing case appears.
-    if (!g_spmAuroraDlActive || !GXDisplayListIsEmpty()) return;
+    if (!g_gxAuroraDlActive || !GXDisplayListIsEmpty()) return;
     // Geometry-only lists inherit their vertex layout at playback, not at recording.
     ::GXEndDisplayList();
-    g_spmAuroraDlActive = false;
-    BeginDisplayListRecording(g_spmAuroraDlAddr, g_spmAuroraDlSize);
+    g_gxAuroraDlActive = false;
+    BeginDisplayListRecording(g_gxAuroraDlAddr, g_gxAuroraDlSize);
 }
-// Aurora's list encoding is larger than real GX (SPM's extdrv asserts dl_size < 128), so lists are
+// Aurora's list encoding is larger than real GX (a game can assert dl_size < 128), so lists are
 // recorded host-side and the guest buffer only receives a 32-byte stub naming the recording. The stub
-// travels with guest copies (mapdrv records into scratch and copies), unlike an address key.
-static std::vector<uint8_t> g_spmDlScratch;
+// travels with guest copies (a game can record into scratch and copy), unlike an address key.
+static std::vector<uint8_t> g_gxDlScratch;
 static std::vector<std::vector<uint8_t>> g_hostDls;
 static std::unordered_map<uint64_t, uint32_t> g_hostDlByHash;
 static constexpr uint8_t kHostDlMagic[8] = {0, 0, 0, 'S', 'P', 'M', 'D', 'L'};  // leading GX NOPs
-bool SpmHostDisplayList(const uint8_t* list, uint32_t n, const uint8_t*& data, uint32_t& size) {
+bool GxHostDisplayList(const uint8_t* list, uint32_t n, const uint8_t*& data, uint32_t& size) {
     if (n < 12 || std::memcmp(list, kHostDlMagic, 8) != 0) return false;
     const uint32_t id = (uint32_t(list[8]) << 24) | (uint32_t(list[9]) << 16) | (uint32_t(list[10]) << 8) | list[11];
     std::lock_guard<std::mutex> lock(g_auroraDlMutex);
@@ -249,17 +238,17 @@ extern "C" void GX__BeginDisplayList_80172e00(uint32_t la, uint32_t s) {
         // Mirror the guest fifo-object fields the FIFO write path consumes so
         // HleFifoWrite never has to read them back out of guest memory.
         GXFlush();
-        // SPM compiles map materials into display lists from native GX state calls (GXSetTevOp,
+        // A game can compile map materials into display lists from native GX state calls (GXSetTevOp,
         // GXLoadTexObj, GXSetCullMode...), which the vertex-only shadow recorder never captured, so
-        // GXEndDisplayList returned 0 and mapdrv asserted. Aurora encodes every GX call into its FIFO,
+        // GXEndDisplayList returned 0 and the game asserted. Aurora encodes every GX call into its FIFO,
         // so let it record the whole list straight into the guest buffer.
         if (GuestToHostPtr(la, s) && s >= 32u) {
-            if (g_spmDlScratch.empty()) g_spmDlScratch.resize(4u << 20);
-            g_spmAuroraDlSize = s;
-            ::GXBeginDisplayList(g_spmDlScratch.data(), static_cast<u32>(g_spmDlScratch.size()));
+            if (g_gxDlScratch.empty()) g_gxDlScratch.resize(4u << 20);
+            g_gxAuroraDlSize = s;
+            ::GXBeginDisplayList(g_gxDlScratch.data(), static_cast<u32>(g_gxDlScratch.size()));
             g_boundTexMaps.fill(BoundTexInfo{});  // every texture load must land in the list, not be skipped
-            g_spmAuroraDlActive = true;
-            g_spmAuroraDlAddr = la;
+            g_gxAuroraDlActive = true;
+            g_gxAuroraDlAddr = la;
         } else {
             BeginDisplayListRecording(la, s);
         }
@@ -267,43 +256,40 @@ extern "C" void GX__BeginDisplayList_80172e00(uint32_t la, uint32_t s) {
         GX__SetCPUFifo_8016c94c(0x80521E70);
     } catch (...) {}
 }
-#if 0  // SCOOBY: GXBeginDisplayList: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001114, GX__BeginDisplayList_80172e00, (uint32_t la, uint32_t s), (la, s));
-#endif
 
 extern "C" uint32_t GX__EndDisplayList_80172eb4() {
     try {
         uint32_t auroraBytes = 0;
-        const bool auroraDl = g_spmAuroraDlActive;
+        const bool auroraDl = g_gxAuroraDlActive;
         if (auroraDl) {
             const uint32_t recorded = ::GXEndDisplayList();
-            g_spmAuroraDlActive = false;
+            g_gxAuroraDlActive = false;
             uint32_t id = 0;
             {
                 std::lock_guard<std::mutex> lock(g_auroraDlMutex);
-                const uint64_t h = XXH3_64bits(g_spmDlScratch.data(), recorded) ^ (uint64_t(recorded) << 40);
+                const uint64_t h = XXH3_64bits(g_gxDlScratch.data(), recorded) ^ (uint64_t(recorded) << 40);
                 auto it = g_hostDlByHash.find(h);
                 if (it != g_hostDlByHash.end()) {
                     id = it->second;
                 } else {
                     id = static_cast<uint32_t>(g_hostDls.size());
-                    g_hostDls.emplace_back(g_spmDlScratch.begin(), g_spmDlScratch.begin() + recorded);
+                    g_hostDls.emplace_back(g_gxDlScratch.begin(), g_gxDlScratch.begin() + recorded);
                     g_hostDlByHash.emplace(h, id);
                 }
             }
             uint8_t stub[32] = {};
             std::memcpy(stub, kHostDlMagic, 8);
             stub[8] = uint8_t(id >> 24); stub[9] = uint8_t(id >> 16); stub[10] = uint8_t(id >> 8); stub[11] = uint8_t(id);
-            if (uint8_t* dst = static_cast<uint8_t*>(GuestToHostPtr(g_spmAuroraDlAddr, 32))) std::memcpy(dst, stub, 32);
+            if (uint8_t* dst = static_cast<uint8_t*>(GuestToHostPtr(g_gxAuroraDlAddr, 32))) std::memcpy(dst, stub, 32);
             auroraBytes = 32u;
-            RegisterAuroraDisplayList(g_spmAuroraDlAddr, auroraBytes);
+            RegisterAuroraDisplayList(g_gxAuroraDlAddr, auroraBytes);
             static int s_dlLog = 0;
-            if (s_dlLog++ < 40) RT_LOGF(RT_TAG_GX, "[spmdl] recorded list 0x%08X: %u bytes\n", g_spmAuroraDlAddr, auroraBytes);
-            { static int k = 0; if (k++ < 6000) RT_LOGF(RT_TAG_GX, "[spmrec] end id %u bytes %u\n", id, recorded); }
-            if (std::getenv("SPM_DL_HEX") && id < 64) {  // diagnostic: hex of each recorded host list
+            if (s_dlLog++ < 40) RT_LOGF(RT_TAG_GX, "[gxdl] recorded list 0x%08X: %u bytes\n", g_gxAuroraDlAddr, auroraBytes);
+            { static int k = 0; if (k++ < 6000) RT_LOGF(RT_TAG_GX, "[gxrec] end id %u bytes %u\n", id, recorded); }
+            if (std::getenv("NO100F_DL_HEX") && id < 64) {  // diagnostic: hex of each recorded host list
                 static bool seen[64] = {};
                 if (!seen[id]) { seen[id] = true; std::string h; for (uint32_t b = 0; b < g_hostDls[id].size() && b < 1024; ++b) { char t[4]; std::snprintf(t, sizeof t, "%02x", g_hostDls[id][b]); h += t; }
-                    RT_LOGF(RT_TAG_GX, "[spmdlhex] id %u %s\n", id, h.c_str()); }
+                    RT_LOGF(RT_TAG_GX, "[gxdlhex] id %u %s\n", id, h.c_str()); }
             }
             g_boundTexMaps.fill(BoundTexInfo{});  // live texture bindings are unknown after recording
         }
@@ -344,9 +330,6 @@ extern "C" uint32_t GX__EndDisplayList_80172eb4() {
         return 0;
     }
 }
-#if 0  // SCOOBY: GXEndDisplayList: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001118, GX__EndDisplayList_80172eb4, uint32_t, (), ());
-#endif
 
 // ============================================================================
 // Flush

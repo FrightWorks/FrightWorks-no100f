@@ -1,4 +1,4 @@
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Where the game and the player's files are. Keep in step with the game (wiicompiled/runtime/include/runtime_config.h:
 // PortableRootDirectory, ApplicationDataDirectory, SavesDirectory, CaptureDirectory):

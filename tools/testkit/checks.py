@@ -4,7 +4,7 @@
   audio_peak(raw)         loudest sample of an AUDIO_RAW_DUMP file (big-endian 16-bit stereo, 32 kHz)
   loopcheck(raw, tool)    is the output stuck repeating a short loop? runs tools/debug/audio/loopcheck.py (needs numpy)
   hd_drawn(game)          how many of the HD pack's textures the game has drawn in this scene (the `textures` command)
-  fps_samples / fps_summary / fps_too_slow   the frame rate the game logs every two seconds (NSMBW_LOG_FPS=1) on stderr
+  fps_samples / fps_summary / fps_too_slow   the frame rate the game logs every two seconds (NO100F_LOG_FPS=1) on stderr
 """
 import array
 import re

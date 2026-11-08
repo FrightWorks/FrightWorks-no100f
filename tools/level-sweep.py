@@ -15,12 +15,12 @@ cutscene, waits out a camera pan; no fixed 30 s, no blind presses), then --secon
   * a picture: the window is not black (screenshot, Windows only; "not run" elsewhere). A black one is shot again up to 4 times,
     3 s apart, before it fails: with nobody at the pad an enemy can kill Scooby at the spawn (o005, p002), and the screen
     is black during the death fade until he respawns. A retake that was lit is noted in REPORT.md ("picture retaken");
-  * frame rate: the game's own two-second fps lines (NSMBW_LOG_FPS) after it was playable; the median must reach --min-fps
+  * frame rate: the game's own two-second fps lines (NO100F_LOG_FPS) after it was playable; the median must reach --min-fps
     (default: half the target, 30 at 60 fps, 15 at 30 fps).
 While the game says "no cutscene, no control" for more than 4 s (a dialogue box such as f003's "PRESS A TO CONTINUE") the wait presses
 A every 2 s, at most 12 times; every press is logged and counted in the report ("dialogue press(es)").
 A scene in KNOWN_EXCEPTIONS (s006: the ending cutscene, not a playable level) is not run: REPORT.md lists it as "skipped (known)" with the reason,
-and the exit code is 3, never 0. --include-known runs it anyway.
+it does not count against the run (exit code 0 when everything else passed). --include-known runs it anyway.
 A level that does not become playable in --timeout gets one more try from a fresh launch ("passed on retry"); a crash or a failed
 check is final. A check that could not run is "not run", never a pass.
 
@@ -29,7 +29,7 @@ size = window, 16:9, skip_intro, MSAA off, HD textures off (the smoke test cover
 frame interpolation not set (off), sound muted, rumble off. The old script also wrote an interpolation target of 120: dropped.
 
 Output: autotest/level-sweep-<time>/ with REPORT.md, results.json, shots/<level>.png and logs/<level>-<attempt>.{err,console}.log.
-Exit code 0 passed, 1 a level failed, 2 wrong build, 3 some checks could not run (and no failures).
+Exit code 0 passed (known exceptions skipped), 1 a level failed or is missing, 2 wrong build, 3 no failure but a check could not run.
 """
 import argparse
 import json
@@ -99,7 +99,7 @@ class Level(Recorder):
 def new_game(worker, args, out):
     kw = dict(getattr(args, "game_kwargs", {}))      # the tests hand in a stand-in game
     extra = dict(kw.pop("extra_env", {}))
-    extra.setdefault("NSMBW_LOG_FPS", "1")           # the game's own fps lines on stderr
+    extra.setdefault("NO100F_LOG_FPS", "1")           # the game's own fps lines on stderr
     g = launch.TestGame(f"w{worker}", out / "work" / f"w{worker}", hd=False, fps60=not args.fps30, extra_env=extra,
                         build_check=not args.skip_build_check,
                         activate_when_shown=getattr(args, "activate_when_shown", None), **kw)
@@ -322,6 +322,14 @@ def is_skipped(r):
     return r["outcome"].startswith("skipped")
 
 
+def exit_code(results, planned):
+    """0 everything passed (known exceptions are expected: skipped, not counted against the run), 1 a level failed or is missing,
+    3 nothing failed but a check could not run."""
+    if any(is_problem(r) for r in results) or len(results) < planned:
+        return 1
+    return 3 if any("not run" in r["outcome"] for r in results) else 0
+
+
 def write_report(out, results, args, build_msg, wall, planned=None):
     (out / "results.json").write_text(json.dumps(results, indent=1, default=str), encoding="utf-8")
     bad = [r for r in results if is_problem(r)]
@@ -416,9 +424,7 @@ def main(argv=None):
         print(f"  {r['level']}: {r['outcome']}: {r['detail']}")
     if not args.keep:
         launch.safe_rmtree(out / "work")
-    if bad or len(results) < len(levels):
-        return 1
-    return 3 if skipped or any("not run" in r["outcome"] for r in results) else 0
+    return exit_code(results, len(levels))
 
 
 if __name__ == "__main__":

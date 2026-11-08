@@ -5,8 +5,8 @@
 // x18 is platform-reserved on Darwin and is needed by code that accesses TLS.
 // x0 = address holding the target frame pointer; x1 = address to receive the
 // current frame pointer. This is intentionally leaf-only: it never calls C++.
-.globl _mkw_co_switch
-_mkw_co_switch:
+.globl _recomp_co_switch
+_recomp_co_switch:
     sub sp, sp, #240
     str x18, [sp, #0]
     stp x19, x20, [sp, #16]
@@ -38,22 +38,22 @@ _mkw_co_switch:
     add sp, sp, #240
     ret
 
-// Creates a frame compatible with mkw_co_switch and returns its saved SP.
+// Creates a frame compatible with recomp_co_switch and returns its saved SP.
 // x0 = one-past-end stack pointer, x1 = entry(void*), x2 = entry argument.
-.globl _mkw_co_init
-_mkw_co_init:
+.globl _recomp_co_init
+_recomp_co_init:
     bic x0, x0, #0xf
     sub x0, x0, #240
     str x18, [x0, #0]      // Darwin platform register / TLS base
     str x1, [x0, #16]      // x19: entry
     str x2, [x0, #24]      // x20: argument
     str xzr, [x0, #96]     // x29
-    adrp x3, _mkw_co_entry_trampoline@PAGE
-    add x3, x3, _mkw_co_entry_trampoline@PAGEOFF
+    adrp x3, _recomp_co_entry_trampoline@PAGE
+    add x3, x3, _recomp_co_entry_trampoline@PAGEOFF
     str x3, [x0, #104]     // x30
     ret
 
-_mkw_co_entry_trampoline:
+_recomp_co_entry_trampoline:
     mov x0, x20
     blr x19
     brk #0

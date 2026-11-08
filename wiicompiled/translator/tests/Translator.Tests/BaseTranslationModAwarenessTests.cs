@@ -32,7 +32,7 @@ public class BaseTranslationModAwarenessTests
 
         var awareness = Awareness(original.Path);
 
-        Assert.True(awareness.CoversCodePul("retro-rewind", candidate.Path, out var reason), reason);
+        Assert.True(awareness.CoversCodePul("example-mod", candidate.Path, out var reason), reason);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class BaseTranslationModAwarenessTests
 
         var awareness = Awareness(original.Path);
 
-        Assert.False(awareness.CoversCodePul("retro-rewind", candidate.Path, out var reason));
+        Assert.False(awareness.CoversCodePul("example-mod", candidate.Path, out var reason));
         Assert.Contains("80543BB8", reason, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -57,7 +57,7 @@ public class BaseTranslationModAwarenessTests
 
         var awareness = Awareness(original.Path);
 
-        Assert.False(awareness.CoversCodePul("retro-rewind", candidate.Path, out _));
+        Assert.False(awareness.CoversCodePul("example-mod", candidate.Path, out _));
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class BaseTranslationModAwarenessTests
         var awareness = Awareness(original.Path);
 
         Assert.False(awareness.CoversCodePul("some-other-mod", original.Path, out var reason));
-        Assert.Contains("retro-rewind", reason, StringComparison.Ordinal);
+        Assert.Contains("example-mod", reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -77,14 +77,14 @@ public class BaseTranslationModAwarenessTests
         using var second = TemporaryPul(Absolute(KamekCommandId.Branch, 0x80543BB8));
         var awareness = BaseTranslationModAwareness.Create(null, 2,
             [
-                ("retro-rewind", "P", new string('a', 64),
+                ("example-mod", "P", new string('a', 64),
                     BaseTranslationModAwareness.PatchedAddresses(first.Path, "P")),
                 ("other", "P", new string('b', 64),
                     BaseTranslationModAwareness.PatchedAddresses(second.Path, "P"))
             ],
             FunctionEnds);
 
-        Assert.False(awareness.CoversCodePul("retro-rewind", first.Path, out var reason));
+        Assert.False(awareness.CoversCodePul("example-mod", first.Path, out var reason));
         Assert.Contains("2 mod profile", reason, StringComparison.Ordinal);
     }
 
@@ -94,7 +94,7 @@ public class BaseTranslationModAwarenessTests
         using var original = TemporaryPul(
             Absolute(KamekCommandId.BranchLink, 0x80005F40),
             Absolute(KamekCommandId.Write32, 0x80001920));
-        var path = Path.Combine(Path.GetTempPath(), $"mkwc-awareness-{Guid.NewGuid():N}.json");
+        var path = Path.Combine(Path.GetTempPath(), $"recompc-awareness-{Guid.NewGuid():N}.json");
         try
         {
             BaseTranslationModAwarenessFile.WriteIfChangedAtomic(path, Awareness(original.Path));
@@ -104,7 +104,7 @@ public class BaseTranslationModAwarenessTests
             Assert.Equal(4, round.TranslatedFunctionRanges.Count);
             // Only the patch inside a translated function is recorded as consequential.
             Assert.Equal([0x80005F40u], round.Profiles[0].ConsequentialPatchedAddresses);
-            Assert.True(round.CoversCodePul("retro-rewind", original.Path, out var reason), reason);
+            Assert.True(round.CoversCodePul("example-mod", original.Path, out var reason), reason);
         }
         finally
         {
@@ -114,7 +114,7 @@ public class BaseTranslationModAwarenessTests
 
     private static BaseTranslationModAwareness Awareness(string codePulPath) =>
         BaseTranslationModAwareness.Create(null, FunctionEnds.Count,
-            [("retro-rewind", "P", new string('a', 64),
+            [("example-mod", "P", new string('a', 64),
                 BaseTranslationModAwareness.PatchedAddresses(codePulPath, "P"))],
             FunctionEnds);
 
@@ -155,7 +155,7 @@ public class BaseTranslationModAwarenessTests
     private sealed class TemporaryFile : IDisposable
     {
         public string Path { get; } =
-            System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"mkwc-pul-{Guid.NewGuid():N}.pul");
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"recompc-pul-{Guid.NewGuid():N}.pul");
 
         public void Dispose() => File.Delete(Path);
     }

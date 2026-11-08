@@ -14,20 +14,20 @@ public sealed class RiivolutionProfileConfigTests
             var projectPath = WriteProject(
                 root,
                 "    riivolution:",
-                "      xml: .\\xml\\RetroRewind6.xml",
+                "      xml: .\\xml\\ExampleMod.xml",
                 "      options:",
-                "        - section: Retro Rewind",
+                "        - section: Example Mod",
                 "          option: Pack",
                 "          choice: 1",
                 "        - option: Extra");
 
-            var profile = TranslationProjectConfig.Load(projectPath).Profiles["retro-rewind"];
+            var profile = TranslationProjectConfig.Load(projectPath).Profiles["example-mod"];
 
             Assert.NotNull(profile.Riivolution);
-            Assert.Equal("xml/RetroRewind6.xml", profile.Riivolution!.Xml);
+            Assert.Equal("xml/ExampleMod.xml", profile.Riivolution!.Xml);
             Assert.Collection(
                 profile.Riivolution.Options,
-                option => Assert.Equal(new ProjectRiivolutionOption("Retro Rewind", "Pack", 1u), option),
+                option => Assert.Equal(new ProjectRiivolutionOption("Example Mod", "Pack", 1u), option),
                 option => Assert.Equal(new ProjectRiivolutionOption(string.Empty, "Extra", 0u), option));
         }
         finally
@@ -43,7 +43,7 @@ public sealed class RiivolutionProfileConfigTests
         try
         {
             var projectPath = WriteProject(root);
-            Assert.Null(TranslationProjectConfig.Load(projectPath).Profiles["retro-rewind"].Riivolution);
+            Assert.Null(TranslationProjectConfig.Load(projectPath).Profiles["example-mod"].Riivolution);
         }
         finally
         {
@@ -65,7 +65,7 @@ public sealed class RiivolutionProfileConfigTests
                 "          choice: 1");
 
             var error = Assert.Throws<InvalidDataException>(() => TranslationProjectConfig.Load(projectPath));
-            Assert.Contains("profiles.retro-rewind.riivolution.xml", error.Message, StringComparison.Ordinal);
+            Assert.Contains("profiles.example-mod.riivolution.xml", error.Message, StringComparison.Ordinal);
         }
         finally
         {
@@ -82,9 +82,9 @@ public sealed class RiivolutionProfileConfigTests
             var projectPath = WriteProject(
                 root,
                 "    riivolution:",
-                "      xml: xml/RetroRewind6.xml",
+                "      xml: xml/ExampleMod.xml",
                 "      options:",
-                "        - section: Retro Rewind",
+                "        - section: Example Mod",
                 "          choice: 1");
 
             var error = Assert.Throws<InvalidDataException>(() => TranslationProjectConfig.Load(projectPath));
@@ -116,7 +116,7 @@ public sealed class RiivolutionProfileConfigTests
             "    - 0x80001000",
             "",
             "profiles:",
-            "  retro-rewind:",
+            "  example-mod:",
             "    enabled: true",
         };
         lines.AddRange(profileLines);

@@ -75,7 +75,7 @@ uint32_t EncodeAIDmaLengthRegister(uint32_t length) {
     return length & 0x000fffe0u;
 }
 
-// NSMBW bring-up: the loudest sample of the AI output, reported every ~15 s of 32 kHz stereo for the
+// Bring-up: the loudest sample of the AI output, reported every ~15 s of 32 kHz stereo for the
 // first minute, so a game that runs silently shows up in the log of an automated run.
 void MeterAudioBlock(const uint8_t* src, uint32_t bytes) {
     constexpr uint64_t kReportBytes = 32000ull * 2 * kBytesPerSample * 15;  // frames * channels
@@ -165,9 +165,6 @@ extern "C" void AIClockInit_801A1138(uint32_t clock_mode)
     }
 }
 
-#if 0  // SCOOBY: __AIClockInit: name not in Scooby
-PPC_NATIVE_OVERRIDE_VOID(80001094, AIClockInit_801A1138, (uint32_t clock_mode), (clock_mode));
-#endif
 
 extern "C" void OSInitAudioSystem_801A1358()
 {
@@ -237,9 +234,6 @@ extern "C" uint32_t AICheckInit_80124094()
     Memory::TryRead32(kAIInitializedAddr, initialized);
     return initialized;
 }
-#if 0  // SPM: AICheckInit: name not in SPM
-REGISTER_NATIVE_FUNCTION(0x80001510, AICheckInit_80124094);
-#endif
 
 
 
@@ -296,7 +290,7 @@ PPC_NATIVE_OVERRIDE_VOID(800F4400, AIInitDMA_80123fcc, (uint32_t start_addr, uin
 
 
 
-// AIRegisterDMACallback stores the callback in the guest global __AID_Callback (0x8056DE08 in NSMBW).
+// AIRegisterDMACallback stores the callback in the guest global __AID_Callback.
 // Returns the old callback pointer.
 extern "C" uint32_t AIRegisterDMACallback_80123f88(uint32_t callback)
 {
@@ -336,27 +330,18 @@ extern "C" uint32_t AIGetDMABytesLeft_8012405c()
     std::lock_guard<std::mutex> lock(g_ai.mutex);
     return g_ai.bytesLeft;
 }
-#if 0  // SCOOBY: AIGetDMABytesLeft: name not in Scooby
-PPC_NATIVE_OVERRIDE(80001098, AIGetDMABytesLeft_8012405c, uint32_t, (), ());
-#endif
 
 extern "C" uint32_t AIGetDMAStartAddr_8012406c()
 {
     std::lock_guard<std::mutex> lock(g_ai.mutex);
     return g_ai.registerStartAddr;
 }
-#if 0  // SPM: AIGetDMAStartAddr: name not in SPM
-PPC_NATIVE_OVERRIDE(8000109C, AIGetDMAStartAddr_8012406c, uint32_t, (), ());
-#endif
 
 extern "C" uint32_t AIGetDMALength_80124084()
 {
     std::lock_guard<std::mutex> lock(g_ai.mutex);
     return g_ai.length;
 }
-#if 0  // SPM: AIGetDMALength: name not in SPM
-PPC_NATIVE_OVERRIDE(800010A0, AIGetDMALength_80124084, uint32_t, (), ());
-#endif
 
 extern "C" uint32_t AIGetDSPSampleRate_8012409c()
 {
@@ -364,11 +349,6 @@ extern "C" uint32_t AIGetDSPSampleRate_8012409c()
     // SDK AIGetDSPSampleRate returns AIDFR^1: 0 for 32 kHz, 1 for 48 kHz.
     return (g_ai.sampleRate == 48000u) ? 1u : 0u;
 }
-#if 0  // NSMBW: AIGetDSPSampleRate is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x8012409c: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800010A4, AIGetDSPSampleRate_8012409c, uint32_t, (), ());
-#endif
-#endif
 
 extern "C" void DSPSendMailToDSP_8015d430(uint32_t mail)
 {
