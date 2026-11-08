@@ -116,6 +116,7 @@ class BuildIdTest(unittest.TestCase):
         built = self.built_id()
         self.commit("tools/testkit/new.py")
         self.commit("tools/smoke-test.py")
+        self.commit("tools/level-sweep.py")
         self.commit("docs/testing.md")
         self.commit(".agents/REPO.md")
         self.commit("README.md")
@@ -123,7 +124,7 @@ class BuildIdTest(unittest.TestCase):
         ok, msg = launch.check_build(built, launch.expected_build_id(self.repo), self.repo)
         self.assertTrue(ok, msg)
         self.assertIn("only test/doc files differ", msg)
-        self.assertIn("and 1 more", msg)  # 5 files, 4 of them named
+        self.assertIn("and 2 more", msg)  # 6 files, 4 of them named
         self.assertIn(built.split("@")[1], msg)
 
     def test_uncommitted_test_file_edit_is_accepted_too(self):

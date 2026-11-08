@@ -118,5 +118,26 @@ class WaitForSceneTest(FakeGameCase):
             waitplay.wait_for_scene(g, "h001", timeout=1.5)
 
 
+class FpsTest(unittest.TestCase):
+    TEXT = ("[vi] fps 31.0: game 3.1 ms (gx 1.0 ms)\n[vi] interp: displayed 59.0 fps\n[vi] fps 59.8: game 3 ms\n"
+            "[vi] fps 60.0: game 3 ms\nnoise fps 5\n[vi] fps 58.0: game 3 ms\n")
+
+    def test_samples_are_the_fps_lines_only(self):
+        self.assertEqual(checks.fps_samples(self.TEXT), [31.0, 59.8, 60.0, 58.0])
+        self.assertEqual(checks.fps_samples("nothing here"), [])
+
+    def test_summary_drops_the_loading_window_when_there_are_enough_samples(self):
+        s = checks.fps_summary(checks.fps_samples(self.TEXT))
+        self.assertEqual(s, {"n": 3, "min": 58.0, "median": 59.8, "last": 58.0})
+        self.assertEqual(checks.fps_summary([20.0, 40.0])["median"], 30.0)   # two samples: nothing is dropped
+        self.assertEqual(checks.fps_summary([20.0])["n"], 1)
+        self.assertIsNone(checks.fps_summary([]))
+
+    def test_slow_is_the_median_below_the_limit(self):
+        self.assertTrue(checks.fps_too_slow(checks.fps_summary([10, 12, 11, 12]), 30))
+        self.assertFalse(checks.fps_too_slow(checks.fps_summary([10, 59, 60, 61]), 30))   # one dip is not slow
+        self.assertFalse(checks.fps_too_slow(None, 30))    # no samples: not "slow", the caller reports "not run"
+
+
 if __name__ == "__main__":
     unittest.main()

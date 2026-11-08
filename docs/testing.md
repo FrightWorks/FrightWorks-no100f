@@ -233,10 +233,10 @@ powershell -ExecutionPolicy Bypass -File tools\debug\manual-session.ps1 stop    
   hear the game or are working on audio. Mute and volume only change what SDL plays: `AUDIO_RAW_DUMP` captures are the
   same either way.
 - Controller rumble is off in every test run (`[controller] rumble = false`), with no switch to turn it on. The game's
-  default is on, so a script that starts the game has to set it: `manual-session` writes it, `level-sweep.py` writes it
-  in its workers' configs, and `play-patched`, `iterate` and `capture-window` set it for the run and put your
-  `Config.toml` back afterwards. Sound is muted the same way in `iterate`, `capture-window` and `level-sweep.py`
-  (no switch), and all three wait for the game-run lock and give it back when the run ends. The helpers are in `tools\debug\kit-common.ps1`.
+  default is on, so a script that starts the game has to set it: `manual-session` writes it, `level-sweep.py` and the smoke test
+  write it in their own copies' configs (test kit, section 4a), and `play-patched`, `iterate` and `capture-window` set it for the run and put your
+  `Config.toml` back afterwards. Sound is muted the same way in `iterate` and `capture-window` (no switch) and in the Python kit; those two wait for the
+  game-run lock and give it back when the run ends. The helpers are in `tools\debug\kit-common.ps1`.
   The PowerShell scripts take turns through that lock, one at a time. The Python test kit (section 4a) uses shared run slots
   instead and respects the same lock both ways, so old and new scripts never overlap.
   Scene IDs, level names and which scenes suit which tests: [`tools/debug/game/levels.md`](../tools/debug/game/levels.md),
@@ -272,7 +272,7 @@ Options: `--jobs`, `--scenes`, `--slots N`, `--timeout S` (playable limit per jo
 Measured on one PC (Ryzen 9 7900X, RTX 3090, 2026-11-07, 1280x720 windows): the three jobs at once take about 47 s after the build (h001 27 s, i004 20 s, g001 47 s, each playable after 8-14 s); one after another 85 s (11.5 + 6 + 12 s to playable). Every window held 60 fps (p95 frame time under 17 ms) whether it was in front of the others or behind, with or without `--activate-when-shown 0`: nothing in the game or runtime sets `pauseOnFocusLost` (it is off), and background windows did not stall.
 A fresh `Play` copy starts with an empty shader and pipeline cache (`UserData\Cache`), which costs about 3.4 s (h001 playable in 13.4 s cold, 10.0 s warm); each game also reads about 1 GiB of disc files into its read cache and starts 22 pipeline compile threads, so more than 3 at once will slow each one down.
 
-The pieces are in `tools/testkit/` and are meant for every automated game run (`level-sweep.py` and the PowerShell scripts have not been moved onto them yet):
+The pieces are in `tools/testkit/` and are meant for every automated game run (the smoke test and the level sweep use them; the PowerShell scripts have not been moved onto them yet):
 - `launch.py`: the one launch helper. Its own copy of `Play\` in a folder you give it (the HD pack and button icons are linked, never copied; deleting never follows a link),
   its own `Config.toml` (windowed, rumble off, muted), the environment scrubbed of leftover `NO100F_*`, `AX_*`, `AUDIO_*` switches and of
   `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS` (never set it: SDL then refuses the game's own hint call and the game treats that as an error).
@@ -284,10 +284,35 @@ The pieces are in `tools/testkit/` and are meant for every automated game run (`
   crashed run's slot is taken over after 90 s. While any slot is held a `game-run.lock` exists in the old format (its `root` is the slots folder, so no checkout's old script takes it over), and a lock held by an old PowerShell script makes
   the kit wait: `python tools/testkit/slots.py status` shows who holds what.
 - `devmenu.py` and `waitplay.py`: the dev menu's `devmenu.txt` / `devmenu_press.txt` as a client, and the one wait-until-playable routine (from `texhunt\look.ps1`): uses `cutscene`
-  (`cutscene yes|no control yes|no`): skip (A) every 2 s while a cutscene plays, nothing while there is no control and no cutscene (a camera pan, a dialogue box), ready the moment the player has control; a time limit fails with the last state and a screenshot.
-- `checks.py`: black-picture test (PNG, no Pillow), audio peak and loop check, the HD-drawn probe.
+  (`cutscene yes|no control yes|no`): skip (A) every 2 s while a cutscene plays; with no control and no cutscene it waits 4 s (a camera pan ends by itself), then presses A every 2 s, at most 12 times, for a dialogue box ("PRESS A TO CONTINUE"), logging each press; ready the moment the player has control; a time limit fails with the last state and a screenshot.
+- `checks.py`: black-picture test (PNG, no Pillow), audio peak and loop check, the HD-drawn probe, the frame rate from the game's own `fps` log lines.
+- `recorder.py`: the per-job / per-level record of checks (passed, FAILED, not run) that the smoke test and the sweep print into their reports.
 
 Tests of the kit need no game: `python -m unittest discover -s tools/testkit -p "test_*.py"` (about a minute; uses a windowless stand-in game).
+
+## 4b. Level sweep
+
+`python tools/level-sweep.py` boots every level on the disc (87: every folder but `MN` and `fmv`) for real, one after another on up to 7 windows at once, and checks each.
+Run it after a fresh build, before a release; it is not part of every PR (use the smoke test for that, section 4a).
+Same kit as the smoke test: each worker has its own copy of `Play\` (rumble off, muted, controller isolation, own config), and a worker takes a shared run slot for each level, so a smoke test or another checkout's run shares the machine instead of waiting for the whole sweep.
+The build ID must match the commit under test (same rule as the smoke test).
+
+Per level: boot straight into it (`sd2.ini` `BOOT=<level>`, saves cleared), wait until it is playable (the kit's routine: skips a cutscene, waits out a camera pan, no fixed time, no blind presses),
+keep running `--seconds` (8) more, then check:
+- alive, and no `AccessViolation`, `OS panic`, `missing_target`, `Unhandled` or `FATAL` on stderr: a fault or an exit fails the level at once (`failed: crash (access violation | panic | exited)`);
+- the dev menu says the scene is the level (`failed: in <level>`);
+- the picture is not black (a screenshot, Windows only; "not run" elsewhere). A black one is shot again up to 4 times, 3 s apart, before it fails, and a retake that was lit is noted in the report. With nobody at the pad the monsters of `o005` and `p002` catch Scooby at the spawn within seconds (health 3, 2, dead, then back at 3 about every 13 s), and the screen is black during the game's own death fade until he respawns. A picture that stays black through all five shots (12 s) still fails;
+- frame rate: the game's own `fps` lines (the sweep sets `NO100F_LOG_FPS`) after it was playable; the median must reach `--min-fps` (default half the target: 30 at 60 fps, 15 at 30 fps).
+A level that does not become playable in `--timeout` (150 s) gets one more try from a fresh launch ("passed on retry"); a crash or a failed check is final.
+A check that could not run is "not run" (`passed (some checks not run)`, exit code 3), never a pass.
+A scene in `KNOWN_EXCEPTIONS` (in `level-sweep.py`, with the reason) is not run: `REPORT.md` lists it as "skipped (known)", never as passed, but it does not count against the run (exit code 0 when everything else passed); `--include-known` runs it anyway. Today that is `s006`, the ending (`OUTTRO` cutscene, not a playable level: it is the one scene on the disc missing from the level table in `tools/debug/game/levels.md`).
+
+What the sweep sets, on top of the game's defaults (the kit's test config, the same as the smoke test): windowed 1280x720 with the render size following the window and 16:9, `skip_intro`, MSAA off (so 7 windows stay fast), HD textures off (the smoke test covers them),
+`fps60 = true` (`--fps30` sets `fps60 = false`: 30 fps), muted, rumble off. Frame interpolation is not set, so it is off: the old script wrote a target of 120.
+
+Options: `--levels h001,c003`, `--include-known`, `--workers N` (7), `--slots N` (as many as workers), `--seconds S`, `--timeout S`, `--fps30`, `--min-fps N`, `--keep`, `--exclusive` (the machine to yourself), `--out DIR`, `--activate-when-shown 0|1`, `--skip-build-check`.
+Exit codes: 0 passed (known exceptions skipped), 1 a level failed or is missing, 2 wrong build, 3 nothing failed but a check could not run. Output: `autotest\level-sweep-<time>\` with `REPORT.md` (problems first, then one row per level: outcome, seconds, seconds to playable, fps median and min), `results.json`, `shots\<level>.png` and `logs\<level>-<attempt>.err.log` / `.console.log`.
+Measured on one PC (2026-11-08): `h001`, `i004` and `w020` at once passed in 28 s (playable after 11-17 s, 60 fps median in each), and `i004` with `--fps30` in 19 s (30 fps). The first full run (87 levels, 7 windows, fps60) took 538 s: 83 passed and 4 failed. The four were `f003` (a dialogue box nobody dismissed), `s006` (the ending cutscene, which is not a level) and `o005` and `p002` (a black picture caught during the death fade); after the dialogue presses, the retake and the exception above, `f003`, `o005` and `p002` pass.
 
 ## 5. Dev menu (F8)
 
@@ -425,7 +450,7 @@ useful:
 - Fix-only: minimal diff, no diagnostics (revert any patch: `play-patched.ps1 -Remove -Patch <name>` or `git apply -R`),
   no unrelated changes, no heuristics that hide a symptom.
 - Run what the change needs (the table in `.agents/REPO.md`, Testing): the unit tests it affects, and a full build if you touched overrides.
-- Smoke test: build first, then `python tools\smoke-test.py` (add `--scenes <scene,...>` for a level you changed; section 4a). Keep it short; nothing runs it automatically (no CI), so the PR says what was run, and what it could not run.
+- Smoke test: build first, then `python tools\smoke-test.py` (add `--scenes <scene,...>` for a level you changed; section 4a); before a release, the level sweep (section 4b). Keep it short; nothing runs it automatically (no CI), so the PR says what was run, and what it could not run.
 - Open it as a draft and say plainly what you tested and what you didn't.
 
 ## 10. Working on several branches at once

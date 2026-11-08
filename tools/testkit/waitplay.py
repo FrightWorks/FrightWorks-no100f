@@ -3,7 +3,9 @@ had its own copy). Replaces fixed waits and blind button presses. Python 3.8+, s
 
 Uses the dev menu command `cutscene` ("cutscene yes|no control yes|no"):
   * cutscene playing        -> press skip (A) every 2 s; the game takes a skip only after a few seconds
-  * no cutscene, no control -> press nothing (an in-world camera pan, or a dialogue box: neither can be skipped)
+  * no cutscene, no control -> a camera pan or a dialogue box. Nothing is pressed for the first DIALOGUE_AFTER seconds (a pan
+    ends by itself); after that A is pressed every DIALOGUE_EVERY seconds, at most DIALOGUE_MAX times in all (a dialogue box
+    such as f003's "PRESS A TO CONTINUE" waits for it), and each press is logged and counted in the result
   * no cutscene, control    -> ready; start the checks at once
   * time limit              -> PlayTimeout with the last state and a screenshot
   * the game exits or logs a fault at any time -> GameCrashed at once (never retried)
@@ -17,6 +19,9 @@ from .devmenu import DevMenuTimeout
 from .launch import GameCrashed
 
 SKIP_EVERY = 2.0
+DIALOGUE_AFTER = 4.0   # seconds of "no cutscene, no control" before A is pressed for a dialogue box
+DIALOGUE_EVERY = 2.0
+DIALOGUE_MAX = 12      # presses in all: a stuck level still ends in a timeout
 
 
 class PlayTimeout(Exception):
@@ -26,13 +31,14 @@ class PlayTimeout(Exception):
 
 
 def wait_until_playable(game, boot_level=None, timeout=150.0, skip_button="a", screenshot=None, log=print,
-                        boot_timeout=None):
-    """Returns {'seconds', 'presses', 'where'}. `timeout` is the whole time limit from now (boot included).
+                        boot_timeout=None, dialogue_after=DIALOGUE_AFTER, dialogue_max=DIALOGUE_MAX):
+    """Returns {'seconds', 'presses', 'dialogue_presses', 'where'}. `dialogue_max` 0 = never press for a dialogue box. `timeout` is the whole time limit from now (boot included).
     `skip_button` None = never press (look.ps1 -SkipButton none). Raises PlayTimeout / GameCrashed."""
     t0 = time.time()
     deadline = t0 + timeout
     state = "waiting for the game to start"
     presses = 0
+    dialogue = 0
 
     def fail(why):
         shot = None
@@ -59,7 +65,8 @@ def wait_until_playable(game, boot_level=None, timeout=150.0, skip_button="a", s
             except DevMenuTimeout:
                 if time.time() > deadline:
                     fail("the dev menu never answered")
-        last_press = 0.0
+        last_press = last_dialogue = 0.0
+        no_control_since = None
         while True:
             game.check_crash()
             if time.time() > deadline:
@@ -72,6 +79,14 @@ def wait_until_playable(game, boot_level=None, timeout=150.0, skip_button="a", s
             state = f"cutscene {'yes' if playing else 'no'}, control {'yes' if control else 'no'}"
             if not playing and control:
                 break
+            no_control_since = (no_control_since or time.time()) if not playing else None
+            if (no_control_since and skip_button and dialogue < dialogue_max and time.time() - no_control_since >= dialogue_after
+                    and time.time() - last_dialogue >= DIALOGUE_EVERY):
+                game.devmenu.press(f"{skip_button} 10", timeout=10)
+                dialogue += 1
+                last_dialogue = time.time()
+                log(f"{game.name}: no cutscene and no control for {time.time() - no_control_since:.0f} s: "
+                    f"pressed {skip_button.upper()} for a dialogue box ({dialogue}/{dialogue_max})")
             if playing and skip_button and time.time() - last_press >= SKIP_EVERY:
                 game.devmenu.press(f"{skip_button} 10 cutscene", timeout=10)
                 presses += 1
@@ -81,8 +96,8 @@ def wait_until_playable(game, boot_level=None, timeout=150.0, skip_button="a", s
     except DevMenuTimeout as e:
         fail(str(e))
     seconds = time.time() - t0
-    log(f"{game.name}: playable after {seconds:.1f} s ({presses} skip press(es)): {where}")
-    return {"seconds": seconds, "presses": presses, "where": where}
+    log(f"{game.name}: playable after {seconds:.1f} s ({presses} skip press(es), {dialogue} dialogue press(es)): {where}")
+    return {"seconds": seconds, "presses": presses, "dialogue_presses": dialogue, "where": where}
 
 
 def wait_for_scene(game, scene, timeout=60.0, screenshot=None):

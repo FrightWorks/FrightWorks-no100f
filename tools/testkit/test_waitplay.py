@@ -2,6 +2,7 @@
 import sys
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -48,6 +49,32 @@ class WaitPlayableTest(FakeGameCase):
         g = self.game(env={"FAKE_CUTSCENE": "0"}).start()
         r = waitplay.wait_until_playable(g, "h001", timeout=30, log=QUIET)
         self.assertEqual(r["presses"], 0)
+        self.assertEqual(r["dialogue_presses"], 0)   # the short camera pan ends by itself before anything is pressed
+
+    def test_a_dialogue_box_gets_a_logged_a_press_after_a_few_seconds(self):
+        g = self.game(env={"FAKE_CUTSCENE": "0", "FAKE_DIALOGUE": "2"}).start()
+        lines = []
+        with mock.patch.object(waitplay, "DIALOGUE_EVERY", 0.3):
+            r = waitplay.wait_until_playable(g, "h001", timeout=30, log=lines.append, dialogue_after=1.0)
+        self.assertEqual(r["dialogue_presses"], 2)
+        self.assertEqual(r["presses"], 0)
+        pressed = [l for l in lines if "dialogue box" in l]
+        self.assertEqual(len(pressed), 2)
+        self.assertIn("(2/12)", pressed[1])
+
+    def test_dialogue_presses_are_capped_and_a_stuck_level_still_times_out(self):
+        g = self.game(env={"FAKE_CUTSCENE": "0", "FAKE_DIALOGUE": "99"}).start()
+        lines = []
+        with mock.patch.object(waitplay, "DIALOGUE_EVERY", 0.2):
+            with self.assertRaises(waitplay.PlayTimeout) as ctx:
+                waitplay.wait_until_playable(g, "h001", timeout=6, log=lines.append, dialogue_after=0.5, dialogue_max=3)
+        self.assertEqual(len([l for l in lines if "dialogue box" in l]), 3)
+        self.assertIn("cutscene no, control no", str(ctx.exception))
+
+    def test_dialogue_max_zero_never_presses(self):
+        g = self.game(env={"FAKE_CUTSCENE": "0", "FAKE_DIALOGUE": "1"}).start()
+        with self.assertRaises(waitplay.PlayTimeout):
+            waitplay.wait_until_playable(g, "h001", timeout=4, log=QUIET, dialogue_after=0.5, dialogue_max=0)
 
     def test_skip_button_none_never_presses(self):
         g = self.game(env={"FAKE_CUTSCENE": "1"}).start()
