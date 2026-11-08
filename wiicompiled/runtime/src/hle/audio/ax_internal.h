@@ -31,7 +31,7 @@ constexpr uint32_t kMailReset = kTaskMailToDsp | 0x0002u;
 constexpr size_t kResamplingCoefficientCount = 0x800;
 constexpr uint32_t kMailContinue = kTaskMailToDsp | 0x0003u;
 constexpr uint32_t kAxSamplesPerFrame = 96u;
-// G5DE78 runs the GameCube AX ucode (Dolphin AX.cpp): its own command IDs, AXPBGc and 5 ms frames, voice
+// The game runs the GameCube AX ucode (Dolphin AX.cpp): its own command IDs, AXPBGc and 5 ms frames, voice
 // samples in ARAM. The Wii AX path (AXWii.cpp port) stays for reference but is never dispatched.
 constexpr bool kGameCubeAx = true;
 constexpr uint32_t kGcAxSamplesPerFrame = 160u;  // 32 samples per ms, 5 ms

@@ -927,8 +927,8 @@ static void CompleteDvdCancelState()
 
     // These are the SDK DVD globals used by DVDCancelAll/__DVDPrepareReset.
     // The actual drive work is HLE'd, so complete pending cancel/reset waits.
-    // NO100F: Canceling/ResumeFromHere/PausingFlag/Prepared/executing were Unmasked addresses (inside NO100F's
-    // .sdata2) and are not written. They start zeroed in .sbss; shortcut: map them if DVDCancelAll/reset is used.
+    // NO100F: Canceling/ResumeFromHere/PausingFlag/Prepared/executing are not written (the addresses this code
+    // had are inside NO100F's .sdata2). They start zeroed in .sbss; shortcut: map them if DVDCancelAll/reset is used.
 }
 
 // 0x801CAD30 -> DVDInit
@@ -1271,7 +1271,7 @@ extern "C" int32_t DVDLowReadDiskID_80164AAC(uint32_t diskIdPtr, uint32_t callba
 PPC_NATIVE_OVERRIDE(8010E644, DVDLowReadDiskID_80164AAC, int32_t, (uint32_t p, uint32_t c), (p, c));
 
 // ----------------------------------------------------------------------------
-// GameCube SDK (Scooby-Doo! Unmasked): requests not covered above would reach the drive state machine
+// GameCube SDK: requests not covered above would reach the drive state machine
 // (stateReady/stateBusy), which polls the DI registers. Complete them on the spot like the read HLE does.
 // ----------------------------------------------------------------------------
 static void CompleteGcCommandBlock(uint32_t block, uint32_t transferred, uint32_t callback)

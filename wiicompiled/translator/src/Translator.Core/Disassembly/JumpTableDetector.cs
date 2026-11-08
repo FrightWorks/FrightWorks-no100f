@@ -66,7 +66,7 @@ internal static class JumpTableDetector
         {
             return true;
         }
-        // lwzx with the index in rA and the table in rB (Scooby-Doo! Unmasked logic modules). Tried as a whole:
+        // lwzx with the index in rA and the table in rB (seen in relocated modules). Tried as a whole:
         // rA can still resolve to a stale lis constant there, so only a table that validates counts.
         return TryTable(indexReg.Name, baseReg.Name, allowPcRelative: false, out targets);
 
@@ -164,7 +164,7 @@ internal static class JumpTableDetector
                 return true;
             }
 
-            // The base re-materialised in another register (Scooby-Doo! Unmasked logic modules:
+            // The base re-materialised in another register (seen in relocated modules:
             // lis/addi r11 -> lwzx; lis/addi r9 -> add r10,r10,r9).
             var other = RegistersEqual(left.Name, targetRegister) ? right.Name :
                         RegistersEqual(right.Name, targetRegister) ? left.Name : null;

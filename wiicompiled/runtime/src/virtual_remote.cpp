@@ -120,7 +120,7 @@ Intent KeyboardIntent() {
     return intent;
 }
 
-// Gamepads. Scooby-Doo! Unmasked is single-player, so every connected gamepad (not a real Wii Remote, which
+// Gamepads. The game is single-player, so every connected gamepad (not a real Wii Remote, which
 // reaches the game through KPAD) drives player 1 alongside the keyboard; there is no port to pick.
 // The pad's type (SDL_GetGamepadType) picks the default layout; Config.toml [gamepad] <type>_<action>
 // (xbox_jump = "a,b", types xbox / playstation / nintendo, actions in Keybinds order) replaces one
