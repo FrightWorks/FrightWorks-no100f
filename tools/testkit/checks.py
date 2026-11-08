@@ -4,6 +4,7 @@
   audio_peak(raw)         loudest sample of an AUDIO_RAW_DUMP file (big-endian 16-bit stereo, 32 kHz)
   loopcheck(raw, tool)    is the output stuck repeating a short loop? runs tools/debug/audio/loopcheck.py (needs numpy)
   hd_drawn(game)          how many of the HD pack's textures the game has drawn in this scene (the `textures` command)
+  fps_samples / fps_summary / fps_too_slow   the frame rate the game logs every two seconds (NSMBW_LOG_FPS=1) on stderr
 """
 import array
 import re
@@ -15,6 +16,7 @@ from pathlib import Path
 
 AUDIO_RATE = 32000
 AUDIO_BYTES_PER_SECOND = AUDIO_RATE * 4
+FPS_LINE = re.compile(r"\[vi\] fps (\d+(?:\.\d+)?):")
 
 
 class CheckNotRun(Exception):
@@ -124,3 +126,27 @@ def hd_drawn(devmenu, timeout=20):
     checks every 30 frames)."""
     text = devmenu.command("textures", timeout)
     return len(text.replace("drawn suspects:", "").split())
+
+
+# ---- frame rate -----------------------------------------------------------------------------------------------------
+def fps_samples(text):
+    """The frame rates in a block of the game's stderr: one `[vi] fps 59.8: game ...` line per two seconds."""
+    return [float(m) for m in FPS_LINE.findall(text)]
+
+
+def fps_summary(samples, skip_first=True):
+    """{'n', 'min', 'median', 'last'} of the samples, or None when there are none. The first sample is dropped when more
+    than two came: its two-second window began before the level was playable (loading), so it is not the level's rate."""
+    if skip_first and len(samples) > 2:
+        samples = samples[1:]
+    if not samples:
+        return None
+    ordered = sorted(samples)
+    mid = len(ordered) // 2
+    median = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+    return {"n": len(samples), "min": ordered[0], "median": round(median, 1), "last": samples[-1]}
+
+
+def fps_too_slow(summary, minimum):
+    """True when the median frame rate is below `minimum`. No samples is not slow: the caller reports it as not run."""
+    return summary is not None and summary["median"] < minimum

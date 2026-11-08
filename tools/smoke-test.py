@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from testkit import checks, launch, slots, waitplay  # noqa: E402
 from testkit.devmenu import DevMenuTimeout  # noqa: E402
 from testkit.launch import BuildMismatch, GameCrashed, REPO  # noqa: E402
+from testkit.recorder import CheckFailed, Recorder  # noqa: E402
 from testkit.waitplay import PlayTimeout  # noqa: E402
 
 TOOLS = Path(__file__).resolve().parent
@@ -41,26 +42,16 @@ SAVE_POINT = (-25.618, 1.186, -1.515)   # g001
 LOADED_AT = (-27.0, 0.121, 0.0)         # g001: where a load puts Scooby (the level's start)
 SNACKS = 123
 
-print_lock = threading.Lock()
+JobFailure = CheckFailed
 
 
-class JobFailure(Exception):
-    """A check of a job failed."""
-
-
-class Job:
+class Job(Recorder):
     """One job's context: its Play copies, its checks and its numbers."""
 
     def __init__(self, name, args, out, pool):
-        self.name, self.args, self.out, self.pool = name, args, out, pool
-        self.checks = []        # (check, status, detail)
-        self.times = {}
+        super().__init__(name, out)
+        self.args, self.pool = args, pool
         self.games = []
-        self.notes = []
-
-    def log(self, text):
-        with print_lock:
-            print(f"[{self.name}] {text}", flush=True)
 
     def new_game(self, attempt, **kw):
         g = launch.TestGame(self.name, self.out / "work" / f"{self.name}-{attempt}",
@@ -69,33 +60,6 @@ class Job:
         g.prepare()
         self.games.append(g)
         return g
-
-    def passed(self, check, detail=""):
-        self.checks.append((check, "passed", detail))
-        self.log(f"ok    {check}{': ' + detail if detail else ''}")
-
-    def not_run(self, check, why):
-        self.checks.append((check, "not run", why))
-        self.log(f"NOT RUN {check}: {why}")
-
-    def require(self, ok, check, detail=""):
-        if not ok:
-            self.checks.append((check, "FAILED", detail))
-            raise JobFailure(f"{check}: {detail}")
-        self.passed(check, detail)
-
-    def shot(self, game, label):
-        png = self.out / "shots" / f"{self.name}-{label}.png"
-        if not game.screenshot(png):
-            return None
-        return png
-
-    def check_picture(self, game, label):
-        png = self.shot(game, label)
-        if png is None:
-            self.not_run(f"picture ({label})", "no screenshot tool on this OS")
-            return
-        self.require(not checks.png_is_blank(png), f"picture ({label})", f"{png.name} is not black")
 
     def record_perf(self, game, label):
         try:

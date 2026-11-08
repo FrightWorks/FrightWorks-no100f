@@ -154,7 +154,7 @@ def find_build_id(text) -> str:
 
 # Paths that are not inputs of the game build: a change to them since the build does not make the build stale.
 TEST_ONLY_PREFIXES = ("tools/testkit/", "docs/", "autotest/")
-TEST_ONLY_FILES = ("tools/smoke-test.py",)
+TEST_ONLY_FILES = ("tools/smoke-test.py", "tools/level-sweep.py")
 
 
 def is_test_only(path: str) -> bool:
@@ -165,7 +165,7 @@ def check_build(found, expected: BuildId, repo=None):
     """(ok, message): was the game built from the code under test?
     Identical ID: yes. Otherwise, for a clean build of the same branch, `git diff --name-only <built commit>` (that commit
     against the working tree, committed and uncommitted tracked changes) must name only files outside the build's
-    inputs (tools/testkit/, tools/smoke-test.py, docs/, *.md, autotest/): then the run is accepted and says which files
+    inputs (tools/testkit/, tools/smoke-test.py, tools/level-sweep.py, docs/, *.md, autotest/): then the run is accepted and says which files
     differ. Anything else, a build made from uncommitted changes that are gone or different now included, fails:
     rebuild. Without `repo` only the exact ID passes."""
     if not found:
@@ -196,14 +196,15 @@ def exe_build_id(exe) -> str:
 
 
 # ---- config ---------------------------------------------------------------------------------------------------------
-def test_config(dvd_root, hd=False, window=(1280, 720), extra="") -> str:
-    """The Config.toml of a test run: windowed, MSAA off, 60 fps, HD pack per `hd`, muted at volume 0.05, rumble off.
+def test_config(dvd_root, hd=False, window=(1280, 720), extra="", fps60=True) -> str:
+    """The Config.toml of a test run: windowed, MSAA off, 60 fps (30 with fps60=False), HD pack per `hd`, muted at volume 0.05,
+    rumble off.
     `extra` is appended as is: it must not repeat any table above."""
     dvd = str(dvd_root).replace("\\", "/")
     return (
         f"[paths]\ndvd_root = '{dvd}'\n\n"
         f"[video]\ndisplay_mode = \"windowed\"\nwindow_width = {window[0]}\nwindow_height = {window[1]}\n"
-        f"resolution_multiplier = 0\naspect_mode = 1\nskip_intro = true\nfps60 = true\nmsaa = 1\n"
+        f"resolution_multiplier = 0\naspect_mode = 1\nskip_intro = true\nfps60 = {'true' if fps60 else 'false'}\nmsaa = 1\n"
         f"texture_replacements = {'true' if hd else 'false'}\n\n"
         "[audio]\nvolume = 0.05\nmuted = true\n\n"
         "[controller]\nrumble = false\n" + (("\n" + extra) if extra else ""))
@@ -233,7 +234,7 @@ def boot_ini(disc_data, level) -> str:
 class TestGame:
     def __init__(self, name, work_dir, boot=None, hd=False, repo=REPO, src_play=None, disc_data=None, game_cmd=None,
                  extra_env=None, config_extra="", window=(1280, 720), activate_when_shown=None, dev_tools=True,
-                 build_check=True):
+                 build_check=True, fps60=True):
         self.name, self.repo = name, Path(repo)
         self.play = Path(work_dir) / "Play"
         self.src_play = Path(src_play) if src_play else self.repo / "Play"
@@ -241,6 +242,7 @@ class TestGame:
         self.boot, self.hd, self.window = boot, hd, window
         self.game_cmd, self.extra_env, self.config_extra = game_cmd, dict(extra_env or {}), config_extra
         self.activate_when_shown, self.dev_tools, self.build_check = activate_when_shown, dev_tools, build_check
+        self.fps60 = fps60
         self.proc = None
         self.launches = 0
         self.start_time = 0.0
@@ -303,7 +305,7 @@ class TestGame:
         ud = self.play / "UserData"
         ud.mkdir(parents=True, exist_ok=True)
         (ud / "Config.toml").write_text(
-            test_config(self.disc_data, self.hd, self.window, self.config_extra), encoding="utf-8")
+            test_config(self.disc_data, self.hd, self.window, self.config_extra, self.fps60), encoding="utf-8")
         mod = ud / "mods" / "zz-smoke"
         if mod.exists():
             safe_rmtree(mod)

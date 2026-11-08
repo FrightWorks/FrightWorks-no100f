@@ -7,7 +7,8 @@ Behaviour comes from the environment, FAKE_MODE:
   hang_once   like hang the first time (marker file in FAKE_STATE_DIR), normal afterwards
   crash       exits with code 3 after a moment
   fault       prints AccessViolation on stderr, keeps running
-Other: FAKE_BOOT_DELAY (seconds before the game is in play), FAKE_BUILD_ID (printed to console.log), FAKE_CUTSCENE (0 = none).
+Other: FAKE_FPS (a frame rate: prints a `[vi] fps N:` line to stderr every half second once in play, as NSMBW_LOG_FPS does),
+FAKE_BOOT_DELAY (seconds before the game is in play), FAKE_BUILD_ID (printed to console.log), FAKE_CUTSCENE (0 = none).
 """
 import os
 import re
@@ -47,6 +48,8 @@ cutscene_wanted = os.environ.get("FAKE_CUTSCENE", "1") != "0"
 scene, pos, snacks = boot if boot != "title" else "title", [0.0, 0.121, 0.0, 0.0], 0
 pressed_a_at = None
 presses = []
+fake_fps = os.environ.get("FAKE_FPS")
+last_fps_line = 0.0
 
 
 def append(path, text):
@@ -76,6 +79,9 @@ while True:
     if mode == "fault" and now > 1.0 and not os.path.exists("fault-printed"):
         print("MKW AccessViolation at 0x80001234", file=sys.stderr, flush=True)
         open("fault-printed", "w").close()
+    if fake_fps and in_play() and time.time() - last_fps_line >= 0.5:
+        print(f"[vi] fps {float(fake_fps):.1f}: game 1.00 ms (stand-in)", file=sys.stderr, flush=True)
+        last_fps_line = time.time()
     if in_play():
         if os.path.exists("devmenu_press.txt"):
             for line in Path("devmenu_press.txt").read_text().splitlines():
