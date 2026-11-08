@@ -475,7 +475,7 @@ void clear_display_copy_cache() noexcept;
 // `efbRect`: the render-target rectangle the display copy was made from (see webgpu::PresentSource::efbRect).
 void set_display_copy_present_source(std::array<float, 4> efbRect = {}) noexcept;
 void evict_copy_texture(const void* dest) noexcept;
-// NSMBW: the cached static textures whose RAM holds `dest` (a copy patching part of a texture).
+// The cached static textures whose RAM holds `dest` (a copy patching part of a texture).
 struct PatchTarget {
   gfx::TextureHandle texture;
   u32 x = 0, y = 0;

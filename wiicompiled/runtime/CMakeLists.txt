@@ -215,7 +215,7 @@ set_source_files_properties(${RECOMP_PPC_SEMANTIC_RUNTIME_SOURCES} PROPERTIES
     SKIP_UNITY_BUILD_INCLUSION ON
     SKIP_PRECOMPILE_HEADERS ON
     COMPILE_OPTIONS "${RECOMP_TRANSLATED_PPC_FP_OPTIONS}")
-# The NSMBW sampling profiler includes <windows.h>; keep it out of the unity batches.
+# The sampling profiler includes <windows.h>; keep it out of the unity batches.
 set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/guest_profiler.cpp" PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # Map guards must reject guest NaN/Inf before constructing backdrop geometry.
 set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/hle/no100f_map_backdrop.cpp" PROPERTIES
@@ -606,7 +606,7 @@ endif()
 
 # The translator emits the complete, content-addressed source graph. Consuming
 # this one manifest keeps configure independent of the 28k generated function
-# files and of optional Retro Rewind artifacts such as code.map.
+# files and of optional mod artifacts such as code.map.
 if(RECOMP_BUILD_PRODUCTS)
     set(RECOMP_TRANSLATED_SHARD_MANIFEST
         "${CMAKE_CURRENT_LIST_DIR}/../generated/build_shards/shards.cmake"
@@ -627,7 +627,7 @@ if(RECOMP_BUILD_PRODUCTS)
     message(STATUS
         "Translator graph: ${RECOMP_SHARED_BASE_FUNCTION_COUNT}/${RECOMP_BASE_FUNCTION_COUNT} base functions shared; "
         "${RECOMP_PROFILE_SENSITIVE_CALLER_COUNT} profile-sensitive callers; "
-        "${RECOMP_MOD_FUNCTION_COUNT} Retro Rewind functions")
+        "${RECOMP_MOD_FUNCTION_COUNT} mod functions")
 
     set(RECOMP_RUNTIME_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}")
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/PublicProducts.cmake")

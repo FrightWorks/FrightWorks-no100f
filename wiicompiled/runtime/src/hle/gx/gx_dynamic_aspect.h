@@ -18,7 +18,7 @@ inline constexpr uint32_t kEggScreenHeight = 456u;
 inline constexpr uint32_t kEggRecordWidth43 = 608u;
 inline constexpr uint32_t kEggRecordWidth169 = 832u;
 // Guard against a degenerate window turning the world inside out: 6.0 is a
-// ~145 degree vertical FOV at MKW's stock 45 degree base, past which the
+// ~145 degree vertical FOV at a 45 degree base, past which the
 // 10.0 near plane and the game's own culling stop behaving.
 inline constexpr float kMaxVerticalExpansion =
     aurora::render_size_limits::kMaxDynamicPortraitExpansion;

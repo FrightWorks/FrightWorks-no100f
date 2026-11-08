@@ -114,7 +114,7 @@ var baseTranslationExclusions = new Lazy<IReadOnlySet<uint>>(() =>
         .ToHashSet());
 // The base translation is shared across products, so mod-safety decisions must cover every enabled
 // profile's patch set, not just --profile. The launcher reuses one profile-less base for both vanilla
-// and Retro Rewind; keying on --profile alone let mod-patched callees get leaf-inlined into base
+// and modded builds; keying on --profile alone let mod-patched callees get leaf-inlined into base
 // callers, baking vanilla code into the modded product (character-select corruption, LinkList panics).
 var modPatchProfiles = new Lazy<IReadOnlyList<Translator.Cli.Configuration.ProjectProfile>>(
     () => CollectModPatchProfiles(project, profile));
@@ -1610,7 +1610,7 @@ int RunTranslateModCore(string[] argsTail, string? outputDirectoryOverride)
             "cannot verify the base translation is aware of this mod's patch set.");
     }
     var modName = OptionValue(argsTail, "--mod-name")
-        ?? (!string.IsNullOrWhiteSpace(modRoot) ? Path.GetFileName(Path.GetFullPath(modRoot)) : "Pulsar Mod");
+        ?? (!string.IsNullOrWhiteSpace(modRoot) ? Path.GetFileName(Path.GetFullPath(modRoot)) : "Mod");
     var region = OptionValue(argsTail, "--region") ?? profile?.Region ?? "P";
     var moduleGuestBase = OptionValue(argsTail, "--module-guest-base") is { } moduleBaseText
         ? ParseAddress(moduleBaseText)
@@ -1639,8 +1639,8 @@ int RunTranslateModCore(string[] argsTail, string? outputDirectoryOverride)
     if (droppedReservedWrites > 0)
     {
         Console.WriteLine(
-            $"[translator] Dropped {droppedReservedWrites} Code.pul write(s) to the WFC codehandler probe word " +
-            "(0x80001920); the recomp keeps it clean so the WFC anticheat probe reads an untouched console.");
+            $"[translator] Dropped {droppedReservedWrites} Code.pul write(s) to the reserved word at 0x80001920; " +
+            "the recomp leaves that word unmodified.");
     }
 
     var baseManifestDirectory = Path.GetDirectoryName(Path.GetFullPath(baseManifestPath))!;
@@ -1967,8 +1967,8 @@ void WriteResolvedDispatchProfile(
         .ToArray();
 
     // A native registration always outranks a mod overlay at the same address, deliberately for
-    // functions the runtime must own (hardware, the strap scene). But when the mod's whole point
-    // is replacing that function, e.g. Retro Rewind's DVDOpen override at 0x8015E2BC, the overlay
+    // functions the runtime must own (hardware). But when the mod's whole point
+    // is replacing that function, e.g. a mod's DVDOpen override, the overlay
     // is silently dropped. Name every such address so the tradeoff is a choice, not an accident.
     var nativeOverriddenModPatches = groups
         .Where(group =>
@@ -2004,7 +2004,7 @@ void WriteResolvedDispatchProfile(
         Path.Combine(outDir, "resolved_dispatch_profile.json"),
         new
         {
-            Format = "recompii-resolved-dispatch-profile",
+            Format = "recomp-resolved-dispatch-profile",
             FormatVersion = 1,
             NativeOverriddenModPatches = nativeOverriddenModPatches,
             Entries = resolved

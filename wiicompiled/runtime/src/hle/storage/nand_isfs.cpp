@@ -824,9 +824,8 @@ static bool g_isfsInitialized = false;
 // load-bearing and must not be "tidied". Names come from the RVL IPC/ISFS
 // sources; only the naming changed here, never a value.
 namespace {
-// SPM (R8PE01) ISFS/IPC globals as negative r13 offsets, read from SPM's own ISFS_OpenLib
-// (0x80293C70) and IPCGetBufferLo/Hi (0x802950E8/E0). The NSMBW offsets used before landed
-// in SPM's .sdata2 and overwrote a map-blend constant with "/dev/fs" (black backgrounds).
+// ISFS/IPC globals as negative r13 offsets (ISFS_OpenLib, IPCGetBufferLo/Hi). A wrong offset can land
+// in .sdata2 and overwrite a constant with "/dev/fs" (black backgrounds).
 constexpr uint32_t kIsfsFdSda1Offset = 0x7B60u;          // __fsFd
 constexpr uint32_t kIpcBufferLoSda1Offset = 0x6F24u;     // IPCBufferLo
 constexpr uint32_t kIpcBufferHiSda1Offset = 0x6F20u;     // IPCBufferHi
@@ -876,7 +875,7 @@ int32_t ISFS_OpenLib_Initialize(CpuContext* ctx) {
     const uint32_t isfsHeapBaseGlobal = r13 - kIsfsHeapBaseSda1Offset;
     const uint32_t firstCallGlobal = r13 - kIsfsFirstCallSda1Offset;
 
-    // Mirrors SPM's ISFS_OpenLib, with IOS_Open("/dev/fs") replaced by the HLE fd.
+    // Mirrors ISFS_OpenLib, with IOS_Open("/dev/fs") replaced by the HLE fd.
     const bool firstCall = Memory::Read32(firstCallGlobal) != 0;
     if (firstCall) {
         Memory::Write32(ipcArenaLoGlobal, Memory::Read32(r13 - kIpcBufferLoSda1Offset));

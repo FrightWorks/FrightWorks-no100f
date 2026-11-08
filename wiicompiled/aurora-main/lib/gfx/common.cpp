@@ -213,7 +213,7 @@ struct RenderPass {
   bool resolveLinearSampling = false;
   bool snapshotColorResolveSource = false;
   std::vector<tex_palette_conv::ConvRequest> paletteConvs;
-  // NSMBW: copies of this pass's resolve target into a region of another texture (add_resolve_patch).
+  // Copies of this pass's resolve target into a region of another texture (add_resolve_patch).
   struct Patch {
     TextureHandle dst;
     TextureHandle native;  // the resolve target scaled to the patch's own size
@@ -445,7 +445,7 @@ static ClipRect calculate_resolve_snapshot_rect(const wgpu::Extent3D& targetSize
       .height = static_cast<int32_t>(targetSize.height),
   };
   // Shader-sampled and converted copies can feed effects that read outside the copy rectangle
-  // (MKW's DOF chain), so keep those full-target. Exact copies have a closed, crop-safe footprint.
+  // (a depth of field chain, say), so keep those full-target. Exact copies have a closed, crop-safe footprint.
   if (samplingPlan.needsConversion ||
       samplingPlan.needsShaderSampling ||
       targetSize.width == 0 || targetSize.height == 0 ||
@@ -1496,7 +1496,7 @@ void split_staging_batch() {
   std::lock_guard gpuLock(aurora::renderer_gpu_mutex());
   if (!has_current_render_pass())
     throw StagingCapacityError("Cannot split staging outside an active render pass");
-  {  // SPM diagnostic (env NO100F_PASS_LOG): which staging buffer forced the split (V/U/I/S bytes used)
+  {  // Diagnostic (env NO100F_PASS_LOG): which staging buffer forced the split (V/U/I/S bytes used)
     static const bool passLog = std::getenv("NO100F_PASS_LOG") != nullptr;
     static int logged = 0;
     if (passLog && logged++ < 20) {
@@ -1604,7 +1604,7 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
   // interpolation weight. Replay slots are rendered before the native frame, so the first slot encodes
   // them too: otherwise every slot sampled the previous frame's (HUD, icons and screen effects flickered).
   const bool encodeTextureBakes = interpolatedFrame <= 0;
-  {  // SPM diagnostic (env NO100F_PASS_LOG): every 300th frame, the render passes with their clears and command counts
+  {  // Diagnostic (env NO100F_PASS_LOG): every 300th frame, the render passes with their clears and command counts
     static const bool passLog = std::getenv("NO100F_PASS_LOG") != nullptr;
     static u32 calls = 0, logged = 0;
     if (passLog && encodeTextureBakes && ++calls % 300 == 0 && logged++ < 12) {
@@ -1978,8 +1978,8 @@ bool bind_pipeline(PipelineRef ref, const wgpu::RenderPassEncoder& pass, Pipelin
   if (!skip_unready_pipelines()) {
     pipelineReady = wait_pipeline(ref, pipeline);
   } else if (requireReady) {
-    // The pass resolves into a persistent texture (a one-shot bake such as MKW's minimap), so a
-    // skipped draw would never be re-issued. These run behind loads, not mid-race.
+    // The pass resolves into a persistent texture (a one-shot bake), so a
+    // skipped draw would never be re-issued. These run behind loads, not during play.
     pipelineReady = wait_pipeline_for_persistent_pass(ref, pipeline);
   } else {
     pipelineReady = try_pipeline(ref, pipeline);

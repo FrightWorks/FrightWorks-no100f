@@ -24,7 +24,7 @@ extern std::atomic<bool> g_interrupts_enabled;
 // observable state, not just bookkeeping.
 extern std::atomic<uint32_t> g_interrupt_mask;
 
-// NSMBW SMNE01 rev 1 addresses (symbols from the cracked Shield symbol table, converted to E1).
+// Guest addresses of the OS globals.
 constexpr uint32_t kInterruptHandlerTablePtrAddr = 0x80271320u;  // NO100F r13-0x6F60 (__OSSetInterruptHandler)  // InterruptHandlerTable
 constexpr uint32_t kInterruptHandlerTableAddr = 0x80003040u;
 constexpr size_t kInterruptHandlerTableBytes = 0x80u;

@@ -511,7 +511,7 @@ static void apply_xf_viewport() {
   });
 }
 
-// NSMBW: the screen's aspect while the game's view is widened past 16:9 (0 = off). See below.
+// The screen's aspect while the game's view is widened past 16:9 (0 = off). See below.
 std::atomic<float> g_widePerspectiveAspect{0.0f};
 static float g_gxProjWiden = 1.f;  // the horizontal factor the current projection was widened by
 
@@ -519,7 +519,7 @@ static void apply_xf_projection() {
   const auto& raw = g_gxState.xfProjection;
   auto& proj = g_gxState.proj;
   proj = {};
-  // NSMBW: on a screen wider than 16:9 the picture fills it, so a camera set up for 16:9 would be
+  // On a screen wider than 16:9 the picture fills it, so a camera set up for 16:9 would be
   // stretched sideways. Re-derive its horizontal scale from the screen's aspect instead: the same
   // vertical view, more to the sides (Hor+), around the same centre. Cameras already set up wider
   // are left alone. That covers the perspective ones (world map, title) and the orthographic one
@@ -573,7 +573,7 @@ static void handle_xf(const u8* data, u32& pos, u32 size, bool bigEndian);
 static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndian);
 static bool handle_aurora(const u8* data, u32& pos, u32 size, bool bigEndian);
 
-// NSMBW: time spent decoding GX commands (and waiting for the renderer lock first), and draws
+// Time spent decoding GX commands (and waiting for the renderer lock first), and draws
 // decoded, for the runtime's NO100F_LOG_FPS breakdown.
 std::atomic<uint64_t> g_statProcessNanos{0}, g_statLockNanos{0}, g_statDraws{0};
 std::atomic<uint64_t> g_statProcessTotalNanos{0};  // never reset: slow-frame breakdowns take deltas
@@ -607,7 +607,7 @@ struct ProcessTimer {
   }
 };
 
-// NSMBW debugging: NO100F_MERGE_SUSPECTS logs register writes that changed a value but left the state
+// Debugging: NO100F_MERGE_SUSPECTS logs register writes that changed a value but left the state
 // clean, when a draw then merged into the previous one (state that a merged draw would not see).
 static bool MergeSuspectsOn() {
   static const bool on = std::getenv("NO100F_MERGE_SUSPECTS") != nullptr;
@@ -2089,8 +2089,8 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
 
 // The per-draw geometry signature, matrix-usage mask and draw-identity hashes exist purely to feed frame interpolation (build_uniform consumes them only after its `frame_interpolation_fps() == 0` early-out).
 static inline bool frame_interpolation_identity_needed() noexcept {
-  // SPM draws its levels with an orthographic camera, so orthographic draws interpolate too (the
-  // perspective-only gate was for NSMBW, whose orthographic draws are only HUD).
+  // Orthographic draws interpolate too, not only perspective ones: a game can draw its levels with
+  // an orthographic camera.
   // Motion vectors pair draws across frames with the same machinery.
   return frame_interpolation_active() || gfx::motion_vectors_active();
 }
@@ -2329,7 +2329,7 @@ static const CachedPipelineState& resolve_pipeline_state(GXPrimitive prim, GXVtx
 }
 
 
-// SPM bring-up diagnostic: runtime sets g_gxDrawDump during the drawdump frame; g_gxCullOff forces GX_CULL_NONE.
+// Diagnostic: runtime sets g_gxDrawDump during the drawdump frame; g_gxCullOff forces GX_CULL_NONE.
 static void gx_log_draw_extent(u8 prim, GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be);
 static float gx_bbox_comp(const u8* p, GXCompType t, u8 frac, bool be);
 static void gx_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtxSize, const u8* v, bool be) {
@@ -2524,8 +2524,8 @@ static void gx_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtxS
 }
 
 
-// SPM: GX's bounding box is filled by the rasterizer, which Aurora has no readback for. SPM reads it
-// after drawing offscreen objects (paper-flip effects, offscreen map objects, character extension
+// GX's bounding box is filled by the rasterizer, which Aurora has no readback for. A game reads it
+// after drawing offscreen objects (offscreen map objects, character extension
 // textures) to know what to copy, so while it is armed (GXClearBoundingBox until GXReadBoundingBox)
 // project every drawn position on the CPU with the raw XF projection/viewport, as the GPU would.
 static float gx_bbox_comp(const u8* p, GXCompType t, u8 frac, bool be) {
@@ -2600,7 +2600,7 @@ static void gx_bbox_accumulate(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtx
   }
 }
 
-// SPM diagnostic: every draw's extent in the game's own NDC (raw XF projection, unclamped, so |x| > 1
+// Diagnostic: every draw's extent in the game's own NDC (raw XF projection, unclamped, so |x| > 1
 // is outside the game's 16:9 view) during the dump frame. Same vertex walk as gx_bbox_accumulate.
 // Extent of a draw in the game's own NDC (raw XF projection, unclamped); false when it has no position.
 static bool gx_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be, float out[4]) {
@@ -3066,7 +3066,7 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
     if (skipLines == 1) { pos += totalVtxBytes; return true; }
   }
   if (!g_gxState.zFreeze) update_zfreeze_reference(prim, fmt, data + pos, vtxCount, vtxSize, bigEndian);
-  // SPM: with the view widened past 16:9, a quad covering the game's whole 16:9 view (backdrop colour,
+  // With the view widened past 16:9, a quad covering the game's whole 16:9 view (backdrop colour,
   // sky, fade curtains) is drawn unwidened so it covers the whole screen instead of leaving the
   // margins black; the camera widening still applies to everything else.
   bool fullScreenQuad = false;
@@ -3087,7 +3087,7 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
 
   const auto particleDepths = direct_billboard_depths(prim, fmt, data + pos, totalVtxBytes);
   DrawData* mergeTarget = nullptr;
-  // NSMBW debugging: NO100F_NO_MERGE turns draw merging off.
+  // Debugging: NO100F_NO_MERGE turns draw merging off.
   static const int noMergeMode = [] {
     const char* v = std::getenv("NO100F_NO_MERGE");
     return v == nullptr ? 0 : std::atoi(v);
@@ -3251,7 +3251,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
     // Leave stateDirty alone: the next draw re-resolving its pipeline is the safe direction, and nothing about this draw reached the GPU.
     return;
   }
-  // SPM diagnostic (env NO100F_FLAT_TEST): map-tile class (fmt0 strips, CMPR map0) drawn 1 = flat white, 2 = flat white over
+  // Diagnostic (env NO100F_FLAT_TEST): map-tile class (fmt0 strips, CMPR map0) drawn 1 = flat white, 2 = flat white over
   // everything (no depth), 3 = texture colour only, 4 = every draw flat white, 5 = every non-quad draw flat white (quads = backdrop/HUD), 6 = depth-tested quads white, 7 = 2 + culling off, 10 = 7 + fixed z -0.95. Shows whether missing walls/floors rasterize at all.
   static const int flatTest = [] { const char* e = std::getenv("NO100F_FLAT_TEST"); return e ? std::atoi(e) : 0; }();
   struct FlatSave { TevStage st0; u8 numTev; AlphaCompare ac; GXBlendMode bm; bool dc, du; GXCullMode cull; Mat4x4<float> proj; };
@@ -3630,7 +3630,7 @@ bool handle_aurora(const u8* data, u32& pos, u32 size, bool bigEndian) {
 
 } // namespace aurora::gx::fifo
 
-// NSMBW: widen 16:9 perspective cameras to `aspect` (the screen's, when wider than 16:9; 0 = off).
+// Widen 16:9 perspective cameras to `aspect` (the screen's, when wider than 16:9; 0 = off).
 extern std::atomic<uint64_t> g_statCopies, g_statCopyCreates;
 extern "C" void AuroraTakeCopyStats(uint64_t* copies, uint64_t* creates) {
   *copies = g_statCopies.exchange(0, std::memory_order_relaxed);

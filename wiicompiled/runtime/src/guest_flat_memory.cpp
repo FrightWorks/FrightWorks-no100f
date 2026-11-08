@@ -366,7 +366,7 @@ void ApplyExecutableProtectionLocked() {
     auto& protectedPages = ExecutableProtectedPages();
     for (const auto& range : ExecutableRanges()) {
         // Only pages fully inside the range are protected: edge pages often share a page with data
-        // (MKW's THP buffers do), so guarding them would fault legitimate stores; their writes still go through the checked path.
+        // (game buffers do), so guarding them would fault legitimate stores; their writes still go through the checked path.
         const uint64_t first = RoundUp(range.start, kHostPageSize);
         const uint64_t last = static_cast<uint64_t>(range.end) & ~(kHostPageSize - 1u);
         if (last <= first) continue;

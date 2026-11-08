@@ -63,10 +63,10 @@ struct ChannelState {
 // one 60 Hz read stands for about three of them.
 constexpr int kReportsPerRead = 3;
 
-// KPAD's calc_acc_vertical (0x801EB030 in NSMBW): the remote's attitude in the vertical plane,
+// KPAD's calc_acc_vertical: the remote's attitude in the vertical plane,
 // (|acc.xy|, -acc.z) / |acc|, eased toward each report with weight kp_acc_horizon_pw (0.05) times
 // w^2, where w is |acc| folded around 1 g; readings of 2 g or more (swings) are ignored. Kept at
-// unit length. New Super Mario Bros. Wii reads its y as the tilt of a sideways remote.
+// unit length. Its y is the tilt of a sideways remote.
 void UpdateAccVertical(ChannelState& state, const float* acc) {
     constexpr float kHorizonPower = 0.05f;
     const float xy2 = acc[0] * acc[0] + acc[1] * acc[1];
@@ -288,8 +288,8 @@ extern "C" int32_t KPAD__Read_HLE(uint32_t chan, uint32_t statusPtr, uint32_t co
     }
 }
 
-// KPADReadEx: KPADRead plus an optional s32* error out-parameter. In NSMBW both are thin wrappers
-// around KPADiRead, and the main input path (EGG::CoreControllerMgr, call at 0x802BCE0C) uses this
+// KPADReadEx: KPADRead plus an optional s32* error out-parameter. Both are thin wrappers
+// around KPADiRead, and the main input path uses this
 // one, so it needs the same native or the remote would read as disconnected.
 extern "C" int32_t KPAD__ReadEx_HLE(uint32_t chan, uint32_t statusPtr, uint32_t count, uint32_t errPtr)
 {

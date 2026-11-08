@@ -146,7 +146,7 @@ static std::optional<size_t> ParseHttpContentLength(std::string_view headers) {
     return parsedLength;
 }
 
-// The Retro-WFC server rejects a NAS "POST /ac" auth body split across TCP
+// A mod's server can reject a NAS "POST /ac" auth body split across TCP
 // segments, so buffer guest chunks until Content-Length is satisfied, then
 // flush as one write. Flush at 16 KiB if it never terminates, and immediately
 // if Content-Length can't be parsed.

@@ -14,7 +14,7 @@ public class BaseFunctionIndexTests
                 0x80533600,
                 0x80533820,
                 "func_80533600",
-                "StaticR.rel:1",
+                "module.rel:1",
                 0x123600,
                 "test",
                 ["Executable"]),
@@ -22,7 +22,7 @@ public class BaseFunctionIndexTests
                 0x80533820,
                 0x80533900,
                 "func_80533820",
-                "StaticR.rel:1",
+                "module.rel:1",
                 0x123820,
                 "test",
                 ["Executable"])

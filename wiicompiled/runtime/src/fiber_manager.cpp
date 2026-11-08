@@ -49,10 +49,10 @@ std::atomic<uint32_t> g_viRetracePendingCount{0};
 namespace {
 constexpr uint32_t kOSCurrentContextAddr = 0x800000d4u;
 constexpr uint32_t kOSRunningContextAddr = 0x800000e4u;  // OSGetCurrentThread reads this
-constexpr uint32_t kThreadQueueArrayAddr = 0x8026D158u;  // NO100F __OSThreadInit base 0x8026D158          // RunQueue (NSMBW)
-constexpr uint32_t kSchedulerPendingFlagAddr = 0x80271370u;  // NO100F r13-0x6F10      // RunQueueBits (NSMBW)
-constexpr uint32_t kSchedulerReschedCounterAddr = 0x80271374u;  // NO100F r13-0x6F0C   // RunQueueHint (NSMBW)
-constexpr uint32_t kSchedulerIdleFlagAddr = 0x80271378u;  // NO100F r13-0x6F08         // Reschedule (NSMBW)
+constexpr uint32_t kThreadQueueArrayAddr = 0x8026D158u;  // NO100F __OSThreadInit base 0x8026D158          // RunQueue
+constexpr uint32_t kSchedulerPendingFlagAddr = 0x80271370u;  // NO100F r13-0x6F10      // RunQueueBits
+constexpr uint32_t kSchedulerReschedCounterAddr = 0x80271374u;  // NO100F r13-0x6F0C   // RunQueueHint
+constexpr uint32_t kSchedulerIdleFlagAddr = 0x80271378u;  // NO100F r13-0x6F08         // Reschedule
 
 // OSThread structure offsets
 constexpr uint32_t kThreadStateOffset = 0x2C8u;
@@ -485,7 +485,7 @@ void GuestFiberManager::DumpGuestThreads(std::ostream& os) {
     }
     os << "[fiber] " << s_fibers.size() << " guest thread(s); current 0x" << std::hex << std::uppercase
        << s_currentGuestThread << std::dec << std::nouppercase << std::endl;
-    // The guest OS's own view (SPM addresses): which threads it can run and who sleeps on the VI
+    // The guest OS's own view: which threads it can run and who sleeps on the VI
     // retrace queue. A thread the host calls READY but the OS never queues is waiting on something.
     const auto word = [](uint32_t addr) {
         uint32_t value = 0;

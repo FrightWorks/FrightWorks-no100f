@@ -114,7 +114,7 @@ private:
 // Probes only descriptors whose copied socket identity is still live. A dead identity
 // (SOClose/SOCleanup/slot reuse) reports POLLNVAL and counts toward readiness like IOS/Dolphin;
 // skipping it silently would return 0 forever and strand an infinite-timeout SO_POLL parked
-// during socket teardown mid-WFC-connect.
+// during socket teardown while a connect is in progress.
 template <typename IsStillValid>
 int ProbeNow(std::vector<CopiedDescriptor>& descriptors, IsStillValid&& isStillValid) {
     if (descriptors.size() > kMaxDescriptors) {

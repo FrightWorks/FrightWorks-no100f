@@ -320,8 +320,7 @@ void SystemBridge::Initialize() {
     RT_LOG(RT_TAG_RUNTIME) << "Initializing data sections from embedded DOL/REL data" << std::endl;
     InitializeDataSections();
 
-    // SPM __start -> __init_user -> __init_cpp runs its own .ctors at 0x80319180.
-    // The inherited NSMBW host pass read SPM instructions as constructor pointers.
+    // The game's __start -> __init_user -> __init_cpp runs its own .ctors, so the host does not.
     InitializePersistentCpuContext();
 }
 
@@ -410,10 +409,10 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
     constexpr uint32_t kBusClockHz =
         static_cast<uint32_t>(TimeBaseContract::kBusClockHz);
     constexpr uint32_t kCpuClockHz = kBusClockHz * 3u;
-    // NSMBW (SMNE01 rev 1) boots under IOS53 (TMD system version 0x35). These are the IOS kernel values that
+    // These are the IOS kernel values that
     // Dolphin exposes in low memory for IOS53 (VersionInfo.cpp: v5663). SDK helpers
     // read them through the 0xC0000000 MEM1 alias.
-    constexpr uint32_t kIos36Version = 0x0035161Fu;  // IOS53 v5663 (name kept from MKW)
+    constexpr uint32_t kIos36Version = 0x0035161Fu;  // IOS53 v5663
     constexpr uint32_t kIos36Date = 0x00030110u;
 
     constexpr uint32_t kMem2LoFloor = 0x90000800u;
@@ -426,19 +425,18 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
     constexpr uint32_t kIosReservedSize = 0x20000u;
 
     // The boot code exposes the current disc ID in low memory before DVDInit.
-    // Retro Rewind reads the region byte directly from here while building its
-    // Retro-WFC payload URL, and OSGetAppGamename reads the app code mirrors
+    // OSGetAppGamename reads the app code mirrors
     // at 0x80003180/0x80003194 while building NAS auth fields.
     entries.push_back({0x80000000u, 0x47354445u, "Disc game code"}); // G5DE
     entries.push_back({0x80000004u, 0x37380000u, "Disc maker/id"});  // "78" (THQ), disc 0, version 0 (boot.bin)
     entries.push_back({0x80003180u, 0x47354445u, "OS app game code"}); // G5DE
     entries.push_back({0x80003194u, 0x47354445u, "OS app gamename"});  // G5DE
-    // NSMBW's OSInit (newer SDK than Mario Kart's) compares the running IOS (0x80003140) with the
+    // OSInit (in newer SDKs) compares the running IOS (0x80003140) with the
     // title's required IOS at 0x80003188 - same major, revision not older - and calls OSFatal
     // ("ERROR #002") otherwise. The boot path leaves the TMD's IOS here; Dolphin writes the IOS word.
     entries.push_back({0x80003188u, kIos36Version, "Title's required IOS (IOS53)"});
     if (RuntimeProduct::IsModProduct()) {
-        entries.push_back({0x800017D8u, 0x00000001u, "Retro Rewind recomp runtime marker", true});
+        entries.push_back({0x800017D8u, 0x00000001u, "Mod recomp runtime marker", true});
     }
 
     for (const auto& reservation : RecompMod::MemoryReservations()) {

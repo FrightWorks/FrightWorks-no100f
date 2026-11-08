@@ -160,14 +160,13 @@ constexpr uint32_t kViRenderHeightAddr      = 0x8026DE36;  // HorVer.DispSizeY (
 constexpr uint32_t kViXfbWidthAddr          = 0x8026DE42;  // HorVer.FBSizeX (+0x12)
 constexpr uint32_t kViXfbHeightAddr         = 0x8026DE4C;  // HorVer+0x1C (PanSizeY)
 constexpr uint32_t kViRetraceCountAddr      = 0x80271398;  // retraceCount (NO100F r13-0x6EE8); // matches VIWaitForRetrace/handler
-constexpr uint32_t kViTimingGuardAddr       = 0x8056dd0c;  // IsInitialized+0xC = __VIDimming_All_Clear in NSMBW (offset-matched; MKW name unverified)
+constexpr uint32_t kViTimingGuardAddr       = 0x8056dd0c;  // IsInitialized+0xC (offset-matched)
 constexpr uint32_t kViPreRetraceCallback    = 0x802713A8;  // PreCB (NO100F r13-0x6ED8)
 constexpr uint32_t kViPostRetraceCallback   = 0x802713AC;  // PostCB (NO100F r13-0x6ED4)
 constexpr uint32_t kViNextFrameBufferAddr   = 0x8026DE60;  // NO100F: no CurrBufAddr in this SDK; VISetNextFrameBuffer writes HorVer.bufAddr
 constexpr uint32_t kViNextFrameBufferHwAddr = 0x8026DE60;  // HorVer.bufAddr (+0x30)
 constexpr uint32_t kViRetraceQueueAddr      = 0x802713A0;  // retraceQueue (NO100F r13-0x6EE0); // Thread queue for VIWaitForRetrace
 
-// (MKW gated the post-retrace callback on EGG::BaseSystem::sSystem at 0x80386F60; not used for NSMBW.)
 
 
 // ============================================================================
@@ -393,11 +392,11 @@ static std::atomic<bool> s_inAdvanceRetrace{false};
 // end the freshly pre-warmed empty frame and show it as a black frame group.
 static std::atomic<bool> s_presentSequenceActive{false};
 
-// NSMBW bring-up: frames the guest actually handed to the presenter (an XFB was ready), and a one-shot
+// Bring-up: frames the guest actually handed to the presenter (an XFB was ready), and a one-shot
 // watchdog that dumps every guest thread's state if none arrived after 12 s and again after 30 s, so
 // a boot that stalls in a wait loop shows where each thread is parked.
 static std::atomic<uint32_t> s_presentedXfbFrames{0};
-extern "C" { extern int g_gxDrawDump; extern int g_gxCullOff; extern unsigned g_gxDrawIdx; extern unsigned g_gxDrawLimit; }  // aurora command_processor (SPM bring-up diagnostics)
+extern "C" { extern int g_gxDrawDump; extern int g_gxCullOff; extern unsigned g_gxDrawIdx; extern unsigned g_gxDrawLimit; }  // aurora command_processor (Diagnostic)
 static uint32_t GxPresentedFramesLocal() { return s_presentedXfbFrames.load(std::memory_order_relaxed); }
 static uint32_t (*const g_gxFramesFn)() = &GxPresentedFramesLocal;
 
@@ -424,7 +423,7 @@ void StartStallWatchdogOnce() {
                 const bool black = g_vi.black;  // racy read; diagnostics only
                 RT_LOGF(RT_TAG_VI, "[watchdog] %d s: %u guest frame(s) presented, VI black=%d\n", seconds, frames,
                         black ? 1 : 0);
-                if (frames != 0 && !black && seconds != 30) {  // SPM bring-up: always dump at 30 s
+                if (frames != 0 && !black && seconds != 30) {  // Bring-up: always dump at 30 s
                     continue;
                 }
                 RT_LOGF(RT_TAG_VI, "[watchdog] nothing visible yet; guest threads:\n");
@@ -434,14 +433,14 @@ void StartStallWatchdogOnce() {
     });
 }
 
-// NSMBW: report where the game's own loader places its four boot RELs. The translated build was
-// pre-linked for fixed heap addresses (projects/nsmbw/tools/prelink_rels.py); a mismatch means the
+// Report where the game's own loader places its boot RELs. The translated build expects fixed
+// heap addresses; a mismatch means the
 // guest heap layout differs from hardware and translated REL code would run against wrong data.
-// Walks __OSModuleInfoList (0x800030C8) once per retrace until all four have been reported.
+// Walks __OSModuleInfoList (0x800030C8) once per retrace until all have been reported.
 void LogGuestModulesOnce() {
     struct ExpectedModule { uint32_t id; const char* name; uint32_t image; uint32_t bss; };
     static constexpr ExpectedModule kExpected[] = {
-        {1, "relF", 0x80BF6840u, 0x80F12640u},  // SPM: projects/spm/tools/prelink_spm_rel.py
+        {1, "relF", 0x80BF6840u, 0x80F12640u},  // id, name, image and bss addresses
     };
     static uint32_t s_reported = 0;  // one bit per module id
     if (s_reported == 0x2u) {
@@ -479,11 +478,10 @@ void LogGuestModulesOnce() {
     }
 }
 
-// NSMBW: log every scene switch (boot, title, world map, stage, ...) with the game's own profile name,
-// so automated bring-up runs show how far the game got without screenshots. dScene_c::m_nextScene and
-// m_nowScene are adjacent halfwords at 0x80428730; dProf_getName reads names from a pointer table.
+// Log every sequence switch (logo, title, game, ...), so automated bring-up runs show how far the
+// game got without screenshots.
 void LogSceneChanges() {
-    // SPM: seqdrv now_seq / next_seq (.sdata, r13-0x7E48 / -0x7E44) and seqWork.stage (0x804CF364).
+    // Guest words read as the current and next sequence (.sdata, r13-0x7E48 / -0x7E44) and the stage.
     static constexpr const char* kSeqNames[] = {"logo", "title", "game", "mapchange", "gameover", "load"};
     static uint32_t s_last = 0xFFFFFFFFu;
     uint32_t now = 0, next = 0, stage = 0;
@@ -605,10 +603,7 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
             InvokeIndirectCpu(preCb, ctx);
         }
         if (postCb) {
-            // Mario Kart Wii gated this on EGG::BaseSystem::sSystem being non-null because its
-            // callback dereferenced it during early boot. NSMBW has no BaseSystem (its EGG is the
-            // older TSystem<...>), and none of its direct VISetPostRetraceCallback calls install a
-            // callback, so follow the SDK: call whatever callback is set.
+            // Follow the SDK: call whatever callback is set.
             InvokeIndirectCpu(postCb, ctx);
         }
     }
@@ -854,7 +849,7 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
             g_gxDrawIdx = 0;
             g_gxCullOff = envTest ? envTest : ((cullTest && pf >= 6900u) ? 2 : 0);
         }
-        // SPM bring-up: with drawdump.txt present, report any guest write into the DOL's
+        // Bring-up: with drawdump.txt present, report any guest write into the DOL's
         // read-only sections (.rodata/.sdata2) once the game has been running a while.
         if (s_presentedXfbFrames.load(std::memory_order_relaxed) == 3000u && std::ifstream("drawdump.txt").good()) {
             std::ifstream dol(RuntimeConfigFile::ResolvedDvdRoot() / "sys" / "main.dol", std::ios::binary);
@@ -874,14 +869,11 @@ void VI_HLE_PresentFrame(bool presentedXfb, bool paceToRetrace) {
                 RT_LOGF(RT_TAG_VI, "[rocheck] section 0x%08X checked, %d diffs shown\n", addr, reported);
             }
         }
-        // NSMBW: lift the runtime's startup cover at the game's first visible frame. Mario Kart's
-        // runtime lifted it from a StrapScene::CheckInput hook that auto-accepted its strap screen;
-        // NSMBW shows its own Wii Strap screen instead, and the player presses A as on a console.
+        // Log the game's first visible frame.
         static std::once_flag firstVisibleFrame;
         if (!g_vi.black) {
             std::call_once(firstVisibleFrame, [] {
-                // The cover now stays up until the player presses A or 2 (hle/input/kpad.cpp).
-                RT_LOGF(RT_TAG_VI, "first visible guest frame presented; waiting for A or 2 to lift the startup cover\n");
+                RT_LOGF(RT_TAG_VI, "first visible guest frame presented\n");
             });
         }
     }
@@ -1418,7 +1410,7 @@ extern "C" void VIWaitForRetrace_HLE_801b99ec(CpuContext* ctx)
 }
 PPC_NATIVE_OVERRIDE_VOID(8010AFA0, VIWaitForRetrace_HLE_801b99ec, (CpuContext* ctx), (ctx));
 
-// VIGetScanMode (SPM 0x8028211C): reads the VI clock/DTV registers on hardware. The host has no
+// VIGetScanMode: reads the VI clock/DTV registers on hardware. The host has no
 // cable, so report interlaced (VI_INTERLACE = 0), the mode every NTSC console supports.
 extern "C" uint32_t VIGetScanMode_HLE() { return 0; }
 

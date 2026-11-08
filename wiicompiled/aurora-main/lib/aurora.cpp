@@ -1158,7 +1158,7 @@ std::shared_ptr<PresentationImage> acquire_presentation_image(size_t slot, uint3
   return image;
 }
 
-// NSMBW V-Sync: how long the last presentation waited to acquire a swapchain image. A long wait
+// V-Sync: how long the last presentation waited to acquire a swapchain image. A long wait
 // means the flip queue is backed up (frames queued while V-Sync was switched on); with the game's
 // clock locked to the display that backlog never drains by itself, so the presenter drops a frame.
 std::atomic<int64_t> g_lastAcquireNanos{0};

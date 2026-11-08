@@ -4705,7 +4705,7 @@ TEST_F(GXFifoTest, CopyTexUsesExactRationalScaledEdgesBeforeClearing) {
 
 TEST_F(GXFifoTest, CopyTexClearDoesNotOverlapFractionalLeftEdge) {
   std::array<u8, 152 * 114 * 4> image{};
-  // MKW split-screen scratch-copy geometry from the regression capture: the scaled source edge is
+  // Split-screen scratch-copy geometry from the regression capture: the scaled source edge is
   // x=492.975, so flooring clears column 492 while the matching viewport rasterizes from 493.
   aurora::gfx::testing::set_framebuffer_sizes(640, 528, 939, 528);
   gxState().pixelFmt = GX_PF_RGBA6_Z24;

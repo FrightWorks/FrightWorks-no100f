@@ -7,7 +7,7 @@ public sealed class KamekChunk
 {
     public const uint Magic0 = 0x4B616D65;
     /// <summary>
-    /// Kamek v2 is still emitted by current Retro Rewind releases. Its command
+    /// Kamek v2 is still emitted by current mod releases. Its command
     /// stream matches v3, but combined v2 files carry each chunk length only in
     /// the outer size table.
     /// </summary>

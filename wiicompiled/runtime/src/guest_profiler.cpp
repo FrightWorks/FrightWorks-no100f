@@ -51,7 +51,7 @@ void Report(const std::unordered_map<uintptr_t, uint32_t>& samples, const std::v
             uint32_t total) {
     // Every translated function's host entry point, sorted, to find which one a sample falls in.
     std::vector<Entry> entries;
-    for (const auto& [lo, hi] : {std::pair{0x80011B78u, 0x80319180u}, std::pair{0x80BF691Cu, 0x80C5A648u}}) {  // SPM main.dol text, relF text
+    for (const auto& [lo, hi] : {std::pair{0x80011B78u, 0x80319180u}, std::pair{0x80BF691Cu, 0x80C5A648u}}) {  // guest code ranges to index
         for (uint32_t address = lo; address < hi; address += 4) {
             if (const TranslatedFunctionInfo* info = TranslatedFunctionRegistry::FindByAddressPtr(address);
                 info != nullptr && info->entryPoint != nullptr && info->address == address) {
@@ -221,7 +221,7 @@ void OnFramePresented() {
     }
     started = true;
     const char* value = std::getenv("NO100F_PROFILE");
-    // SPM: also read "<start>:<length>" from profile.txt beside the executable (the test loop's switch).
+    // Also read "<start>:<length>" from profile.txt beside the executable (the test loop's switch).
     static char fileValue[64] = {};
     if (value == nullptr) {
         char exePath[MAX_PATH] = {};

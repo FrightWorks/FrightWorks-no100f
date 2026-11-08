@@ -47,12 +47,12 @@ public class ContinuationPlannerTests
         var manifest = new BaseManifest(
             "test",
             1,
-            "RMCP01",
+            "TEST01",
             "P",
             "",
             0,
             [
-                new BaseSectionMetadata(".text", "StaticR.rel", 0x807EFFF0u, 0x807F0100u, true, false, "base_text.bin", 0)
+                new BaseSectionMetadata(".text", "module.rel", 0x807EFFF0u, 0x807F0100u, true, false, "base_text.bin", 0)
             ],
             [
                 new BaseFunctionRangeMetadata(0x807EFFE0u, 0x807F0100u, "func_807EFFE0", ".text", 0, "test", ["Executable"])
@@ -148,12 +148,12 @@ public class ContinuationPlannerTests
         new(
             "test",
             1,
-            "RMCP01",
+            "TEST01",
             "P",
             "",
             0,
             [
-                new BaseSectionMetadata(".text", "StaticR.rel", 0x807E2D18u, 0x807E30ACu, true, false, "base_text.bin", 0)
+                new BaseSectionMetadata(".text", "module.rel", 0x807E2D18u, 0x807E30ACu, true, false, "base_text.bin", 0)
             ],
             [
                 new BaseFunctionRangeMetadata(0x807E2D18u, 0x807E30ACu, "func_807E2D18", ".text", 0, "test", ["Executable"])

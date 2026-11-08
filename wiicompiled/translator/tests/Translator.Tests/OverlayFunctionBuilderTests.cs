@@ -41,7 +41,7 @@ public class OverlayFunctionBuilderTests
             var manifest = new BaseManifest(
                 "test",
                 1,
-                "RMCP01",
+                "TEST01",
                 "P",
                 "",
                 0,

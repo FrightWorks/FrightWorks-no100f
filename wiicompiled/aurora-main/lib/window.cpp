@@ -326,7 +326,7 @@ bool SDLCALL lifecycle_event_watch(void*, SDL_Event* event) {
   case SDL_EVENT_WINDOW_RESTORED:
     g_backgrounded.store(false, std::memory_order_relaxed);
     break;
-  // NSMBW: a phone app is killed, never shut down, so the pipelines compiled while playing are
+  // A phone app is killed, never shut down, so the pipelines compiled while playing are
   // saved for the next launch when it leaves the screen (Dawn's device is internally locked).
   case SDL_EVENT_WILL_ENTER_BACKGROUND:
   case SDL_EVENT_TERMINATING:

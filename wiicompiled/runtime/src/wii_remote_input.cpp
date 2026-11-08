@@ -69,7 +69,7 @@ constexpr uint32_t kWpadLeft = 0x0001, kWpadRight = 0x0002, kWpadDown = 0x0004, 
                    kWpadPlus = 0x0010, kWpadTwo = 0x0100, kWpadOne = 0x0200, kWpadB = 0x0400, kWpadA = 0x0800,
                    kWpadMinus = 0x1000, kWpadZ = 0x2000, kWpadC = 0x4000, kWpadHome = 0x8000;
 
-// NSMBW bring-up: scripted Wii Remote input for automated runs without a remote.
+// Bring-up: scripted Wii Remote input for automated runs without a remote.
 // NO100F_INPUT_SCRIPT="5000:A:200,9000:A+TWO:150:2" holds the named buttons for <duration> ms
 // (default 150) starting <time> ms after the game's first input read (in deterministic mode: after
 // boot, on the virtual clock), on channel 1 or the channel given as a fourth field. While the
@@ -111,7 +111,7 @@ const InputScript& Script() {
         // A network session (after the restart out of a room) has a script of its own, so a test
         // can drive the menus before the restart and the game after it.
         const char* text = std::getenv(NetplaySession::Active() ? "NO100F_SESSION_SCRIPT" : "NO100F_INPUT_SCRIPT");
-        // SPM test loop: the same script from input_script.txt beside the executable (no env needed).
+        // Test loop: the same script from input_script.txt beside the executable (no env needed).
         static std::string fileText;
         if (text == nullptr || *text == '\0') {
             if (const auto dir = RuntimeConfigFile::ExecutableDirectory()) {
@@ -717,11 +717,11 @@ static Kind RealKind(uint32_t chan) {
     return Kind::NotWii;
 }
 
-// The real Wii controller on the port; otherwise, for NSMBW, a bare remote when the keyboard or a
+// The real Wii controller on the port; otherwise a bare remote when the keyboard or a
 // gamepad stands in for one there (VirtualRemote).
 Kind EffectiveKind(uint32_t chan) {
     if (chan >= PAD_MAX_CONTROLLERS) return Kind::NotWii;
-    if (Script().active && chan < Script().remotes) return Kind::Remote;  // NSMBW bring-up scripted remotes
+    if (Script().active && chan < Script().remotes) return Kind::Remote;  // Scripted remotes
     const Kind real = RealKind(chan);
     if (IsKpadKind(real)) return real;
     return VirtualRemote::Present(chan) ? Kind::Remote : real;

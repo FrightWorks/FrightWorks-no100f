@@ -66,7 +66,7 @@ Relative paths resolve from `workspace_root`, which itself resolves from the man
 -  `generate-data-init --project path`
 -  `emit-base-manifest --project path`
 -  `emit-build-shards --project path`
--  `translate-mod --project path [--profile name] ...` - static Kamek/Pulsar module translation
+-  `translate-mod --project path [--profile name] ...` - static Kamek module translation
 
 Any command prints its own option list with `--help`.
 
