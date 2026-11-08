@@ -274,7 +274,7 @@ A fresh `Play` copy starts with an empty shader and pipeline cache (`UserData\Ca
 
 The pieces are in `tools/testkit/` and are meant for every automated game run (`level-sweep.py` and the PowerShell scripts have not been moved onto them yet):
 - `launch.py`: the one launch helper. Its own copy of `Play\` in a folder you give it (the HD pack and button icons are linked, never copied; deleting never follows a link),
-  its own `Config.toml` (windowed, rumble off, muted), the environment scrubbed of leftover `NO100F_*`, `AX_*`, `NSMBW_*`, `AUDIO_*` switches and of
+  its own `Config.toml` (windowed, rumble off, muted), the environment scrubbed of leftover `NO100F_*`, `AX_*`, `AUDIO_*` switches and of
   `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS` (never set it: SDL then refuses the game's own hint call and the game treats that as an error).
   Controller isolation, per game process only, so your own game is unaffected: `NO100F_INPUT_SCRIPT` set (the game reports pad 1 connected, nothing pressed) and
   `SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT=0xDEAD/0xBEEF`, an ID no controller has, so a real pad's presses do not reach the game

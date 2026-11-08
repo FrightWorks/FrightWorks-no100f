@@ -74,7 +74,7 @@ while True:
     if mode == "crash" and now > 1.0:
         sys.exit(3)
     if mode == "fault" and now > 1.0 and not os.path.exists("fault-printed"):
-        print("MKW AccessViolation at 0x80001234", file=sys.stderr, flush=True)
+        print("AccessViolation at 0x80001234", file=sys.stderr, flush=True)
         open("fault-printed", "w").close()
     if in_play():
         if os.path.exists("devmenu_press.txt"):

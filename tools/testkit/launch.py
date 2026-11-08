@@ -11,7 +11,7 @@ Every run gets, with nothing left to the caller:
     in a folder of the caller's, so the player's Play\\, Config.toml and saves are never touched and need no putting back;
   * a Config.toml of its own: windowed, rumble off (`[controller] rumble = false`), sound muted;
   * the environment of the game process scrubbed of every test switch the caller's shell may have left behind
-    (NO100F_*, AX_*, NSMBW_*, AUDIO_*, AURORA_*, SPM_*, BUTTON_ICONS) and of SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS,
+    (NO100F_*, AX_*, AUDIO_*, AURORA_*, BUTTON_ICONS) and of SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS,
     which must never be set (SDL then refuses the game's own hint call, and the game treats that as an error);
   * controller isolation: NO100F_INPUT_SCRIPT set (the game then reports pad 1 connected every frame) and
     SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT set to a device ID that does not exist, so no real controller reaches the
@@ -34,7 +34,7 @@ REPO = Path(__file__).resolve().parent.parent.parent
 EXE_NAMES = ("FrightWorks Game.exe", "FrightWorks Game")
 IGNORE_PADS_EXCEPT = "0xDEAD/0xBEEF"   # no controller has this vendor/product ID
 DUMMY_PAD_SCRIPT = "none"              # any non-empty text without events: pad 1 reports connected, nothing is pressed
-SCRUB_PREFIXES = ("NO100F_", "AX_", "NSMBW_", "AUDIO_", "AURORA_", "SPM_")
+SCRUB_PREFIXES = ("NO100F_", "AX_", "AUDIO_", "AURORA_")
 SCRUB_NAMES = ("BUTTON_ICONS", "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "SDL_GAMECONTROLLER_IGNORE_DEVICES",
                "SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT", "SDL_WINDOW_ACTIVATE_WHEN_SHOWN")
 CRASH_PATTERN = re.compile(r"AccessViolation|OS panic|missing_target|Unhandled|FATAL|Fatal Error")
