@@ -1,5 +1,5 @@
 diff --git a/wiicompiled/aurora-main/lib/dolphin/gx/GXFrameBuffer.cpp b/wiicompiled/aurora-main/lib/dolphin/gx/GXFrameBuffer.cpp
-index 8b5ec00..87d789d 100644
+index fa5c477..5288427 100644
 --- a/wiicompiled/aurora-main/lib/dolphin/gx/GXFrameBuffer.cpp
 +++ b/wiicompiled/aurora-main/lib/dolphin/gx/GXFrameBuffer.cpp
 @@ -50,6 +50,10 @@ CopyClearState get_copy_clear_state(GXBool clear) {

@@ -247,7 +247,7 @@ diff --git a/wiicompiled/aurora-main/lib/gx/gx.cpp b/wiicompiled/aurora-main/lib
 index 955e2e0..17637b2 100644
 --- a/wiicompiled/aurora-main/lib/gx/gx.cpp
 +++ b/wiicompiled/aurora-main/lib/gx/gx.cpp
-@@ -29,6 +29,7 @@ extern "C" unsigned g_spmAudit[8];
+@@ -29,6 +29,7 @@ extern "C" unsigned g_gxAudit[8];
  #include <cstring>
  #include <mutex>
  #include <optional>
@@ -271,7 +271,7 @@ index 955e2e0..17637b2 100644
 +
  gfx::TextureHandle resolve_static_texture(const GXTexObj_& obj) {
    ZoneScoped;
-   static const bool spmTexNoCache = std::getenv("SPM_TEX_NOCACHE") != nullptr;
+   static const bool gxTexNoCache = std::getenv("NO100F_TEX_NOCACHE") != nullptr;
 @@ -654,6 +665,7 @@ gfx::TextureHandle resolve_static_texture(const GXTexObj_& obj) {
      handle = gfx::new_static_texture_2d(obj.width(), obj.height(), obj.mip_count(), obj.format(),
                                          {static_cast<const uint8_t*>(obj.data), dataSize}, false, nameStr);
@@ -448,7 +448,7 @@ index a796d2e..19dfe36 100644
 +
  # The input expression engine is self-contained, so it can be exercised without
  # linking the runtime or SDL.
- add_executable(mkw_input_expr_tests
+ add_executable(recomp_input_expr_tests
 diff --git a/wiicompiled/runtime/include/no100f_devmenu.h b/wiicompiled/runtime/include/no100f_devmenu.h
 new file mode 100644
 index 0000000..217da0b

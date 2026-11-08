@@ -1,5 +1,5 @@
 diff --git a/wiicompiled/aurora-main/lib/dolphin/gx/GXDispList.cpp b/wiicompiled/aurora-main/lib/dolphin/gx/GXDispList.cpp
-index ecd37fd..c015b7d 100644
+index 1e9bbb5..85c5475 100644
 --- a/wiicompiled/aurora-main/lib/dolphin/gx/GXDispList.cpp
 +++ b/wiicompiled/aurora-main/lib/dolphin/gx/GXDispList.cpp
 @@ -18,6 +18,7 @@ static void process_display_list(const u8* data, u32 nbytes, bool bigEndian) {
@@ -120,13 +120,13 @@ index 80b3b92..1adaa7d 100644
    GX_WRITE_SOME_REG4(8, 0x50, __gx->vcdLo, -12);
    GX_WRITE_SOME_REG4(8, 0x60, __gx->vcdHi, -12);
 diff --git a/wiicompiled/aurora-main/lib/gx/command_processor.cpp b/wiicompiled/aurora-main/lib/gx/command_processor.cpp
-index 1f4f527..9d87573 100644
+index 14edf90..f0b2bd6 100644
 --- a/wiicompiled/aurora-main/lib/gx/command_processor.cpp
 +++ b/wiicompiled/aurora-main/lib/gx/command_processor.cpp
-@@ -38,6 +38,11 @@ int g_spmBBoxArmed = 0;
- unsigned g_spmAudit[8] = {};  // render audit for tools/sweep-spm-maps.py
- unsigned g_spmGameClear = 0;  // the game's own EFB clear colour (0xRRGGBB) while sweeping
- int g_spmCullOff = 0;
+@@ -36,6 +36,11 @@ unsigned g_gxDrawLimit = ~0u;  // diagnostic: only the first N draws of each fra
+ int g_gxBBoxArmed = 0;
+ unsigned g_gxAudit[8] = {};  // render audit counters, shown by the diagnostic logs
+ int g_gxCullOff = 0;
 +unsigned g_no100fGhostList = 0;  // GHOST PROBE: set by the runtime while a ghost-model list replays
 +unsigned g_no100fCurList = 0;    // GHOST PROBE: list being replayed by the runtime (0 = raw FIFO)
 +int g_no100fAfterScooby = 0;
@@ -135,7 +135,7 @@ index 1f4f527..9d87573 100644
  }
  namespace aurora::gx {
  GXState::CopyTextureRef* find_copy_texture_for_texobj(const GXTexObj_& obj) noexcept;  // gx.cpp
-@@ -337,6 +342,13 @@ static inline void mark_pipeline_state_dirty() noexcept {
+@@ -335,6 +340,13 @@ static inline void mark_pipeline_state_dirty() noexcept {
    g_gxState.pipelineStateGeneration = next_gx_state_epoch();
  }
  
@@ -149,7 +149,7 @@ index 1f4f527..9d87573 100644
  // Rejects a malformed XF write in release builds.
  #define XF_REQUIRE(cond, msg, ...)                                                                                     \
    do {                                                                                                                 \
-@@ -909,6 +921,12 @@ static void handle_bp(u32 value, bool bigEndian) {
+@@ -907,6 +919,12 @@ static void handle_bp(u32 value, bool bigEndian) {
      g_gxState.invalidateXfReg(0x3F);
      g_gxState.invalidateXfReg(0x09);
      g_gxState.numTevStages = bp_get(value, 4, 10) + 1;
@@ -162,7 +162,7 @@ index 1f4f527..9d87573 100644
      if (!g_replayingDisplayList) g_gxState.zFreeze = bp_get(value, 1, 19) != 0;
      else  // keep the cached register honest so the game's own coplanar-off write is not deduplicated away
        g_gxState.bpRegCache[0x00] = (g_gxState.bpRegCache[0x00] & ~(1u << 19)) | (u32(g_gxState.zFreeze) << 19);
-@@ -1611,11 +1629,35 @@ void reset_cp_register_cache() {
+@@ -1607,11 +1625,35 @@ void reset_cp_register_cache() {
    s_cpRegisterCacheValid.fill(false);
  }
  
@@ -199,7 +199,7 @@ index 1f4f527..9d87573 100644
    }
    s_cpRegisterCacheValid[addr] = true;
    s_cpRegisterCache[addr] = value;
-@@ -2820,6 +2862,85 @@ static bool admit_draw(GXPrimitive prim, GXVtxFmt fmt, u16 count, uint32_t verte
+@@ -2831,6 +2873,85 @@ static bool admit_draw(GXPrimitive prim, GXVtxFmt fmt, u16 count, uint32_t verte
    return gfx::staging_has_space(demand);
  }
  
@@ -285,15 +285,15 @@ index 1f4f527..9d87573 100644
  bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, uint16_t vtxCount,
                       uint32_t vertexBytes) {
    ZoneScoped;
-@@ -2856,6 +2977,7 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
+@@ -2867,6 +2988,7 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
    }
  
-   ++g_spmAudit[0];
+   ++g_gxAudit[0];
 +  no100f_state_check(prim, fmt, vtxCount, true);  // STATECHECK PROBE
-   spm_dump_draw("raw", static_cast<u8>(prim | fmt), fmt, vtxCount, vtxSize, vertices, false);
-   spm_bbox_accumulate(fmt, vertices, vtxCount, vtxSize, true);
+   gx_dump_draw("raw", static_cast<u8>(prim | fmt), fmt, vtxCount, vtxSize, vertices, false);
+   gx_bbox_accumulate(fmt, vertices, vtxCount, vtxSize, true);
    if (!has_complete_primitive(prim, vtxCount)) return true;
-@@ -2918,6 +3040,84 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
+@@ -2929,6 +3051,84 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
      return false;
    }
  
@@ -375,10 +375,10 @@ index 1f4f527..9d87573 100644
 +               int(fresh.colorUpdate), int(fresh.alphaUpdate));
 +    }
 +  }
-   ++g_spmAudit[0];
+   ++g_gxAudit[0];
    {  // NO100F: where the draw sits in its buffer (env NO100F_VTX_IDX, dump frame only)
      static const unsigned vtxIdx = [] { const char* e = std::getenv("NO100F_VTX_IDX"); return e ? unsigned(std::atoi(e)) : ~0u; }();
-@@ -3235,6 +3435,88 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
+@@ -3246,6 +3446,88 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
      if (flatTest == 10) for (int i = 0; i < 4; ++i) g_gxState.proj.m2.m[i] = i == 3 ? -0.95f * g_gxState.proj.m3.m[3] : 0.f;  // fixed depth, near side
      g_gxState.pipelineStateGeneration = next_gx_state_epoch();
    }
@@ -467,7 +467,7 @@ index 1f4f527..9d87573 100644
    // Callers hold the renderer GPU mutex for the whole drain (process() and submit_raw_draw); taking it again per draw only cost a recursive re-entry.
    const auto& indexTemplate = cached_index_template(prim, vtxCount);
    const u32 numIndices = indexTemplate.indexCount;
-@@ -3318,6 +3600,10 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
+@@ -3366,6 +3648,10 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
      g_gxState.depthUpdate = flatSave->du;
      g_gxState.cullMode = flatSave->cull;
      g_gxState.proj = flatSave->proj;
@@ -479,7 +479,7 @@ index 1f4f527..9d87573 100644
      g_gxState.stateDirty = true;
    }
 diff --git a/wiicompiled/aurora-main/lib/gx/command_processor.hpp b/wiicompiled/aurora-main/lib/gx/command_processor.hpp
-index 25fe6bd..d4bb16d 100644
+index 468cb68..11dcbe4 100644
 --- a/wiicompiled/aurora-main/lib/gx/command_processor.hpp
 +++ b/wiicompiled/aurora-main/lib/gx/command_processor.hpp
 @@ -7,6 +7,7 @@ namespace aurora::gx::fifo {
@@ -489,12 +489,12 @@ index 25fe6bd..d4bb16d 100644
 +void no100f_probe_list_start();  // LISTSTART PROBE
  
  // True while a recorded display list is being replayed. The game's SDK never flushes deferred state (genMode) into a
- // list, so genMode copies Aurora recorded must not switch coplanar mode off (SPM mi1_01 front grass).
+ // list, so genMode copies Aurora recorded must not switch coplanar mode off.
 diff --git a/wiicompiled/runtime/src/hle/gx/gx_dl.cpp b/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
-index b123221..27d6e86 100644
+index 531ed49..b8ded4b 100644
 --- a/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
 +++ b/wiicompiled/runtime/src/hle/gx/gx_dl.cpp
-@@ -7,6 +7,8 @@ extern "C" void aurora_spm_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3);
+@@ -7,6 +7,8 @@ extern "C" void aurora_gx_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3);
  
  #include <cstdlib>
  #include <unordered_map>
@@ -513,7 +513,7 @@ index b123221..27d6e86 100644
  
      auto& s_cache = DlScanCache();
      const uint64_t key = DlScanCacheKey(listAddr, nbytes, layoutHash);
-@@ -1325,8 +1328,158 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
+@@ -1324,8 +1327,158 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
      return false;
  }
  
@@ -669,10 +669,10 @@ index b123221..27d6e86 100644
 +            if ((nCalls % 100000) == 0) RT_LOGF(RT_TAG_GX, "[vcdsync] %u calls, %u mismatches\n", nCalls, nBad);
 +        }
 +    }
-     static const int s_skipId = std::getenv("SPM_SKIP_MATDL") ? std::atoi(std::getenv("SPM_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>
+     static const int s_skipId = std::getenv("NO100F_SKIP_MATDL") ? std::atoi(std::getenv("NO100F_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>
      static bool s_skipNext = false;
      try {
-@@ -1466,7 +1619,8 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
+@@ -1451,7 +1604,8 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
              scanOk = ScanDisplayListMaxIndices(list, nbytes, maxIdx, sawIdx, maxXfIdx, maxXfBytes, sawXfIdx,
                                                 &dlVtxFmt, &dlVtxFmtMixed, &dlHasNestedDl,
                                                 &dlHasArrayStateWrites, &dlHasCpWrites, &cpWrites);
@@ -682,7 +682,7 @@ index b123221..27d6e86 100644
              bool flattenVerbatim = true;
              auto& flattened = FlattenDisplayListScratch();
              if (needsFlatten) {
-@@ -1552,6 +1706,32 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
+@@ -1537,6 +1691,32 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
                  EnsureAuroraFrameActive();
                  GXMarkFrameWork();
                  GXCallDisplayList(list, nbytes);
@@ -690,7 +690,7 @@ index b123221..27d6e86 100644
 +                    static uint32_t nLists = 0, nBad = 0;
 +                    static std::unordered_map<uint64_t, uint32_t> seenBad;
 +                    uint8_t desc[26], vat[8 * 26 * 3];
-+                    aurora_spm_vtx_state(desc, vat);
++                    aurora_gx_vtx_state(desc, vat);
 +                    ++nLists;
 +                    std::string why;
 +                    for (int a = GX_VA_PNMTXIDX; a <= GX_VA_TEX7; ++a) {
@@ -716,7 +716,7 @@ index b123221..27d6e86 100644
                  SyncAppliedVtxStateFromHleReal();
                  return;
 diff --git a/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp b/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp
-index 26eb176..d7caaaf 100644
+index 2fb255b..2b6052f 100644
 --- a/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp
 +++ b/wiicompiled/runtime/src/hle/gx/gx_fifo.cpp
 @@ -41,20 +41,84 @@ PPC_NATIVE_OVERRIDE_VOID(800FCBDC, No100f_GXEnableBreakPt, (uint32_t breakPt), (

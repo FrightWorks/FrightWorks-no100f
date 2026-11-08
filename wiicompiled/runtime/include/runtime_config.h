@@ -1369,7 +1369,7 @@ inline std::string DvdRoot(std::string fallback = "") {
 
 // The one resolver for configured paths. A relative value means the same thing
 // everywhere it can be configured: relative to the config file that named it,
-// never to the process working directory (docs/WHEELWIZARD_CONTRACT.md).
+// never to the process working directory.
 inline std::filesystem::path ResolveRelativeTo(const std::filesystem::path& base,
                                                const std::string& value) {
     std::filesystem::path path = PathFromUtf8(value);

@@ -1,8 +1,8 @@
 diff --git a/wiicompiled/runtime/src/hle/vi.cpp b/wiicompiled/runtime/src/hle/vi.cpp
-index c9d68ec..8e1e7d9 100644
+index def6fa6..37baf41 100644
 --- a/wiicompiled/runtime/src/hle/vi.cpp
 +++ b/wiicompiled/runtime/src/hle/vi.cpp
-@@ -32,6 +32,11 @@
+@@ -31,6 +31,11 @@
  #include <string>
  #include <cstdint>
  #include <cstdio>
@@ -14,7 +14,7 @@ index c9d68ec..8e1e7d9 100644
  #include <iostream>
  #include <mutex>
  #include <thread>
-@@ -1337,8 +1342,186 @@ extern "C" void VISetBlack_HLE_801bab2c(CpuContext* ctx)
+@@ -1303,8 +1308,186 @@ extern "C" void VISetBlack_HLE_801bab2c(CpuContext* ctx)
  }
  PPC_NATIVE_OVERRIDE_VOID(8010BD8C, VISetBlack_HLE_801bab2c, (CpuContext* ctx), (ctx));
  
