@@ -123,7 +123,7 @@ class BuildId:
 
 
 def _git(repo, *args):
-    r = subprocess.run(["git", *args], cwd=str(repo), capture_output=True, text=True)
+    r = subprocess.run(["git", *args], cwd=str(repo), capture_output=True, text=True, encoding="utf-8", errors="replace")
     return r.stdout.rstrip() if r.returncode == 0 else ""
 
 
