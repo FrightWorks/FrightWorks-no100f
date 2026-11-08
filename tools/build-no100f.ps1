@@ -111,17 +111,17 @@ if (-not $SkipTranslate) {
 # 3. Configure and compile with the portable toolchain on a scrubbed PATH
 # git stays reachable for the build ID (runtime/cmake/build_info.cmake: branch, commit, uncommitted changes).
 $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-$env:PATH = Get-MkwToolchainPath $toolchain
+$env:PATH = Get-RecompToolchainPath $toolchain
 $bin = Join-Path $toolchain 'llvm-mingw\bin'
 $build = Join-Path $wc 'native-build'
-$configure = Get-MkwNativeConfigureArguments `
+$configure = Get-RecompNativeConfigureArguments `
     -SourceDirectory (Join-Path $wc 'runtime') -BuildDirectory $build `
     -Ninja (Join-Path $toolchain 'Ninja\ninja.exe') `
     -CCompiler (Join-Path $bin 'x86_64-w64-mingw32-clang.exe') `
     -CxxCompiler (Join-Path $bin 'x86_64-w64-mingw32-clang++.exe') `
     -ResourceCompiler (Join-Path $bin 'x86_64-w64-mingw32-windres.exe') `
     -DependenciesDirectory (Join-Path $wc 'Dependencies') `
-    -AdditionalArguments (@("-DMKW_TRANSLATED_COMPILE_JOBS=$Jobs") + $(if ($git) { "-DMKW_GIT_EXECUTABLE=$($git.Source.Replace('\', '/'))" }))
+    -AdditionalArguments (@("-DRECOMP_TRANSLATED_COMPILE_JOBS=$Jobs") + $(if ($git) { "-DRECOMP_GIT_EXECUTABLE=$($git.Source.Replace('\', '/'))" }))
 $cmake = Join-Path $toolchain 'CMake\bin\cmake.exe'
 Invoke-Step 'configure' $cmake $configure $wc
 if ($ConfigureOnly) { Set-Status 'configure only: done'; exit 0 }

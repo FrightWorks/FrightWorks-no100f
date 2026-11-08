@@ -121,17 +121,17 @@ int main(int argc, char** argv) {
             }
             return 0;
         }
-        const auto saved = MkwGetHostFpControl();
+        const auto saved = RecompGetHostFpControl();
         CpuContext ctx{};
         for (uint32_t ni : {0u, 4u}) for (uint32_t rounding = 0; rounding < 4; ++rounding) {
             ctx.fpscr = ni;
             CpuContextScope scope(&ctx);
 #if defined(__x86_64__)
-            MkwSetHostFpControl((MkwGetHostFpControl() & ~(3u << 13)) | (rounding << 13));
+            RecompSetHostFpControl((RecompGetHostFpControl() & ~(3u << 13)) | (rounding << 13));
 #endif
             Check<0, 0>(); Check<1, 0>(); Check<0, 7>(); Check<1, 7>();
         }
-        MkwRestoreHostMxcsr(saved);
+        RecompRestoreHostMxcsr(saved);
         std::cout << "passed " << checks << " checks, checksum " << std::hex << checksum << '\n';
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

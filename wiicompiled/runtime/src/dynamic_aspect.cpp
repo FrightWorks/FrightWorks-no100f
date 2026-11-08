@@ -33,31 +33,31 @@ constexpr uint32_t kEggScreenProjScaleY = 0x80386F24u;
 
 constexpr uint32_t kEggScreenAspectHandler = 0x802D1B50u;
 
-constexpr uint32_t kMkwUpdateAllScreens = 0x805653D0u;
-constexpr uint32_t kMkwGfxDrawList = 0x809C1830u;
+constexpr uint32_t kRecompUpdateAllScreens = 0x805653D0u;
+constexpr uint32_t kRecompGfxDrawList = 0x809C1830u;
 constexpr uint32_t kSystemManagerInstance = 0x80386000u;
 
 // The draw list is an nw4r::ut::List: +0x00 head, +0x04 tail, +0x08 u16 count,
 // +0x0A u16 link offset, with next = *(node + linkOffset + 4) (List_GetNext,
 // 0x80228FF0).
-constexpr uint32_t kMkwGfxDrawListLinkOffset = 0x0Au;
+constexpr uint32_t kRecompGfxDrawListLinkOffset = 0x0Au;
 
-constexpr uint32_t kMkwGfxOffscreenList = 0x809C183Cu;
-constexpr uint32_t kMkwGfxOffscreenNodeScreenSlot = 0x10u;
+constexpr uint32_t kRecompGfxOffscreenList = 0x809C183Cu;
+constexpr uint32_t kRecompGfxOffscreenNodeScreenSlot = 0x10u;
 constexpr uint32_t kEggScreenVTableOffset = 0x38u;
 constexpr uint32_t kEggScreenVTable = 0x802A3F0Cu;
-constexpr uint32_t kMkwScreenVTable = 0x808B4C20u;
+constexpr uint32_t kRecompScreenVTable = 0x808B4C20u;
 constexpr uint32_t kEggScreenFlagsOffset = 0x34u;
 constexpr uint16_t kEggScreenFlagFramebufferCanvas = 0x0008u;
 constexpr uint16_t kEggScreenFlagKeepFrustumScale = 0x0040u;
-constexpr uint32_t kMkwGfxNodeScreenSlots[] = {0x10u, 0x28u, 0x2Cu};
+constexpr uint32_t kRecompGfxNodeScreenSlots[] = {0x10u, 0x28u, 0x2Cu};
 
 bool IsEggScreen(uint32_t address) {
     if (address == 0 || (address & 3u) != 0 || !Memory::Contains(address, 0x40u)) {
         return false;
     }
     const uint32_t vtable = Memory::Read32(address + kEggScreenVTableOffset);
-    return vtable == kMkwScreenVTable || vtable == kEggScreenVTable;
+    return vtable == kRecompScreenVTable || vtable == kEggScreenVTable;
 }
 
 void KeepFrustumScale(uint32_t screen) {
@@ -90,20 +90,20 @@ void SweepGfxNodeList(uint32_t list, bool offscreenList) {
     if (!Memory::Contains(list, 0x0Cu)) {
         return;
     }
-    const uint32_t linkOffset = Memory::Read16(list + kMkwGfxDrawListLinkOffset);
+    const uint32_t linkOffset = Memory::Read16(list + kRecompGfxDrawListLinkOffset);
     // The on-screen walk also reads the menu node's parked-screen slots at
     // +0x28/+0x2C, which sit past the link words on small nodes.
     const uint32_t nodeSpan =
-        std::max(linkOffset + 8u, offscreenList ? 0u : kMkwGfxNodeScreenSlots[2] + 4u);
+        std::max(linkOffset + 8u, offscreenList ? 0u : kRecompGfxNodeScreenSlots[2] + 4u);
     uint32_t node = Memory::Read32(list);
     for (int guard = 0; node != 0 && guard < 64; ++guard) {
         if (!Memory::Contains(node, nodeSpan)) {
             break;
         }
         if (offscreenList) {
-            KeepFrustumScale(Memory::Read32(node + kMkwGfxOffscreenNodeScreenSlot));
+            KeepFrustumScale(Memory::Read32(node + kRecompGfxOffscreenNodeScreenSlot));
         } else {
-            for (const uint32_t slot : kMkwGfxNodeScreenSlots) {
+            for (const uint32_t slot : kRecompGfxNodeScreenSlots) {
                 KeepFrustumScaleOnFramebufferCanvasScreen(Memory::Read32(node + slot));
             }
         }
@@ -123,8 +123,8 @@ void AssertOffscreenScreenBypass() {
 void WriteEggScreenRecord(uint32_t recordAddr, uint32_t width) {
     Memory::Write16(recordAddr, static_cast<uint16_t>(width));
     Memory::Write16(recordAddr + 0x02u,
-                    static_cast<uint16_t>(MkwDynamicAspect::kEggScreenHeight));
-    Memory::WriteFloat32(recordAddr + 0x04u, MkwDynamicAspect::EggHorizontalScale(width));
+                    static_cast<uint16_t>(RecompDynamicAspect::kEggScreenHeight));
+    Memory::WriteFloat32(recordAddr + 0x04u, RecompDynamicAspect::EggHorizontalScale(width));
     Memory::WriteFloat32(recordAddr + 0x08u, 1.0f);
 }
 
@@ -140,7 +140,7 @@ void ApplyEggScreenRecords(uint32_t surfaceWidth, uint32_t surfaceHeight) {
 } // namespace
 
 
-void AssertMkwOffscreenScreenBypass() {
+void AssertRecompOffscreenScreenBypass() {
     static int lastSweptFrame = -1;
     if (lastSweptFrame == g_gxFrameCount) {
         return;
@@ -149,7 +149,7 @@ void AssertMkwOffscreenScreenBypass() {
     AssertOffscreenScreenBypass();
 }
 
-void UpdateMkwDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight) {
+void UpdateRecompDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight) {
     const bool requestedForceAspect169 = g_requestedForceAspect169.load(std::memory_order_acquire);
     if (g_forceAspect169 != requestedForceAspect169) {
         g_forceAspect169 = requestedForceAspect169;
@@ -178,15 +178,15 @@ void UpdateMkwDynamicAspectSurface(uint32_t surfaceWidth, uint32_t surfaceHeight
                           g_forceAspect169 ? 9u : surfaceHeight);
 }
 
-void SetMkwForceAspect169(bool enabled) {
+void SetRecompForceAspect169(bool enabled) {
     g_requestedForceAspect169.store(enabled, std::memory_order_release);
 }
 
-bool MkwForceAspect169Requested() {
+bool RecompForceAspect169Requested() {
     return g_requestedForceAspect169.load(std::memory_order_acquire);
 }
 
-void ConfigureMkwDynamicAspect(bool widescreen, bool forceAspect169, uint32_t surfaceWidth, uint32_t surfaceHeight) {
+void ConfigureRecompDynamicAspect(bool widescreen, bool forceAspect169, uint32_t surfaceWidth, uint32_t surfaceHeight) {
     g_widescreenSetting = widescreen;
     g_widescreenConfigured = widescreen || forceAspect169;
     g_forceAspect169 = forceAspect169;

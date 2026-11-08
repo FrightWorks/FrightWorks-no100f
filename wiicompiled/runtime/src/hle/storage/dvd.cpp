@@ -880,7 +880,7 @@ static void BuildAndPublishRuntimeFst() {
               << image.bytes.size() << " bytes) at 0x" << std::hex << fstAddress
               << " inside the boot-time MEM2 reservation" << std::dec << std::endl;
 
-    if (const char* dumpPath = std::getenv("MKW_DUMP_FST")) {
+    if (const char* dumpPath = std::getenv("NO100F_DUMP_FST")) {
         std::ofstream dump(dumpPath, std::ios::binary);
         dump.write(reinterpret_cast<const char*>(image.bytes.data()),
                    static_cast<std::streamsize>(image.bytes.size()));
@@ -967,7 +967,7 @@ extern "C" void DVDInit_8015EA1C()
     ScanDirectory(rootPath / "sys", "/sys/");
 
     const auto& overlays = RuntimeRiivolution::Overlays();
-    if (overlays.empty() && RuntimeProduct::IsRetroRewind()) {
+    if (overlays.empty() && RuntimeProduct::IsModProduct()) {
         RT_LOG(RT_TAG_DVD) << "WARNING: no Retro Rewind overlay root was found. "
                      "File replacements (menu archives, karts, drivers, courses) will not apply "
                      "and the game will look and play like the unmodded disc. Set "

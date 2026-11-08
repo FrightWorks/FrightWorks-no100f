@@ -221,7 +221,7 @@ int RunEmitBuildShards(string[] argsTail)
     var output = OptionValue(argsTail, "--out") ?? Path.Combine(root, "generated", "build_shards");
     var nativeSources = OptionValue(argsTail, "--native-source-dir") ?? Path.Combine(root, "runtime", "src");
     var resolvedProfile = OptionValue(argsTail, "--resolved-profile");
-    var retroCpp = OptionValue(argsTail, "--retro-cpp-dir");
+    var modCpp = OptionValue(argsTail, "--retro-cpp-dir");
 
     try
     {
@@ -233,7 +233,7 @@ int RunEmitBuildShards(string[] argsTail)
             Path.GetFullPath(output),
             nativeSourcePath,
             string.IsNullOrWhiteSpace(resolvedProfile) ? null : Path.GetFullPath(resolvedProfile),
-            string.IsNullOrWhiteSpace(retroCpp) ? null : Path.GetFullPath(retroCpp),
+            string.IsNullOrWhiteSpace(modCpp) ? null : Path.GetFullPath(modCpp),
             NativeIndex: nativeIndex));
         Console.WriteLine("[translator] emitted stable translated build graph");
         Console.WriteLine($"  base functions: {result.BaseFunctionCount:N0}");
@@ -2004,7 +2004,7 @@ void WriteResolvedDispatchProfile(
         Path.Combine(outDir, "resolved_dispatch_profile.json"),
         new
         {
-            Format = "mkwii-resolved-dispatch-profile",
+            Format = "recompii-resolved-dispatch-profile",
             FormatVersion = 1,
             NativeOverriddenModPatches = nativeOverriddenModPatches,
             Entries = resolved

@@ -411,7 +411,7 @@ void GuestFiberManager::SwitchToThread(uint32_t guestThreadAddr, CpuContext* cpu
         // FPSCR travels with the guest-thread context, and its NI bit is
         // modeled through the per-host-thread MXCSR; every context restore
         // must re-mirror it.
-        MkwApplyHostNiMode(cpu->fpscr);
+        RecompApplyHostNiMode(cpu->fpscr);
     }
 
     // Switch to the target fiber (the target fiber will load its own context)
@@ -442,7 +442,7 @@ void GuestFiberManager::SwitchToThread(uint32_t guestThreadAddr, CpuContext* cpu
             if (it != s_fibers.end()) {
                 if (cpu) {
                     *cpu = it->second.cpuContext;
-                    MkwApplyHostNiMode(cpu->fpscr);
+                    RecompApplyHostNiMode(cpu->fpscr);
                 }
                 it->second.state = ThreadState::RUNNING;
             }
@@ -450,7 +450,7 @@ void GuestFiberManager::SwitchToThread(uint32_t guestThreadAddr, CpuContext* cpu
         } else {
             if (cpu && haveCallerContext) {
                 *cpu = callerContext;
-                MkwApplyHostNiMode(cpu->fpscr);
+                RecompApplyHostNiMode(cpu->fpscr);
             }
             s_currentGuestThread = 0;
         }

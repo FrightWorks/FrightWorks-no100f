@@ -166,7 +166,7 @@ public sealed partial class CxxLinearCodeGenerator
                 if (members.Count >= MinimumGpuFifoBurstStores)
                 {
                     var total = members.Sum(static member => member.Store.ByteLength);
-                    var run = new GpuFifoBurstRun($"mkw_fifo_burst_{runs.Count}", total);
+                    var run = new GpuFifoBurstRun($"recomp_fifo_burst_{runs.Count}", total);
                     runs.Add(run);
                     var offset = 0;
                     foreach (var (memberIndex, store) in members)
@@ -209,11 +209,11 @@ public sealed partial class CxxLinearCodeGenerator
             ? $"PpcBitCastToU32Inline(static_cast<float>({srcExpr}))"
             : $"static_cast<uint32_t>({srcExpr})";
         sb.AppendLine($"{pad}{{");
-        sb.AppendLine($"{pad}    const uint32_t mkw_fifo_word = {word};");
+        sb.AppendLine($"{pad}    const uint32_t recomp_fifo_word = {word};");
         for (var byteIndex = 0; byteIndex < slot.Store.ByteLength; byteIndex++)
         {
             var shift = (slot.Store.ByteLength - 1 - byteIndex) * 8;
-            var shifted = shift == 0 ? "mkw_fifo_word" : $"(mkw_fifo_word >> {shift})";
+            var shifted = shift == 0 ? "recomp_fifo_word" : $"(recomp_fifo_word >> {shift})";
             sb.AppendLine($"{pad}    {buffer}[{slot.ByteOffset + byteIndex}] = static_cast<uint8_t>({shifted});");
         }
         sb.AppendLine($"{pad}}}");

@@ -8,7 +8,7 @@
 
 namespace NetworkHle {
 
-bool RetroRewindProfileActive();
+bool ModProductActive();
 
 static std::mutex g_mutex;
 static std::map<int32_t, DeviceKind> g_devices;
@@ -60,8 +60,8 @@ std::string Lower(std::string_view text) {
     return RuntimeHle::Lower(text);
 }
 
-bool RetroRewindProfileActive() {
-    return RuntimeProduct::IsRetroRewind();
+bool ModProductActive() {
+    return RuntimeProduct::IsModProduct();
 }
 
 bool StartsWith(std::string_view text, std::string_view prefix) {

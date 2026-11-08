@@ -37,7 +37,7 @@ template <typename T> void Write(uint32_t addr, T value) {
 namespace GuestFlat {
 inline bool RequiresCheckedAccess() noexcept { return true; }
 }
-#define MKW_FLAT_GUEST_BASE (PsqTestMemory::bytes.data())
+#define RECOMP_FLAT_GUEST_BASE (PsqTestMemory::bytes.data())
 
 class Memory {
 public:

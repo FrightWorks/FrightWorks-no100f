@@ -21,7 +21,7 @@ public class SdaAndGeneratorTests
                 SyntheticDolFactory.Text(0, entry, 0x60000000)
             ]);
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_runtime_config_tests");
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_runtime_config_tests");
         Directory.CreateDirectory(tempDir);
         var output = Path.Combine(tempDir, "RuntimeConfig.generated.h");
 
@@ -43,7 +43,7 @@ public class SdaAndGeneratorTests
                 SyntheticDolFactory.Text(0, entry, 0x60000000)
             ]);
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_runtime_config_write_tests");
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_runtime_config_write_tests");
         Directory.CreateDirectory(tempDir);
         var output = Path.Combine(tempDir, "RuntimeConfig.generated.h");
 
@@ -70,7 +70,7 @@ public class SdaAndGeneratorTests
             ]);
 
         var rel = new RelImage(new byte[] { 0x11, 0x22, 0x33 }, 0x80510000);
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_data_section_tests");
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_data_section_tests");
         Directory.CreateDirectory(tempDir);
         var output = Path.Combine(tempDir, "data_sections_init_test.cpp");
 
@@ -97,7 +97,7 @@ public class SdaAndGeneratorTests
                 SyntheticDolFactory.Data(5, 0x80008020, 0x41, 0x20, 0x00, 0x00)
             ]);
 
-        var tempDir = Path.Combine(Path.GetTempPath(), "mkw_data_section_bss_overlap_tests");
+        var tempDir = Path.Combine(Path.GetTempPath(), "recomp_data_section_bss_overlap_tests");
         Directory.CreateDirectory(tempDir);
         var output = Path.Combine(tempDir, "data_sections_init_overlap_test.cpp");
 
@@ -118,7 +118,7 @@ public class SdaAndGeneratorTests
             [
                 SyntheticDolFactory.Data(5, 0x80008000, 0xAA, 0xBB, 0xCC)
             ]);
-        var tempDir = Path.Combine(Path.GetTempPath(), $"mkw_data_section_staging_{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"recomp_data_section_staging_{Guid.NewGuid():N}");
         try
         {
             var stagedDirectory = Path.Combine(tempDir, "staging");
@@ -149,7 +149,7 @@ public class SdaAndGeneratorTests
     [Fact]
     public void DataSectionGeneratorChangesAssemblyWhenSameSizeBlobContentChanges()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"mkw_data_section_hash_{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"recomp_data_section_hash_{Guid.NewGuid():N}");
         try
         {
             var output = Path.Combine(tempDir, "data_sections_init.cpp");

@@ -28,7 +28,7 @@
 
 // Global flag to suppress SEH reporting during static constructor execution
 bool g_suppressSehReporting = false;
-thread_local MkwJmpBuf* g_sehJumpTarget = nullptr;
+thread_local RecompJmpBuf* g_sehJumpTarget = nullptr;
 thread_local uint32_t g_sehLastExceptionCode = 0;
 thread_local uintptr_t g_sehLastExceptionAddress = 0;
 thread_local uintptr_t g_sehLastAccessedAddress = 0;
@@ -437,7 +437,7 @@ void SystemBridge::SeedLowMemDefaults(const Memory::Config& config) {
     // title's required IOS at 0x80003188 - same major, revision not older - and calls OSFatal
     // ("ERROR #002") otherwise. The boot path leaves the TMD's IOS here; Dolphin writes the IOS word.
     entries.push_back({0x80003188u, kIos36Version, "Title's required IOS (IOS53)"});
-    if (RuntimeProduct::IsRetroRewind()) {
+    if (RuntimeProduct::IsModProduct()) {
         entries.push_back({0x800017D8u, 0x00000001u, "Retro Rewind recomp runtime marker", true});
     }
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef MKW_RUNTIME_LOG_H
-#define MKW_RUNTIME_LOG_H
+#ifndef RUNTIME_LOG_H
+#define RUNTIME_LOG_H
 
 #include <cstdio>
 #include <iostream>
@@ -42,4 +42,4 @@ inline void LogMemoryError(const char* tag, const char* who,
               << e.address() << std::dec << " (" << e.reason() << ")" << std::endl;
 }
 
-#endif // MKW_RUNTIME_LOG_H
+#endif // RUNTIME_LOG_H

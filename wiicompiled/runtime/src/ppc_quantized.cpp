@@ -5,7 +5,7 @@
 #endif
 
 template <uint32_t W, bool Stack>
-MKW_PPC_NO_INLINE MKW_PPC_COLD double PPC_PsqLStateFallback(uint32_t gqr, uint32_t addr)
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD double PPC_PsqLStateFallback(uint32_t gqr, uint32_t addr)
 {
     static_assert(W <= 1u);
     const uint32_t type = (gqr >> 16) & 0x7u;
@@ -37,7 +37,7 @@ MKW_PPC_NO_INLINE MKW_PPC_COLD double PPC_PsqLStateFallback(uint32_t gqr, uint32
 }
 
 template <uint32_t W, bool Stack>
-MKW_PPC_NO_INLINE MKW_PPC_COLD void PPC_PsqStStateFallback(uint32_t gqr, uint32_t addr, double value)
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD void PPC_PsqStStateFallback(uint32_t gqr, uint32_t addr, double value)
 {
     static_assert(W <= 1u);
     const uint32_t type = gqr & 0x7u;
@@ -69,7 +69,7 @@ MKW_PPC_NO_INLINE MKW_PPC_COLD void PPC_PsqStStateFallback(uint32_t gqr, uint32_
 }
 
 template <uint32_t W>
-MKW_PPC_NO_INLINE MKW_PPC_COLD double PPC_PsqLResolvedStateFallback(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD double PPC_PsqLResolvedStateFallback(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr)
 {
     static_assert(W <= 1u);
@@ -103,7 +103,7 @@ MKW_PPC_NO_INLINE MKW_PPC_COLD double PPC_PsqLResolvedStateFallback(
 }
 
 template <uint32_t W>
-MKW_PPC_NO_INLINE MKW_PPC_COLD void PPC_PsqStResolvedStateFallback(
+RECOMP_PPC_NO_INLINE RECOMP_PPC_COLD void PPC_PsqStResolvedStateFallback(
     uint32_t gqr, uint8_t* resolvedHost, uint32_t offset, uint32_t addr, double value)
 {
     static_assert(W <= 1u);

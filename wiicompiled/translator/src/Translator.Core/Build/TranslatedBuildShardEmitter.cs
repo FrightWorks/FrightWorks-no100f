@@ -13,8 +13,8 @@ public sealed record TranslatedBuildShardOptions(
     string BaseFunctionsDirectory,
     string OutputDirectory,
     string NativeSourceDirectory,
-    string? RetroResolvedProfilePath = null,
-    string? RetroCppDirectory = null,
+    string? ModResolvedProfilePath = null,
+    string? ModCppDirectory = null,
     int BaseShardCount = 72,
     int ModShardCount = 48,
     int RegistrationShardCount = 16,
@@ -57,7 +57,7 @@ public sealed record TranslatedBuildShardResult(
 /// </summary>
 public static partial class TranslatedBuildShardEmitter
 {
-    private const string ShardBoundaryFormat = "mkw-base-common-shard-boundaries";
+    private const string ShardBoundaryFormat = "recomp-base-common-shard-boundaries";
     private const int ShardBoundaryVersion = 1;
     // Translator-owned state, not a build product: it lives beside the shards it describes so a
     // checkout carries its frozen membership with its sources. Not a prune candidate, same as
@@ -149,7 +149,7 @@ public static partial class TranslatedBuildShardEmitter
             baseSourceBundle = TranslationSourceBundle.Read(bundlePath);
         }
         var nativeOverrides = ReadNativeOverrides(options.NativeSourceDirectory, options.NativeIndex);
-        var retroEntries = ReadResolvedProfile(options.RetroResolvedProfilePath);
+        var modEntries = ReadResolvedProfile(options.ModResolvedProfilePath);
         var baseRecords = ReadBaseFunctions(metadata, options.BaseFunctionsDirectory, baseSourceBundle);
         foreach (var record in baseRecords)
         {
@@ -182,17 +182,17 @@ public static partial class TranslatedBuildShardEmitter
                 WinnerKind: "base",
                 WinnerPriority: 0u);
         }
-        var rrTraits = new Dictionary<uint, Trait>(BuildRetroTraits(activeBase, baseTraits, retroEntries));
+        var modTraits = new Dictionary<uint, Trait>(BuildModTraits(activeBase, baseTraits, modEntries));
         foreach (var address in nativeOverrides.RawTranslatedOverrides.Keys)
-            rrTraits[address] = baseTraits[address];
-        var sensitiveTargets = FindProfileSensitiveTargets(baseTraits, rrTraits);
+            modTraits[address] = baseTraits[address];
+        var sensitiveTargets = FindProfileSensitiveTargets(baseTraits, modTraits);
         var sensitiveCallers = activeBase
             .Where(record => record.DirectCalls.Any(sensitiveTargets.Contains))
             .Select(static record => record.Address)
             .ToHashSet();
 
         var nonCoffSensitiveTargets = baseTraits.Keys
-            .Where(address => !rrTraits.TryGetValue(address, out var rr) ||
+            .Where(address => !modTraits.TryGetValue(address, out var rr) ||
                               baseTraits[address].Available != rr.Available ||
                               !string.Equals(baseTraits[address].WinnerSymbol, rr.WinnerSymbol, StringComparison.Ordinal))
             .ToHashSet();
@@ -205,11 +205,11 @@ public static partial class TranslatedBuildShardEmitter
         var commonBase = activeBase.Where(record => !sensitiveCallers.Contains(record.Address)).ToArray();
         var portableCommonBase = activeBase.Where(record => !nonCoffSensitiveCallers.Contains(record.Address)).ToArray();
         var portableSensitiveBase = activeBase.Where(record => nonCoffSensitiveCallers.Contains(record.Address)).ToArray();
-        var retroSourceBundlePath = options.RetroCppDirectory is { } retroCppDir && !string.IsNullOrWhiteSpace(retroCppDir)
-            ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(retroCppDir))!, "translated_sources.bin")
+        var modSourceBundlePath = options.ModCppDirectory is { } modCppDir && !string.IsNullOrWhiteSpace(modCppDir)
+            ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(modCppDir))!, "translated_sources.bin")
             : null;
-        if (retroSourceBundlePath is not null && !File.Exists(retroSourceBundlePath)) retroSourceBundlePath = null;
-        var modRecords = ReadModFunctions(options.RetroCppDirectory, retroSourceBundlePath);
+        if (modSourceBundlePath is not null && !File.Exists(modSourceBundlePath)) modSourceBundlePath = null;
+        var modRecords = ReadModFunctions(options.ModCppDirectory, modSourceBundlePath);
 
         var shards = new List<ShardInfo>();
         // base_common is weighted-sequential, so one function's weight changing would shift every
@@ -227,22 +227,22 @@ public static partial class TranslatedBuildShardEmitter
             Math.Min(24, Math.Max(1, portableSensitiveBase.Length)), baseTraits,
             "base profile", weightedSequential: false));
         shards.AddRange(WriteFunctionShards(
-            outputRoot, "retro_portable_sensitive", portableSensitiveBase,
-            Math.Min(24, Math.Max(1, portableSensitiveBase.Length)), rrTraits,
+            outputRoot, "mod_portable_sensitive", portableSensitiveBase,
+            Math.Min(24, Math.Max(1, portableSensitiveBase.Length)), modTraits,
             "Retro Rewind profile", weightedSequential: false));
         shards.AddRange(WriteFunctionShards(
-            outputRoot, "retro_mod", modRecords, options.ModShardCount, rrTraits,
+            outputRoot, "mod_shards", modRecords, options.ModShardCount, modTraits,
             "Retro Rewind mod", weightedSequential: false));
 
         var baseRegistration = WriteRegistrationShards(
             outputRoot, "base", activeBase, baseTraits, options.RegistrationShardCount).ToList();
         baseRegistration.Add(WriteIndirectDispatchTable(outputRoot, "base", baseTraits));
-        var rrRegistrationRecords = activeBase.Concat(modRecords).OrderBy(static record => record.Address).ThenBy(static record => record.RegistrationKind, StringComparer.Ordinal).ToArray();
-        var rrRegistration = WriteRegistrationShards(
-            outputRoot, "retro_rewind", rrRegistrationRecords, rrTraits, options.RegistrationShardCount).ToList();
-        rrRegistration.Add(WriteIndirectDispatchTable(outputRoot, "retro_rewind", rrTraits));
+        var modRegistrationRecords = activeBase.Concat(modRecords).OrderBy(static record => record.Address).ThenBy(static record => record.RegistrationKind, StringComparer.Ordinal).ToArray();
+        var modRegistration = WriteRegistrationShards(
+            outputRoot, "mod_product", modRegistrationRecords, modTraits, options.RegistrationShardCount).ToList();
+        modRegistration.Add(WriteIndirectDispatchTable(outputRoot, "mod_product", modTraits));
 
-        var extraRetroSources = ReadRetroExtraSources(options.RetroCppDirectory, modRecords);
+        var extraModSources = ReadModExtraSources(options.ModCppDirectory, modRecords);
         var cmakeManifestPath = Path.Combine(outputRoot, "shards.cmake");
         WriteCMakeManifest(
             cmakeManifestPath,
@@ -255,9 +255,9 @@ public static partial class TranslatedBuildShardEmitter
             sensitiveCallers.Count,
             shards,
             baseRegistration,
-            rrRegistration,
-            extraRetroSources);
-        PruneStaleShardSources(outputRoot, shards, baseRegistration, rrRegistration);
+            modRegistration,
+            extraModSources);
+        PruneStaleShardSources(outputRoot, shards, baseRegistration, modRegistration);
 
         return new TranslatedBuildShardResult(
             baseRecords.Count,
@@ -266,7 +266,7 @@ public static partial class TranslatedBuildShardEmitter
             sensitiveCallers.Count,
             modRecords.Count,
             shards.Count(shard => shard.Partition.StartsWith("base_", StringComparison.Ordinal)),
-            shards.Count(shard => shard.Partition == "retro_mod"),
+            shards.Count(shard => shard.Partition == "mod_shards"),
             cmakeManifestPath,
             baseCommonBoundaries?.Path,
             baseCommonBoundaries?.Reused ?? false,
@@ -496,16 +496,16 @@ public static partial class TranslatedBuildShardEmitter
             .ToDictionary(static group => group.Key, static group => group.First());
     }
 
-    private static IReadOnlyDictionary<uint, Trait> BuildRetroTraits(
+    private static IReadOnlyDictionary<uint, Trait> BuildModTraits(
         IReadOnlyList<FunctionRecord> baseFunctions,
         IReadOnlyDictionary<uint, Trait> baseTraits,
-        IReadOnlyDictionary<uint, ProfileEntry> retroEntries)
+        IReadOnlyDictionary<uint, ProfileEntry> modEntries)
     {
-        if (retroEntries.Count == 0) return new Dictionary<uint, Trait>(baseTraits);
-        var traits = new Dictionary<uint, Trait>(baseTraits.Count + retroEntries.Count);
+        if (modEntries.Count == 0) return new Dictionary<uint, Trait>(baseTraits);
+        var traits = new Dictionary<uint, Trait>(baseTraits.Count + modEntries.Count);
         foreach (var function in baseFunctions)
         {
-            if (!retroEntries.TryGetValue(function.Address, out var resolved))
+            if (!modEntries.TryGetValue(function.Address, out var resolved))
             {
                 traits[function.Address] = baseTraits[function.Address];
                 continue;
@@ -523,7 +523,7 @@ public static partial class TranslatedBuildShardEmitter
                 resolved.Kind,
                 resolved.Priority);
         }
-        foreach (var resolved in retroEntries.Values)
+        foreach (var resolved in modEntries.Values)
         {
             if (traits.ContainsKey(resolved.Address)) continue;
             var translated = resolved.DirectCallAvailable &&
@@ -545,12 +545,12 @@ public static partial class TranslatedBuildShardEmitter
 
     private static HashSet<uint> FindProfileSensitiveTargets(
         IReadOnlyDictionary<uint, Trait> baseTraits,
-        IReadOnlyDictionary<uint, Trait> rrTraits)
+        IReadOnlyDictionary<uint, Trait> modTraits)
     {
         var result = new HashSet<uint>();
         foreach (var (address, baseTrait) in baseTraits)
         {
-            if (!rrTraits.TryGetValue(address, out var rrTrait) ||
+            if (!modTraits.TryGetValue(address, out var rrTrait) ||
                 baseTrait.Available != rrTrait.Available ||
                 baseTrait.PreservesNonvolatileFprs != rrTrait.PreservesNonvolatileFprs ||
                 baseTrait.NonvolatileFprWriteMask != rrTrait.NonvolatileFprWriteMask)
@@ -575,7 +575,7 @@ public static partial class TranslatedBuildShardEmitter
             // direct calls are always non-overridable literal edges, and the macro guard is
             // selected by the mask alone.
             output.AppendLine(
-                $"MKW_TRANSLATED_TRAIT({address:X8}, {trait.WinnerSymbol}, 0x{trait.NonvolatileFprWriteMask:X8}u);");
+                $"RECOMP_TRANSLATED_TRAIT({address:X8}, {trait.WinnerSymbol}, 0x{trait.NonvolatileFprWriteMask:X8}u);");
         }
         return output.ToString();
     }
@@ -633,7 +633,7 @@ public static partial class TranslatedBuildShardEmitter
             // Quoted include resolves the sibling traits header on every toolchain and keeps
             // the shard text free of the emitting machine's absolute paths.
             source.AppendLine($"#include \"{Path.GetFileName(traitsPath)}\"");
-            source.AppendLine("#define MKW_STATIC_TRANSLATED_CALL(Target, Entry, Context) do { ApplyRuntimeCallOptions(Target, Context); Entry(Context); } while (false)");
+            source.AppendLine("#define RECOMP_STATIC_TRANSLATED_CALL(Target, Entry, Context) do { ApplyRuntimeCallOptions(Target, Context); Entry(Context); } while (false)");
             foreach (var function in group
                          .OrderBy(static function => function.Address)
                          .ThenBy(static function => function.Symbol, StringComparer.Ordinal))
@@ -650,7 +650,7 @@ public static partial class TranslatedBuildShardEmitter
                     source.AppendLine();
                 }
             }
-            source.AppendLine("#undef MKW_STATIC_TRANSLATED_CALL");
+            source.AppendLine("#undef RECOMP_STATIC_TRANSLATED_CALL");
             WriteIfChanged(traitsPath, BuildTraitsHeader(dependencyTraits, traitsLabel));
             WriteIfChanged(path, source.ToString());
             emitted[index] = new ShardInfo(
@@ -683,7 +683,7 @@ public static partial class TranslatedBuildShardEmitter
                 return match.Value;
             }
 
-            return $"MKW_STATIC_TRANSLATED_CALL(0x{address:X8}u, {trait.WinnerSymbol}, ctx)";
+            return $"RECOMP_STATIC_TRANSLATED_CALL(0x{address:X8}u, {trait.WinnerSymbol}, ctx)";
         });
     }
 
@@ -1024,7 +1024,7 @@ public static partial class TranslatedBuildShardEmitter
         return path;
     }
 
-    private static IReadOnlyList<string> ReadRetroExtraSources(string? cppDirectory, IReadOnlyList<FunctionRecord> modRecords)
+    private static IReadOnlyList<string> ReadModExtraSources(string? cppDirectory, IReadOnlyList<FunctionRecord> modRecords)
     {
         if (string.IsNullOrWhiteSpace(cppDirectory) || !Directory.Exists(cppDirectory)) return Array.Empty<string>();
         var functionPaths = modRecords.Select(static record => record.SourcePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -1047,18 +1047,18 @@ public static partial class TranslatedBuildShardEmitter
         int sensitiveCallerCount,
         IReadOnlyList<ShardInfo> shards,
         IReadOnlyList<string> baseRegistration,
-        IReadOnlyList<string> rrRegistration,
-        IReadOnlyList<string> retroExtras)
+        IReadOnlyList<string> modRegistration,
+        IReadOnlyList<string> modExtras)
     {
         var output = new StringBuilder();
         output.AppendLine("# Translator-owned stable shard graph; do not edit.");
-        output.AppendLine($"set(MKW_TRANSLATED_SHARD_ROOT \"{CMakePath(outputRoot)}\")");
-        output.AppendLine($"set(MKW_BASE_FUNCTION_COUNT {activeBaseCount})");
-        output.AppendLine($"set(MKW_SHARED_BASE_FUNCTION_COUNT {sharedBaseCount})");
-        output.AppendLine($"set(MKW_PORTABLE_SHARED_BASE_FUNCTION_COUNT {portableSharedBaseCount})");
-        output.AppendLine($"set(MKW_PROFILE_SENSITIVE_TARGET_COUNT {sensitiveTargetCount})");
-        output.AppendLine($"set(MKW_PROFILE_SENSITIVE_CALLER_COUNT {sensitiveCallerCount})");
-        output.AppendLine($"set(MKW_RETRO_REWIND_FUNCTION_COUNT {modCount})");
+        output.AppendLine($"set(RECOMP_TRANSLATED_SHARD_ROOT \"{CMakePath(outputRoot)}\")");
+        output.AppendLine($"set(RECOMP_BASE_FUNCTION_COUNT {activeBaseCount})");
+        output.AppendLine($"set(RECOMP_SHARED_BASE_FUNCTION_COUNT {sharedBaseCount})");
+        output.AppendLine($"set(RECOMP_PORTABLE_SHARED_BASE_FUNCTION_COUNT {portableSharedBaseCount})");
+        output.AppendLine($"set(RECOMP_PROFILE_SENSITIVE_TARGET_COUNT {sensitiveTargetCount})");
+        output.AppendLine($"set(RECOMP_PROFILE_SENSITIVE_CALLER_COUNT {sensitiveCallerCount})");
+        output.AppendLine($"set(RECOMP_MOD_FUNCTION_COUNT {modCount})");
         // Ninja seeds ready edges in manifest order.  Put longest predicted jobs
         // first (LPT) so a large shard cannot become a serial tail.
         IEnumerable<string> Scheduled(string partition) => shards
@@ -1066,14 +1066,14 @@ public static partial class TranslatedBuildShardEmitter
             .OrderByDescending(static shard => shard.CompileCostWeight)
             .ThenBy(static shard => shard.Fingerprint, StringComparer.Ordinal)
             .Select(static shard => shard.Path);
-        AppendCMakeList(output, "MKW_BASE_COMMON_SHARDS", Scheduled("base_common"), preserveOrder: true);
-        AppendCMakeList(output, "MKW_BASE_PORTABLE_SENSITIVE_SHARDS", Scheduled("base_portable_sensitive"), preserveOrder: true);
-        AppendCMakeList(output, "MKW_RETRO_PORTABLE_SENSITIVE_SHARDS", Scheduled("retro_portable_sensitive"), preserveOrder: true);
-        AppendCMakeList(output, "MKW_RETRO_MOD_SHARDS", Scheduled("retro_mod"), preserveOrder: true);
-        AppendCMakeList(output, "MKW_BASE_REGISTRATION_SOURCES", baseRegistration);
-        AppendCMakeList(output, "MKW_RETRO_REGISTRATION_SOURCES", rrRegistration);
-        AppendCMakeList(output, "MKW_RETRO_EXTRA_SOURCES", retroExtras);
-        output.AppendLine($"set(MKW_HAVE_RETRO_REWIND_SHARDS {(modCount > 0 ? "ON" : "OFF")})");
+        AppendCMakeList(output, "RECOMP_BASE_COMMON_SHARDS", Scheduled("base_common"), preserveOrder: true);
+        AppendCMakeList(output, "RECOMP_BASE_PORTABLE_SENSITIVE_SHARDS", Scheduled("base_portable_sensitive"), preserveOrder: true);
+        AppendCMakeList(output, "RECOMP_MOD_PORTABLE_SENSITIVE_SHARDS", Scheduled("mod_portable_sensitive"), preserveOrder: true);
+        AppendCMakeList(output, "RECOMP_MOD_SHARDS", Scheduled("mod_shards"), preserveOrder: true);
+        AppendCMakeList(output, "RECOMP_BASE_REGISTRATION_SOURCES", baseRegistration);
+        AppendCMakeList(output, "RECOMP_MOD_REGISTRATION_SOURCES", modRegistration);
+        AppendCMakeList(output, "RECOMP_MOD_EXTRA_SOURCES", modExtras);
+        output.AppendLine($"set(RECOMP_HAVE_MOD_SHARDS {(modCount > 0 ? "ON" : "OFF")})");
         WriteIfChanged(path, output.ToString());
     }
 
@@ -1093,14 +1093,14 @@ public static partial class TranslatedBuildShardEmitter
         string outputRoot,
         IReadOnlyList<ShardInfo> shards,
         IReadOnlyList<string> baseRegistration,
-        IReadOnlyList<string> rrRegistration)
+        IReadOnlyList<string> modRegistration)
     {
         var keep = shards.Select(static shard => Path.GetFullPath(shard.Path))
             .Concat(shards.Select(static shard => Path.Combine(
                 Path.GetDirectoryName(shard.Path)!,
                 Path.GetFileNameWithoutExtension(shard.Path) + "_traits.h")))
             .Concat(baseRegistration)
-            .Concat(rrRegistration)
+            .Concat(modRegistration)
             .Select(Path.GetFullPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var directory in Directory.EnumerateDirectories(outputRoot))

@@ -5,7 +5,7 @@ using Translator.Core.Loading;
 namespace Translator.Tests;
 
 /// <summary>
-/// Installs the MKWii PAL save/restore thunk address ranges once for the whole test assembly,
+/// Installs the RECOMPii PAL save/restore thunk address ranges once for the whole test assembly,
 /// since several suites translate hand-assembled fragments that call these thunks by address.
 /// </summary>
 internal static class GuestSaveRestoreThunkTestDefaults
@@ -24,6 +24,6 @@ internal static class GuestSaveRestoreThunkTestDefaults
                 "800215b8 _rest_gpr_14",
                 "800215ec _rest_gpr_27"
             ],
-            "mkwii-pal-test-defaults"));
+            "recompii-pal-test-defaults"));
     }
 }

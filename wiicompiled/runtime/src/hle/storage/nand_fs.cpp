@@ -77,14 +77,14 @@ void CloseFd(int32_t fd) {
 // Path Translation
 // ============================================================================
 
-uint32_t CurrentMkwTitleIdLo() {
+uint32_t CurrentGameTitleIdLo() {
     return RuntimeHle::CurrentGameCode(kNandTitleIdLo);
 }
 
 std::string CurrentNandDataDir() {
     char path[64];
     std::snprintf(path, sizeof(path), "/title/%08x/%08x/data",
-                  kNandTitleIdHi, CurrentMkwTitleIdLo());
+                  kNandTitleIdHi, CurrentGameTitleIdLo());
     return path;
 }
 
