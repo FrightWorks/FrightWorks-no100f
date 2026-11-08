@@ -32,12 +32,12 @@
 #include <vector>
 
 extern "C" {
-int g_spmDrawDump = 0;
-unsigned g_spmDrawIdx = 0;
-unsigned g_spmDrawLimit = ~0u;  // diagnostic: only the first N draws of each frame are rendered (env SPM_DRAW_LIMIT)
-int g_spmBBoxArmed = 0;
-unsigned g_spmAudit[8] = {};  // render audit counters, shown by the diagnostic logs
-int g_spmCullOff = 0;
+int g_gxDrawDump = 0;
+unsigned g_gxDrawIdx = 0;
+unsigned g_gxDrawLimit = ~0u;  // diagnostic: only the first N draws of each frame are rendered (env NO100F_DRAW_LIMIT)
+int g_gxBBoxArmed = 0;
+unsigned g_gxAudit[8] = {};  // render audit counters, shown by the diagnostic logs
+int g_gxCullOff = 0;
 }
 namespace aurora::gx {
 GXState::CopyTextureRef* find_copy_texture_for_texobj(const GXTexObj_& obj) noexcept;  // gx.cpp
@@ -513,7 +513,7 @@ static void apply_xf_viewport() {
 
 // NSMBW: the screen's aspect while the game's view is widened past 16:9 (0 = off). See below.
 std::atomic<float> g_widePerspectiveAspect{0.0f};
-static float g_spmProjWiden = 1.f;  // the horizontal factor the current projection was widened by
+static float g_gxProjWiden = 1.f;  // the horizontal factor the current projection was widened by
 
 static void apply_xf_projection() {
   const auto& raw = g_gxState.xfProjection;
@@ -535,7 +535,7 @@ static void apply_xf_projection() {
       widen = aspect / wide;
     }
   }
-  g_spmProjWiden = widen;
+  g_gxProjWiden = widen;
   {  // NO100F diagnostic (env NO100F_PROJ_LOG): every distinct projection once, with the viewport/scissor it met
     static const bool on = std::getenv("NO100F_PROJ_LOG") != nullptr;
     static std::vector<std::array<float, 4>> seen;
@@ -574,18 +574,18 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
 static bool handle_aurora(const u8* data, u32& pos, u32 size, bool bigEndian);
 
 // NSMBW: time spent decoding GX commands (and waiting for the renderer lock first), and draws
-// decoded, for the runtime's NSMBW_LOG_FPS breakdown.
+// decoded, for the runtime's NO100F_LOG_FPS breakdown.
 std::atomic<uint64_t> g_statProcessNanos{0}, g_statLockNanos{0}, g_statDraws{0};
 std::atomic<uint64_t> g_statProcessTotalNanos{0};  // never reset: slow-frame breakdowns take deltas
 thread_local int t_statDepth = 0;  // only the outermost of nested process()/raw draws counts
 // Timed on Windows always (the slow-frame log splits a frame into GX and the rest), elsewhere only
-// while the runtime logs frame times (NSMBW_LOG_FPS): two clock reads per outermost call add up on a
+// while the runtime logs frame times (NO100F_LOG_FPS): two clock reads per outermost call add up on a
 // phone. Read at first use: on Android the runtime sets the variable from a property after startup.
 static bool StatTiming() {
 #if defined(_WIN32)
   return true;
 #else
-  static const bool on = std::getenv("NSMBW_LOG_FPS") != nullptr;
+  static const bool on = std::getenv("NO100F_LOG_FPS") != nullptr;
   return on;
 #endif
 }
@@ -607,10 +607,10 @@ struct ProcessTimer {
   }
 };
 
-// NSMBW debugging: NSMBW_MERGE_SUSPECTS logs register writes that changed a value but left the state
+// NSMBW debugging: NO100F_MERGE_SUSPECTS logs register writes that changed a value but left the state
 // clean, when a draw then merged into the previous one (state that a merged draw would not see).
 static bool MergeSuspectsOn() {
-  static const bool on = std::getenv("NSMBW_MERGE_SUSPECTS") != nullptr;
+  static const bool on = std::getenv("NO100F_MERGE_SUSPECTS") != nullptr;
   return on;
 }
 static std::vector<u32> g_mergeSuspects;  // kind << 16 | register
@@ -700,7 +700,7 @@ uint32_t process(const u8* data, u32 size, bool bigEndian) {
       const u32 byteOffset = srcArrayIdx * array.stride;
       const u32 byteCount = static_cast<u32>(len) * 4u;
       if (array.data == nullptr || array.stride == 0 || byteOffset + byteCount > array.size) {
-        ++g_spmAudit[4];
+        ++g_gxAudit[4];
         static u32 invalidIndexedXfLogCount = 0;
         if (invalidIndexedXfLogCount < 16) {
           Log.warn("Skipping indexed XF load with invalid source array: array={} idx={} stride={} offset={} bytes={} "
@@ -733,7 +733,7 @@ uint32_t process(const u8* data, u32 size, bool bigEndian) {
     case CP_CMD_CALL_DL: {
       // Call display list: 8 bytes (address + size)
       CHECK(pos + 8 <= size, "call DL read overrun");
-      ++g_spmAudit[5];
+      ++g_gxAudit[5];
       Log.warn("Ignoring nested GX_CMD_CALL_DL");
       pos += 8;
       break;
@@ -913,7 +913,7 @@ static void handle_bp(u32 value, bool bigEndian) {
     else  // keep the cached register honest so the game's own coplanar-off write is not deduplicated away
       g_gxState.bpRegCache[0x00] = (g_gxState.bpRegCache[0x00] & ~(1u << 19)) | (u32(g_gxState.zFreeze) << 19);
     u32 hwCull = bp_get(value, 2, 14);
-    { static int n = 0; if (g_spmDrawDump && n++ < 400) Log.warn("[spmgen] genmode {:#08x} hwcull {} texgens {} tev {}", value & 0xFFFFFF, hwCull, bp_get(value, 4, 0), bp_get(value, 4, 10) + 1); }
+    { static int n = 0; if (g_gxDrawDump && n++ < 400) Log.warn("[gxgen] genmode {:#08x} hwcull {} texgens {} tev {}", value & 0xFFFFFF, hwCull, bp_get(value, 4, 0), bp_get(value, 4, 10) + 1); }
     // Swap front/back to match GX convention
     switch (hwCull) {
     case GX_CULL_FRONT:
@@ -926,8 +926,8 @@ static void handle_bp(u32 value, bool bigEndian) {
       g_gxState.cullMode = static_cast<GXCullMode>(hwCull);
       break;
     }
-    if (g_spmCullOff == 1) g_gxState.cullMode = GX_CULL_NONE;
-    if (g_spmCullOff == 3) {  // diagnostic: swap front/back culling
+    if (g_gxCullOff == 1) g_gxState.cullMode = GX_CULL_NONE;
+    if (g_gxCullOff == 3) {  // diagnostic: swap front/back culling
       if (g_gxState.cullMode == GX_CULL_BACK) g_gxState.cullMode = GX_CULL_FRONT;
       else if (g_gxState.cullMode == GX_CULL_FRONT) g_gxState.cullMode = GX_CULL_BACK;
     }
@@ -1064,7 +1064,7 @@ static void handle_bp(u32 value, bool bigEndian) {
     u32 idx = regId - 0x28;
     u32 stage0 = idx * 2;
     u32 stage1 = idx * 2 + 1;
-    { static int n = 0; if (g_spmDrawDump && n++ < 300) Log.warn("[spmtref] bp {:#x} = {:#08x} (st{} map {} coord {} en {} | st{} map {} coord {} en {})", regId, value & 0xFFFFFF, stage0, bp_get(value, 3, 0), bp_get(value, 3, 3), bp_get(value, 1, 6), stage1, bp_get(value, 3, 12), bp_get(value, 3, 15), bp_get(value, 1, 18)); }
+    { static int n = 0; if (g_gxDrawDump && n++ < 300) Log.warn("[gxtref] bp {:#x} = {:#08x} (st{} map {} coord {} en {} | st{} map {} coord {} en {})", regId, value & 0xFFFFFF, stage0, bp_get(value, 3, 0), bp_get(value, 3, 3), bp_get(value, 1, 6), stage1, bp_get(value, 3, 12), bp_get(value, 3, 15), bp_get(value, 1, 18)); }
 
     // Channel ID reverse mapping from hardware to GX
     static const GXChannelID r2c[] = {GX_COLOR0A0, GX_COLOR1A1,   GX_COLOR0A0,    GX_COLOR1A1,
@@ -1097,9 +1097,9 @@ static void handle_bp(u32 value, bool bigEndian) {
 
   // Z mode (0x40)
   case 0x40: {
-    g_gxState.depthCompare = bp_get(value, 1, 0) != 0 && g_spmCullOff != 2;
+    g_gxState.depthCompare = bp_get(value, 1, 0) != 0 && g_gxCullOff != 2;
     g_gxState.depthFunc = static_cast<GXCompare>(bp_get(value, 3, 1));
-    if (g_spmCullOff == 4) {  // diagnostic: invert the depth comparison direction
+    if (g_gxCullOff == 4) {  // diagnostic: invert the depth comparison direction
       switch (g_gxState.depthFunc) {
       case GX_LESS: g_gxState.depthFunc = GX_GREATER; break;
       case GX_LEQUAL: g_gxState.depthFunc = GX_GEQUAL; break;
@@ -1329,7 +1329,7 @@ static void handle_bp(u32 value, bool bigEndian) {
     u32 idx = (regId - 0xE0) / 2;
     bool isRA = (regId & 1) == 0;
     bool isKColor = bp_get(value, 1, 23) != 0;
-    { static int n = 0; if (g_spmDrawDump && n++ < 200) Log.warn("[spmkreg] bp {:#x} = {:#08x} k {} idx {} {}", regId, value & 0xFFFFFF, isKColor, idx, isRA ? "RA" : "BG"); }
+    { static int n = 0; if (g_gxDrawDump && n++ < 200) Log.warn("[gxkreg] bp {:#x} = {:#08x} k {} idx {} {}", regId, value & 0xFFFFFF, isKColor, idx, isRA ? "RA" : "BG"); }
 
     if (isKColor) {
       // K color register (8-bit components)
@@ -1863,7 +1863,7 @@ static void handle_xf(const u8* data, u32& pos, u32 size, bool bigEndian) {
       case 0x11: {
         // Channel control registers
         u32 chanId = reg - 0x0E;
-        { static int n = 0; if (g_spmDrawDump && n++ < 120) Log.warn("[spmchan] xf chanctrl {} = {:#x}", chanId, val); }
+        { static int n = 0; if (g_gxDrawDump && n++ < 120) Log.warn("[gxchan] xf chanctrl {} = {:#x}", chanId, val); }
         if (chanId < MaxColorChannels) {
           auto& chan = g_gxState.colorChannelConfig[chanId];
           chan.matSrc = static_cast<GXColorSrc>(bp_get(val, 1, 0));
@@ -2006,7 +2006,7 @@ static void handle_xf(const u8* data, u32& pos, u32 size, bool bigEndian) {
 
 static void handle_draw_overrun(u8 cmd, u16 vtxCount, u32 vtxSize, u32 totalVtxBytes, const u8* data, const u32& pos,
                                 u32 size) {
-  ++g_spmAudit[1];
+  ++g_gxAudit[1];
   static u32 truncatedDrawLogCount = 0;
   if (truncatedDrawLogCount >= 64) {
     if (truncatedDrawLogCount == 64) {
@@ -2329,17 +2329,17 @@ static const CachedPipelineState& resolve_pipeline_state(GXPrimitive prim, GXVtx
 }
 
 
-// SPM bring-up diagnostic: runtime sets g_spmDrawDump during the drawdump frame; g_spmCullOff forces GX_CULL_NONE.
-static void spm_log_draw_extent(u8 prim, GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be);
-static float spm_bbox_comp(const u8* p, GXCompType t, u8 frac, bool be);
-static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtxSize, const u8* v, bool be) {
+// SPM bring-up diagnostic: runtime sets g_gxDrawDump during the drawdump frame; g_gxCullOff forces GX_CULL_NONE.
+static void gx_log_draw_extent(u8 prim, GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be);
+static float gx_bbox_comp(const u8* p, GXCompType t, u8 frac, bool be);
+static void gx_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtxSize, const u8* v, bool be) {
   static int n = 0;
-  if (!g_spmDrawDump || n++ > 6000) return;
-  spm_log_draw_extent(prim, static_cast<GXVtxFmt>(fmt), v, count, vtxSize, be);
+  if (!g_gxDrawDump || n++ > 6000) return;
+  gx_log_draw_extent(prim, static_cast<GXVtxFmt>(fmt), v, count, vtxSize, be);
   static const unsigned vtxIdx = [] { const char* e = std::getenv("NO100F_VTX_IDX"); return e ? unsigned(std::atoi(e)) : ~0u; }();
-  if (((prim & 0xF8) == 0x90 || g_spmDrawIdx == vtxIdx) && v) {  // NO100F: raw bytes + layout (triangle lists, or draw NO100F_VTX_IDX)
+  if (((prim & 0xF8) == 0x90 || g_gxDrawIdx == vtxIdx) && v) {  // NO100F: raw bytes + layout (triangle lists, or draw NO100F_VTX_IDX)
     std::string hex;
-    for (u32 i = 0; i < std::min<u32>(count * vtxSize, g_spmDrawIdx == vtxIdx ? 8192u : 96u); ++i) hex += fmt::format("{:02x}{}", v[i], (i + 1) % vtxSize ? "" : " |");
+    for (u32 i = 0; i < std::min<u32>(count * vtxSize, g_gxDrawIdx == vtxIdx ? 8192u : 96u); ++i) hex += fmt::format("{:02x}{}", v[i], (i + 1) % vtxSize ? "" : " |");
     std::string desc;
     for (int a = 0; a <= GX_VA_TEX7; ++a)
       if (g_gxState.vtxDesc[a] != GX_NONE)
@@ -2356,7 +2356,7 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
         }
       }
     }
-    if (g_spmDrawIdx == vtxIdx) {  // every position this draw references, by index
+    if (g_gxDrawIdx == vtxIdx) {  // every position this draw references, by index
       const auto& pa = g_gxState.arrays[GX_VA_POS];
       std::string ps;
       u32 maxIdx = 0;
@@ -2364,7 +2364,7 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
       for (u32 idx = 0; idx <= maxIdx && pa.data; ++idx) {
         if ((idx + 1) * pa.stride > pa.size) { ps += fmt::format(" [{} OOB]", idx); continue; }
         float f[3];
-        for (int c = 0; c < 3; ++c) f[c] = spm_bbox_comp(static_cast<const u8*>(pa.data) + idx * pa.stride + c * 4, GX_F32, 0, !pa.le);
+        for (int c = 0; c < 3; ++c) f[c] = gx_bbox_comp(static_cast<const u8*>(pa.data) + idx * pa.stride + c * 4, GX_F32, 0, !pa.le);
         ps += fmt::format(" {}:{:.1f},{:.1f},{:.1f}", idx, f[0], f[1], f[2]);
       }
       Log.warn("[no100fpos] pos stride {} size {} maxIdx {} data {}{}", (int)pa.stride, pa.size, maxIdx, fmt::ptr(pa.data), ps);
@@ -2402,7 +2402,7 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
         if (ar.data != nullptr && ar.size >= 16) {
           for (int i = 0; i < 16; ++i) std::snprintf(hex + i * 3, 4, "%02x ", static_cast<const u8*>(ar.data)[i]);
         }
-        Log.warn("[spmarr] attr {} desc {} fmt cnt {} type {} frac {} array size {} stride {} le {} first16 {}", static_cast<int>(at),
+        Log.warn("[gxarr] attr {} desc {} fmt cnt {} type {} frac {} array size {} stride {} le {} first16 {}", static_cast<int>(at),
                  static_cast<int>(g_gxState.vtxDesc[at]), static_cast<int>(af.cnt), static_cast<int>(af.type), static_cast<int>(af.frac), ar.size,
                  static_cast<int>(ar.stride), ar.le, hex);
       }
@@ -2442,7 +2442,7 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
       if (x1 - x0 > 0.5f && y1 - y0 > 0.3f) {  // wall-sized: log each vertex (index, ndc, clip w) and cull mode
         static int bigLogged = 0;
         for (u32 k = 0; k < count && k < 8 && bigLogged < 400; ++k, ++bigLogged)
-          Log.warn("[spmbig] v{} idx {} ndc {:.3f} {:.3f} {:.4f} w {:.2f} cull {} n {}", k, li[k], lv[k][0], lv[k][1], lv[k][2], lv[k][3],
+          Log.warn("[gxbig] v{} idx {} ndc {:.3f} {:.3f} {:.4f} w {:.2f} cull {} n {}", k, li[k], lv[k][0], lv[k][1], lv[k][2], lv[k][3],
                    (int)g_gxState.cullMode, count);
       }
       {  // per-draw state, to compare the missing wall with furniture that renders
@@ -2450,7 +2450,7 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
         const auto& rv = g_gxState.renderViewport;
         const auto& rs = g_gxState.renderScissor;
         if (stLogged++ < 6000)
-          Log.warn("[spmst] {} be {} frz {} {:.4f},{:.4f},{:.4f},{} cu {} au {} zc {} zf {} zu {} blend {} lop {} pn {} vp {:.0f},{:.0f} {:.0f}x{:.0f} z {:.2f}-{:.2f} sc {},{} {}x{} chans {} tg {} tev {} bbox {:.2f},{:.2f}..{:.2f},{:.2f}",
+          Log.warn("[gxst] {} be {} frz {} {:.4f},{:.4f},{:.4f},{} cu {} au {} zc {} zf {} zu {} blend {} lop {} pn {} vp {:.0f},{:.0f} {:.0f}x{:.0f} z {:.2f}-{:.2f} sc {},{} {}x{} chans {} tg {} tev {} bbox {:.2f},{:.2f}..{:.2f},{:.2f}",
                    path, be, g_gxState.zFreeze, g_gxState.zFreezePlane.x(), g_gxState.zFreezePlane.y(), g_gxState.zFreezePlane.z(), g_gxState.zFreezePlane.w(), g_gxState.colorUpdate, g_gxState.alphaUpdate, g_gxState.depthCompare, (int)g_gxState.depthFunc, g_gxState.depthUpdate, (int)g_gxState.blendMode,
                    (int)g_gxState.blendOp, g_gxState.currentPnMtx, rv.left, rv.top, rv.width, rv.height, rv.znear, rv.zfar, rs.x, rs.y,
                    rs.width, rs.height, g_gxState.numChans, g_gxState.numTexGens, g_gxState.numTevStages, x0, y0, x1, y1);
@@ -2462,12 +2462,12 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
         static std::set<const void*> dumped;
         if (to.data != nullptr && to.format() == 14 && dumped.size() < 40 && dumped.insert(to.data).second) {
           char fn[128];
-          std::snprintf(fn, sizeof(fn), "spmtex_%02zu_%ux%u_m%u.bin", dumped.size(), to.width(), to.height(), (unsigned)((to.mode0 >> 4) & 7));
+          std::snprintf(fn, sizeof(fn), "gxtex_%02zu_%ux%u_m%u.bin", dumped.size(), to.width(), to.height(), (unsigned)((to.mode0 >> 4) & 7));
           if (FILE* fp = std::fopen(fn, "wb")) { std::fwrite(to.data, 1, size_t(to.width()) * to.height() / 2 * 4 / 3 + 64, fp); std::fclose(fp); }
-          Log.warn("[spmtexdump] {} mode0 {:08x} mode1 {:08x} image0 {:08x}", fn, to.mode0, to.mode1, to.image0);
+          Log.warn("[gxtexdump] {} mode0 {:08x} mode1 {:08x} image0 {:08x}", fn, to.mode0, to.mode1, to.image0);
         }
       }
-      Log.warn("[spmq] n {} oob {} ndc {:.3f} {:.3f} {:.3f} {:.3f} z {:.4f} {:.4f} tex {} {}x{} f{} sum {} nz {} tlut {} zu {}", count, oobN, x0, y0, x1, y1, z0, z1,
+      Log.warn("[gxq] n {} oob {} ndc {:.3f} {:.3f} {:.3f} {:.3f} z {:.4f} {:.4f} tex {} {}x{} f{} sum {} nz {} tlut {} zu {}", count, oobN, x0, y0, x1, y1, z0, z1,
                to.data, to.width(), to.height(), to.format(), sum, nz, (int)to.tlut, g_gxState.depthUpdate);
     }
   }
@@ -2475,13 +2475,13 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
   const bool log98 = prim == 0x98 && tev98Logged < 4 && (++tev98Logged, true);
   if (log98) {
     const auto& ac = g_gxState.alphaCompare;
-    Log.warn("[spmtex] alpha comp0 {} ref0 {} op {} comp1 {} ref1 {} blend {} src {} dst {}", (int)ac.comp0, ac.ref0, (int)ac.op, (int)ac.comp1,
+    Log.warn("[gxtexuse] alpha comp0 {} ref0 {} op {} comp1 {} ref1 {} blend {} src {} dst {}", (int)ac.comp0, ac.ref0, (int)ac.op, (int)ac.comp1,
              ac.ref1, (int)g_gxState.blendMode, (int)g_gxState.blendFacSrc, (int)g_gxState.blendFacDst);
     for (int m = 0; m < 2; ++m) {
       const auto& to = g_gxState.loadedTextures[m];
       char hex[3 * 16 + 1] = {};
       if (to.data != nullptr) for (int i = 0; i < 16; ++i) std::snprintf(hex + i * 3, 4, "%02x ", static_cast<const u8*>(to.data)[i]);
-      Log.warn("[spmtex] map{} {}x{} fmt {} data {} wrap {} {} tlut {} first16 {}", m, to.width(), to.height(), to.format(), to.data,
+      Log.warn("[gxtexuse] map{} {}x{} fmt {} data {} wrap {} {} tlut {} first16 {}", m, to.width(), to.height(), to.format(), to.data,
                (int)to.wrap_s(), (int)to.wrap_t(), (int)to.tlut, hex);
     }
   }
@@ -2491,18 +2491,18 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
       float c0[4], c1[4];
       std::memcpy(c0, &g_gxState.colorRegs[1], sizeof(c0));
       std::memcpy(c1, &g_gxState.colorRegs[2], sizeof(c1));
-      Log.warn("[spmquadtex] map0 {} {}x{} fmt {} copy {} c0 {:.2f},{:.2f},{:.2f},{:.2f} c1 {:.2f},{:.2f},{:.2f},{:.2f}", to.data, to.width(),
+      Log.warn("[gxquadtex] map0 {} {}x{} fmt {} copy {} c0 {:.2f},{:.2f},{:.2f},{:.2f} c1 {:.2f},{:.2f},{:.2f},{:.2f}", to.data, to.width(),
                to.height(), to.format(), find_copy_texture_for_texobj(to) != nullptr, c0[0], c0[1], c0[2], c0[3], c1[0], c1[1], c1[2], c1[3]);
       static std::set<const void*> dumped;  // the quad's CMPR texture, for decoding offline
       if (to.data != nullptr && to.format() == 14 && to.width() >= 256 && dumped.size() < 8 && dumped.insert(to.data).second) {
         char fn[128];
-        std::snprintf(fn, sizeof(fn), "spmquad_%02zu_%ux%u.bin", dumped.size(), to.width(), to.height());
+        std::snprintf(fn, sizeof(fn), "gxquad_%02zu_%ux%u.bin", dumped.size(), to.width(), to.height());
         if (FILE* fp = std::fopen(fn, "wb")) { std::fwrite(to.data, 1, size_t(to.width()) * to.height() / 2, fp); std::fclose(fp); }
       }
     }
     for (u32 i = 0; i < g_gxState.numTevStages && i < 4; ++i) {
       const auto& t = g_gxState.tevStages[i];
-      Log.warn("[spmtev] st{} c {} {} {} {} op {} out {} cl {} sc {} | a {} {} {} {} op {} out {} | kc {} ka {} map {} coord {} chan {}", i,
+      Log.warn("[gxtev] st{} c {} {} {} {} op {} out {} cl {} sc {} | a {} {} {} {} op {} out {} | kc {} ka {} map {} coord {} chan {}", i,
                (int)t.colorPass.a, (int)t.colorPass.b, (int)t.colorPass.c, (int)t.colorPass.d, (int)t.colorOp.op,
                (int)t.colorOp.outReg, t.colorOp.clamp, (int)t.colorOp.scale, (int)t.alphaPass.a, (int)t.alphaPass.b,
                (int)t.alphaPass.c, (int)t.alphaPass.d, (int)t.alphaOp.op, (int)t.alphaOp.outReg, (int)t.kcSel, (int)t.kaSel,
@@ -2514,7 +2514,7 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
     std::memcpy(mat, &g_gxState.colorChannelState[0].matColor, sizeof(mat));
     std::memcpy(amb, &g_gxState.colorChannelState[0].ambColor, sizeof(amb));
     const auto& cc = g_gxState.colorChannelConfig[0];
-    Log.warn("[spmtev] regs prev {:.2f},{:.2f},{:.2f},{:.2f} r0 {:.2f},{:.2f},{:.2f},{:.2f} r1 {:.2f},{:.2f},{:.2f},{:.2f} r2 {:.2f},{:.2f},{:.2f},{:.2f} "
+    Log.warn("[gxtev] regs prev {:.2f},{:.2f},{:.2f},{:.2f} r0 {:.2f},{:.2f},{:.2f},{:.2f} r1 {:.2f},{:.2f},{:.2f},{:.2f} r2 {:.2f},{:.2f},{:.2f},{:.2f} "
              "k0 {:.2f},{:.2f},{:.2f},{:.2f} k1 {:.2f},{:.2f},{:.2f},{:.2f} mat {:.2f},{:.2f},{:.2f},{:.2f} amb {:.2f},{:.2f},{:.2f},{:.2f} "
              "chan0 mat {} amb {} lit {}",
              c[0][0], c[0][1], c[0][2], c[0][3], c[1][0], c[1][1], c[1][2], c[1][3], c[2][0], c[2][1], c[2][2], c[2][3], c[3][0],
@@ -2528,7 +2528,7 @@ static void spm_dump_draw(const char* path, u8 prim, u32 fmt, u32 count, u32 vtx
 // after drawing offscreen objects (paper-flip effects, offscreen map objects, character extension
 // textures) to know what to copy, so while it is armed (GXClearBoundingBox until GXReadBoundingBox)
 // project every drawn position on the CPU with the raw XF projection/viewport, as the GPU would.
-static float spm_bbox_comp(const u8* p, GXCompType t, u8 frac, bool be) {
+static float gx_bbox_comp(const u8* p, GXCompType t, u8 frac, bool be) {
   auto rd16 = [&](const u8* q) { return be ? u16((q[0] << 8) | q[1]) : u16(q[0] | (q[1] << 8)); };
   const float scale = 1.f / float(1u << (frac & 31));
   switch (t) {
@@ -2546,8 +2546,8 @@ static float spm_bbox_comp(const u8* p, GXCompType t, u8 frac, bool be) {
   }
   }
 }
-static void spm_bbox_accumulate(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be) {
-  if (!g_spmBBoxArmed || !verts || vtxSize == 0) return;
+static void gx_bbox_accumulate(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be) {
+  if (!g_gxBBoxArmed || !verts || vtxSize == 0) return;
   const auto& pf = g_gxState.vtxFmts[fmt].attrs[GX_VA_POS];
   const GXAttrType pd = g_gxState.vtxDesc[GX_VA_POS];
   if (pd == GX_NONE) return;
@@ -2568,7 +2568,7 @@ static void spm_bbox_accumulate(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
     }
     const bool cbe = (pd == GX_DIRECT) ? be : !arr.le;
     float pos[3] = {0.f, 0.f, 0.f};
-    for (u32 c = 0; c < comps; ++c) pos[c] = spm_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
+    for (u32 c = 0; c < comps; ++c) pos[c] = gx_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
     const u32 mi = (hasPnIdx ? v[0] : g_gxState.currentPnMtx) / 3u;
     if (mi >= MaxPnMtx) continue;
     float m[12];
@@ -2601,9 +2601,9 @@ static void spm_bbox_accumulate(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
 }
 
 // SPM diagnostic: every draw's extent in the game's own NDC (raw XF projection, unclamped, so |x| > 1
-// is outside the game's 16:9 view) during the dump frame. Same vertex walk as spm_bbox_accumulate.
+// is outside the game's 16:9 view) during the dump frame. Same vertex walk as gx_bbox_accumulate.
 // Extent of a draw in the game's own NDC (raw XF projection, unclamped); false when it has no position.
-static bool spm_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be, float out[4]) {
+static bool gx_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be, float out[4]) {
   const auto& pf = g_gxState.vtxFmts[fmt].attrs[GX_VA_POS];
   const GXAttrType pd = g_gxState.vtxDesc[GX_VA_POS];
   if (!verts || vtxSize == 0 || pd == GX_NONE) return false;
@@ -2626,7 +2626,7 @@ static bool spm_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
     }
     const bool cbe = (pd == GX_DIRECT) ? be : !arr.le;
     float pos[3] = {0.f, 0.f, 0.f};
-    for (u32 c = 0; c < comps; ++c) pos[c] = spm_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
+    for (u32 c = 0; c < comps; ++c) pos[c] = gx_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
     for (int c = 0; c < 3; ++c) { mb[c] = std::min(mb[c], pos[c]); mb[c + 3] = std::max(mb[c + 3], pos[c]); }
     const u32 mi = (hasPnIdx ? v[0] : g_gxState.currentPnMtx) / 3u;
     if (mi >= MaxPnMtx) continue;
@@ -2635,10 +2635,10 @@ static bool spm_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
     const float vx = m[0] * pos[0] + m[1] * pos[1] + m[2] * pos[2] + m[3];
     const float vy = m[4] * pos[0] + m[5] * pos[1] + m[6] * pos[2] + m[7];
     const float vz = m[8] * pos[0] + m[9] * pos[1] + m[10] * pos[2] + m[11];
-    if (i == 0 && g_spmDrawDump) {
+    if (i == 0 && g_gxDrawDump) {
       static int mlog = 0;
       if (mlog++ < 6000)
-        Log.warn("[spmmtx] pn{} [{:.3f} {:.3f} {:.3f} {:.2f} | {:.3f} {:.3f} {:.3f} {:.2f} | {:.3f} {:.3f} {:.3f} {:.2f}] frac {} type {}", mi, m[0], m[1],
+        Log.warn("[gxmtx] pn{} [{:.3f} {:.3f} {:.3f} {:.2f} | {:.3f} {:.3f} {:.3f} {:.2f} | {:.3f} {:.3f} {:.3f} {:.2f}] frac {} type {}", mi, m[0], m[1],
                  m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], pf.frac, (int)pf.type);
     }
     float nx, ny, nz;
@@ -2658,12 +2658,12 @@ static bool spm_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vt
     if (i < 3) { tri[i][0] = nx; tri[i][1] = ny; }
   }
   out[0] = x0; out[1] = y0; out[2] = x1; out[3] = y1; out[4] = z0; out[5] = z1; out[6] = hasPnIdx ? 1.f : 0.f;
-  if (g_spmDrawDump) {
+  if (g_gxDrawDump) {
     static int blog = 0;
     // signed area of the first triangle in the game's NDC (y up): >0 = counter-clockwise
     const float area = (tri[1][0] - tri[0][0]) * (tri[2][1] - tri[0][1]) - (tri[2][0] - tri[0][0]) * (tri[1][1] - tri[0][1]);
     if (blog++ < 6000)
-      Log.warn("[spmmodel] {:.1f} {:.1f} {:.1f} .. {:.1f} {:.1f} {:.1f} | tri0 area {:.5f} cull {} proj y {:.4f} P {:.5f} {:.3f} {:.5f} {:.3f} {:.6f} {:.4f} vp {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f}",
+      Log.warn("[gxmodel] {:.1f} {:.1f} {:.1f} .. {:.1f} {:.1f} {:.1f} | tri0 area {:.5f} cull {} proj y {:.4f} P {:.5f} {:.3f} {:.5f} {:.3f} {:.6f} {:.4f} vp {:.1f} {:.1f} {:.1f} {:.1f} {:.1f} {:.1f}",
                mb[0], mb[1], mb[2], mb[3], mb[4], mb[5], area, (int)g_gxState.cullMode, P[2], P[0], P[1], P[2], P[3], P[4], P[5],
                g_gxState.xfViewport[0], g_gxState.xfViewport[1], g_gxState.xfViewport[2], g_gxState.xfViewport[3], g_gxState.xfViewport[4],
                g_gxState.xfViewport[5]);
@@ -2688,7 +2688,7 @@ static bool gx_vertex_ndc(GXVtxFmt fmt, const u8* v, bool be, float out[3]) {
   }
   const bool cbe = (pd == GX_DIRECT) ? be : !arr.le;
   float pos[3] = {0.f, 0.f, 0.f};
-  for (u32 c = 0; c < comps; ++c) pos[c] = spm_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
+  for (u32 c = 0; c < comps; ++c) pos[c] = gx_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
   const u32 mi = (g_gxState.vtxDesc[GX_VA_PNMTXIDX] == GX_DIRECT ? v[0] : g_gxState.currentPnMtx) / 3u;
   if (mi >= MaxPnMtx) return false;
   float m[12];
@@ -2708,7 +2708,7 @@ static bool gx_vertex_ndc(GXVtxFmt fmt, const u8* v, bool be, float out[3]) {
     out[1] = P[2] * vy + P[3];
     out[2] = P[4] * vz + P[5];
   }
-  out[0] *= g_spmProjWiden;
+  out[0] *= g_gxProjWiden;
   return true;
 }
 
@@ -2747,10 +2747,10 @@ static void update_zfreeze_reference(GXPrimitive prim, GXVtxFmt fmt, const u8* v
   g_gxState.zFreezePlane = {A, B, a[2] - A * a[0] - B * a[1], 1.f};
 }
 
-static void spm_log_draw_extent(u8 prim, GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be) {
+static void gx_log_draw_extent(u8 prim, GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be) {
   static int logged = 0;
   float e[7];
-  if (logged++ > 6000 || !spm_draw_ndc_extent(fmt, verts, count, vtxSize, be, e)) return;
+  if (logged++ > 6000 || !gx_draw_ndc_extent(fmt, verts, count, vtxSize, be, e)) return;
   const float x0 = e[0], y0 = e[1], x1 = e[2], y1 = e[3];
   const std::string depth = fmt::format(" z {:.4f} {:.4f} pn {} cur {}", e[4], e[5], (int)e[6], g_gxState.currentPnMtx);
   const auto& to = g_gxState.loadedTextures[0];
@@ -2764,7 +2764,7 @@ static void spm_log_draw_extent(u8 prim, GXVtxFmt fmt, const u8* verts, u32 coun
   const auto& cc = g_gxState.colorChannelConfig[0];
   {
     const auto& tg = g_gxState.tcgs[0];
-    Log.warn("[spmtcg] tg {} type {} src {} mtx {} norm {} post {} | indStages {} ind0 map {} coord {}", g_gxState.numTexGens, (int)tg.type,
+    Log.warn("[gxtcg] tg {} type {} src {} mtx {} norm {} post {} | indStages {} ind0 map {} coord {}", g_gxState.numTexGens, (int)tg.type,
              (int)tg.src, (int)tg.mtx, tg.normalize, (int)tg.postMtx, g_gxState.numIndStages, (int)g_gxState.indStages[0].texMapId,
              (int)g_gxState.indStages[0].texCoordId);
   }
@@ -2802,18 +2802,18 @@ static void spm_log_draw_extent(u8 prim, GXVtxFmt fmt, const u8* verts, u32 coun
             tbl += fmt::format("{:02x}{:02x}{:02x}{:02x} ", q[0], q[1], q[2], q[3]);
           }
           for (u32 b = 0; b < vtxSize * std::min<u32>(count, 4); ++b) raw += fmt::format("{:02x}{}", verts[b], (b + 1) % vtxSize == 0 ? " | " : " ");
-          Log.warn("[spmraw] desc p{} n{} c{} t{} vsz {} off {} table[0..7] {} verts {}", (int)g_gxState.vtxDesc[GX_VA_POS],
+          Log.warn("[gxraw] desc p{} n{} c{} t{} vsz {} off {} table[0..7] {} verts {}", (int)g_gxState.vtxDesc[GX_VA_POS],
                    (int)g_gxState.vtxDesc[GX_VA_NRM], (int)g_gxState.vtxDesc[GX_VA_CLR0], (int)g_gxState.vtxDesc[GX_VA_TEX0], vtxSize,
                    off, tbl, raw);
         }
       }
-      Log.warn("[spmclr] clr0 idx {} stride {} le {} bytes {:02x} {:02x} {:02x} {:02x} | arr {} size {} white {}/{} pos {} | k0 {:.2f},{:.2f},{:.2f},{:.2f} c0 {:.2f},{:.2f},{:.2f},{:.2f} mat {:.2f},{:.2f},{:.2f},{:.2f}",
+      Log.warn("[gxclr] clr0 idx {} stride {} le {} bytes {:02x} {:02x} {:02x} {:02x} | arr {} size {} white {}/{} pos {} | k0 {:.2f},{:.2f},{:.2f},{:.2f} c0 {:.2f},{:.2f},{:.2f},{:.2f} mat {:.2f},{:.2f},{:.2f},{:.2f}",
                idx, ca.stride, ca.le, cp[0], cp[1], cp[2], cp[3], ca.data, ca.size, white, entries, g_gxState.arrays[GX_VA_POS].data,
                k[0], k[1], k[2], k[3], c0[0], c0[1], c0[2], c0[3], mat[0], mat[1], mat[2], mat[3]);
     }
   }
-  Log.warn("[spmext] widen {} sc {} idx {} draw {} prim {:#x} fmt {} n {} ndc {:.3f} {:.3f} .. {:.3f} {:.3f}{} proj {} tex {}x{} f{} blend {} src {} dst {} zc {} tev {}{} chan0 mat {} amb {} lit {} clr0 desc {} type {} ac {} {} {} {}", g_spmProjWiden, g_gxState.logicalScissor.width, g_spmDrawIdx,
-           g_spmAudit[0], prim, (int)fmt, count, x0, y0, x1, y1, depth, (int)g_gxState.projType, to.width(), to.height(), to.format(),
+  Log.warn("[gxext] widen {} sc {} idx {} draw {} prim {:#x} fmt {} n {} ndc {:.3f} {:.3f} .. {:.3f} {:.3f}{} proj {} tex {}x{} f{} blend {} src {} dst {} zc {} tev {}{} chan0 mat {} amb {} lit {} clr0 desc {} type {} ac {} {} {} {}", g_gxProjWiden, g_gxState.logicalScissor.width, g_gxDrawIdx,
+           g_gxAudit[0], prim, (int)fmt, count, x0, y0, x1, y1, depth, (int)g_gxState.projType, to.width(), to.height(), to.format(),
            (int)g_gxState.blendMode, (int)g_gxState.blendFacSrc, (int)g_gxState.blendFacDst, g_gxState.depthCompare,
            g_gxState.numTevStages, tev, (int)cc.matSrc, (int)cc.ambSrc, cc.lightingEnabled, (int)g_gxState.vtxDesc[GX_VA_CLR0],
            (int)g_gxState.vtxFmts[fmt].attrs[GX_VA_CLR0].type, (int)g_gxState.alphaCompare.comp0, g_gxState.alphaCompare.ref0,
@@ -2902,7 +2902,7 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
 
   const u32 expectedVertexBytes = static_cast<u32>(vtxCount) * vtxSize;
   if (expectedVertexBytes == 0 || expectedVertexBytes != vertexBytes) {
-    ++g_spmAudit[1];
+    ++g_gxAudit[1];
     static uint32_t rawVertexSizeMismatchCount = 0;
     if (rawVertexSizeMismatchCount++ < 64) {
       Log.warn("raw draw vertex-size mismatch prim={} fmt={} count={} cached_stride={} expected={} supplied={}",
@@ -2912,9 +2912,9 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
     return false;
   }
 
-  ++g_spmAudit[0];
-  spm_dump_draw("raw", static_cast<u8>(prim | fmt), fmt, vtxCount, vtxSize, vertices, false);
-  spm_bbox_accumulate(fmt, vertices, vtxCount, vtxSize, true);
+  ++g_gxAudit[0];
+  gx_dump_draw("raw", static_cast<u8>(prim | fmt), fmt, vtxCount, vtxSize, vertices, false);
+  gx_bbox_accumulate(fmt, vertices, vtxCount, vtxSize, true);
   if (!has_complete_primitive(prim, vtxCount)) return true;
   if (!g_gxState.zFreeze) update_zfreeze_reference(prim, fmt, vertices, vtxCount, vtxSize, true);
 
@@ -2932,13 +2932,13 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
   const PnMtxUsage matrixUsage = interpolationIdentityActive
                                      ? pn_mtx_usage(vertices, vtxCount, vtxSize)
                                      : PnMtxUsage{};
-  if (g_spmProjWiden != 1.f && is_fullscreen_overlay_shape(prim, vtxCount)) {
+  if (g_gxProjWiden != 1.f && is_fullscreen_overlay_shape(prim, vtxCount)) {
     float e[7];
     const bool untextured = g_gxState.tevStages[0].texMapId == GX_TEXMAP_NULL;
     // Full width and touching the top or bottom edge: fades and the cutscene letterbox bars. Textured, it must cover
     // the whole screen and blend over it (the pause menu's dimming layer); opaque full-screen pictures keep 4:3.
     g_rawFullscreenOverlay =
-        spm_draw_ndc_extent(fmt, vertices, vtxCount, vtxSize, true, e) && e[0] <= -0.99f && e[2] >= 0.99f &&
+        gx_draw_ndc_extent(fmt, vertices, vtxCount, vtxSize, true, e) && e[0] <= -0.99f && e[2] >= 0.99f &&
         (untextured ? (e[1] <= -0.99f || e[3] >= 0.99f)
                     : e[1] <= -0.99f && e[3] >= 0.99f && g_gxState.blendMode == GX_BM_BLEND && g_gxState.blendFacSrc == GX_BL_SRCALPHA);
   }
@@ -2976,10 +2976,10 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
     return false;
   }
 
-  ++g_spmAudit[0];
+  ++g_gxAudit[0];
   {  // NO100F: where the draw sits in its buffer (env NO100F_VTX_IDX, dump frame only)
     static const unsigned vtxIdx = [] { const char* e = std::getenv("NO100F_VTX_IDX"); return e ? unsigned(std::atoi(e)) : ~0u; }();
-    if (g_spmDrawDump && g_spmDrawIdx == vtxIdx) {
+    if (g_gxDrawDump && g_gxDrawIdx == vtxIdx) {
       std::string head, tail;
       for (u32 i = 0; i < std::min<u32>(pos, 32); ++i) head += fmt::format("{:02x}", data[pos - std::min<u32>(pos, 32) + i]);
       for (u32 i = pos + totalVtxBytes; i < std::min<u32>(size, pos + totalVtxBytes + 32); ++i) tail += fmt::format("{:02x}", data[i]);
@@ -2987,8 +2987,8 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
                size, size - pos - totalVtxBytes, head, tail);
     }
   }
-  spm_dump_draw("fifo", cmd, fmt, vtxCount, vtxSize, data + pos, bigEndian);
-  spm_bbox_accumulate(fmt, data + pos, vtxCount, vtxSize, bigEndian);
+  gx_dump_draw("fifo", cmd, fmt, vtxCount, vtxSize, data + pos, bigEndian);
+  gx_bbox_accumulate(fmt, data + pos, vtxCount, vtxSize, bigEndian);
   // NO100F diagnostic (env NO100F_IDX_CHECK): position indices past the uploaded array, matrix indices past slot 9.
   if (static const bool idxCheck = std::getenv("NO100F_IDX_CHECK") != nullptr; idxCheck) {
     const GXAttrType pd = g_gxState.vtxDesc[GX_VA_POS];
@@ -3021,8 +3021,8 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
         pp = static_cast<const u8*>(arr.data) + idx * arr.stride;
       }
       const bool cbe = pd == GX_DIRECT ? bigEndian : true;  // guest arrays are big-endian
-      p.push_back({spm_bbox_comp(pp, pf.type, pf.frac, cbe), spm_bbox_comp(pp + cs, pf.type, pf.frac, cbe),
-                   spm_bbox_comp(pp + 2 * cs, pf.type, pf.frac, cbe)});
+      p.push_back({gx_bbox_comp(pp, pf.type, pf.frac, cbe), gx_bbox_comp(pp + cs, pf.type, pf.frac, cbe),
+                   gx_bbox_comp(pp + 2 * cs, pf.type, pf.frac, cbe)});
       pidx.push_back(idx);
     }
     if (p.size() >= 12) {
@@ -3070,9 +3070,9 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
   // sky, fade curtains) is drawn unwidened so it covers the whole screen instead of leaving the
   // margins black; the camera widening still applies to everything else.
   bool fullScreenQuad = false;
-  if (g_spmProjWiden != 1.f && is_fullscreen_overlay_shape(prim, vtxCount)) {
+  if (g_gxProjWiden != 1.f && is_fullscreen_overlay_shape(prim, vtxCount)) {
     float e[7];
-    fullScreenQuad = spm_draw_ndc_extent(fmt, data + pos, vtxCount, vtxSize, bigEndian, e) && e[0] <= -0.99f &&
+    fullScreenQuad = gx_draw_ndc_extent(fmt, data + pos, vtxCount, vtxSize, bigEndian, e) && e[0] <= -0.99f &&
                      e[2] >= 0.99f && (e[1] <= -0.99f && e[3] >= 0.99f ||
                      // untextured full-width bars at the top or bottom edge (cutscene letterbox)
                      g_gxState.tevStages[0].texMapId == GX_TEXMAP_NULL && (e[1] <= -0.99f || e[3] >= 0.99f));
@@ -3087,9 +3087,9 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
 
   const auto particleDepths = direct_billboard_depths(prim, fmt, data + pos, totalVtxBytes);
   DrawData* mergeTarget = nullptr;
-  // NSMBW debugging: NSMBW_NO_MERGE turns draw merging off.
+  // NSMBW debugging: NO100F_NO_MERGE turns draw merging off.
   static const int noMergeMode = [] {
-    const char* v = std::getenv("NSMBW_NO_MERGE");
+    const char* v = std::getenv("NO100F_NO_MERGE");
     return v == nullptr ? 0 : std::atoi(v);
   }();
   // 1: never merge; 2: not while drawing into the EFB below line 456 (light textures, tile frames);
@@ -3186,7 +3186,7 @@ namespace aurora::gx {
 // draws blending with the destination colour, and 2D draws pasting an EFB copy back (the corner restore must land
 // on the pixels it was copied from).
 bool skip_hor_plus_widen() noexcept {
-  if (fifo::g_spmProjWiden == 1.f) return false;
+  if (fifo::g_gxProjWiden == 1.f) return false;
   if (g_rawFullscreenOverlay) return true;
   if (g_gxState.logicalViewport.width < 400.0f || g_gxState.logicalScissor.width < 400) return true;
   if (g_gxState.projType != GX_ORTHOGRAPHIC) return false;
@@ -3204,15 +3204,15 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
                                  HashType geometrySignature, bool interpolationIdentityActive,
                                  std::span<const float> particleDepths) {
   ZoneScoped;
-  if (g_spmDrawLimit != ~0u && g_spmDrawIdx++ >= g_spmDrawLimit) return;
-  // NO100F diagnostic (env NO100F_SKIP_DRAWS=a-b): skip draws a..b of every frame to bisect a bad draw (use NSMBW_NO_MERGE=1).
+  if (g_gxDrawLimit != ~0u && g_gxDrawIdx++ >= g_gxDrawLimit) return;
+  // NO100F diagnostic (env NO100F_SKIP_DRAWS=a-b): skip draws a..b of every frame to bisect a bad draw (use NO100F_NO_MERGE=1).
   static const std::pair<unsigned, unsigned> skipDraws = [] {
     unsigned a = ~0u, b = 0;
     if (const char* e = std::getenv("NO100F_SKIP_DRAWS")) std::sscanf(e, "%u-%u", &a, &b);
     return std::pair{a, b};
   }();
   if (skipDraws.first != ~0u) {
-    const unsigned i = g_spmDrawIdx++;
+    const unsigned i = g_gxDrawIdx++;
     if (i >= skipDraws.first && i <= skipDraws.second) return;
   }
   // NO100F diagnostic (env NO100F_SHADOW_TEST): 1 = skip the shadow receiver (blend ZERO / INV_SRC_COLOR),
@@ -3251,9 +3251,9 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
     // Leave stateDirty alone: the next draw re-resolving its pipeline is the safe direction, and nothing about this draw reached the GPU.
     return;
   }
-  // SPM diagnostic (env SPM_FLAT_TEST): map-tile class (fmt0 strips, CMPR map0) drawn 1 = flat white, 2 = flat white over
+  // SPM diagnostic (env NO100F_FLAT_TEST): map-tile class (fmt0 strips, CMPR map0) drawn 1 = flat white, 2 = flat white over
   // everything (no depth), 3 = texture colour only, 4 = every draw flat white, 5 = every non-quad draw flat white (quads = backdrop/HUD), 6 = depth-tested quads white, 7 = 2 + culling off, 10 = 7 + fixed z -0.95. Shows whether missing walls/floors rasterize at all.
-  static const int flatTest = [] { const char* e = std::getenv("SPM_FLAT_TEST"); return e ? std::atoi(e) : 0; }();
+  static const int flatTest = [] { const char* e = std::getenv("NO100F_FLAT_TEST"); return e ? std::atoi(e) : 0; }();
   struct FlatSave { TevStage st0; u8 numTev; AlphaCompare ac; GXBlendMode bm; bool dc, du; GXCullMode cull; Mat4x4<float> proj; };
   std::optional<FlatSave> flatSave;
   if (flatTest == 8) for (auto& a : g_gxState.arrays) a.cachedRange = {};  // 8 = re-upload vertex arrays every draw
@@ -3652,7 +3652,7 @@ extern "C" void AuroraSetWidePerspectiveAspect(float aspect) {
 }
 
 // Decoded vertex descriptor/format state, so the runtime can mirror changes a host display list made.
-extern "C" void aurora_spm_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3) {
+extern "C" void aurora_gx_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3) {
   using namespace aurora::gx;  // defined outside the namespace for C linkage
   for (int a = 0; a < 26 && a < int(MaxVtxAttr); ++a) desc26[a] = static_cast<uint8_t>(g_gxState.vtxDesc[a]);
   for (int f = 0; f < 8; ++f)

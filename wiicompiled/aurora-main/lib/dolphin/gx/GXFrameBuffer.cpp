@@ -1,9 +1,9 @@
 #include <atomic>
 namespace aurora::gx::fifo { extern std::atomic<float> g_widePerspectiveAspect; }  // command_processor.cpp
 namespace aurora::gx { void note_tex_copy_dest(const void* dest) noexcept; }  // command_processor.cpp
-extern "C" int g_spmBBoxArmed;
-extern "C" int g_spmDrawDump;
-extern "C" unsigned g_spmDrawIdx;
+extern "C" int g_gxBBoxArmed;
+extern "C" int g_gxDrawDump;
+extern "C" unsigned g_gxDrawIdx;
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -447,10 +447,10 @@ void GXSetDispCopyGamma(GXGamma gamma) {
 void GXCopyDisp(void* dest, GXBool clear) {
   {
     static unsigned frames = 0;
-    if (g_spmDrawIdx != 0 && ++frames % 300 == 0) std::fprintf(stderr, "[drawcount] %u draws/frame\n", g_spmDrawIdx);
-    g_spmDrawIdx = 0;
+    if (g_gxDrawIdx != 0 && ++frames % 300 == 0) std::fprintf(stderr, "[drawcount] %u draws/frame\n", g_gxDrawIdx);
+    g_gxDrawIdx = 0;
   }
-  g_spmBBoxArmed = 0;  // a box cleared but never read this frame stops costing CPU projection
+  g_gxBBoxArmed = 0;  // a box cleared but never read this frame stops costing CPU projection
   (void)dest;
   // Finish queued commands before this copy reads live EFB state.
   if (aurora::gx::fifo::get_buffer_size() != 0) {
@@ -506,9 +506,9 @@ extern "C" void AuroraSetTexturePatches(bool enabled) { g_texturePatches.store(e
 void GXCopyTex(void* dest, GXBool clear) {
   g_statCopies.fetch_add(1, std::memory_order_relaxed);
   aurora::gx::note_tex_copy_dest(dest);
-  if (g_spmDrawDump) {  // SPM diagnostic: copies in draw order during the dump frame
+  if (g_gxDrawDump) {  // SPM diagnostic: copies in draw order during the dump frame
     if (aurora::gx::fifo::get_buffer_size() != 0) aurora::gx::fifo::drain();
-    std::fprintf(stderr, "[aurora] [2] [aurora::gx::fifo] [spmdraw] COPYTEX src %d,%d %dx%d dst %ux%u clear %d\n",
+    std::fprintf(stderr, "[aurora] [2] [aurora::gx::fifo] [gxdraw] COPYTEX src %d,%d %dx%d dst %ux%u clear %d\n",
                  g_gxState.texCopySrc.x, g_gxState.texCopySrc.y, g_gxState.texCopySrc.width, g_gxState.texCopySrc.height,
                  g_gxState.texCopyDstWidth, g_gxState.texCopyDstHeight, (int)clear);
   }
@@ -548,9 +548,9 @@ void GXCopyTex(void* dest, GXBool clear) {
       ++cacheIt;
     }
   }
-  // NSMBW_LOG_COPIES=<frame>: log every texture copy of that frame and the next (profiling).
+  // NO100F_LOG_COPIES=<frame>: log every texture copy of that frame and the next (profiling).
   static const long logFrame = [] {
-    const char* value = std::getenv("NSMBW_LOG_COPIES");
+    const char* value = std::getenv("NO100F_LOG_COPIES");
     return value != nullptr ? std::atol(value) : -1L;
   }();
   const uint64_t createsBefore = g_statCopyCreates.load(std::memory_order_relaxed);
@@ -632,10 +632,10 @@ void GXCopyTex(void* dest, GXBool clear) {
   // Keep the GPU copy and download it only if guest code reads the destination.
   // A copy smaller than its destination size patches a wider texture (NSMBW's animated tiles: coins,
   // ? blocks, copied into the tile atlas every frame). The patch is applied to the atlas's GPU texture
-  // right after this copy resolves. Reading it back into RAM instead (NSMBW_PATCH_READBACK=1) works too
+  // right after this copy resolves. Reading it back into RAM instead (NO100F_PATCH_READBACK=1) works too
   // but re-decodes the 2 MB atlas every frame: 60 -> 35 FPS on a Snapdragon 6 Gen 1.
   static const bool patchReadback = [] {
-    const char* value = std::getenv("NSMBW_PATCH_READBACK");
+    const char* value = std::getenv("NO100F_PATCH_READBACK");
     return value != nullptr && value[0] == '1';
   }();
   const bool patch = g_gxState.texCopyDstWidth > logicalDstWidth && g_texturePatches.load(std::memory_order_relaxed);
@@ -654,14 +654,14 @@ void GXCopyTex(void* dest, GXBool clear) {
 
 void GXClearBoundingBox() {
   g_gxState.boundingBox = {1023, 0, 1023, 0};
-  g_spmBBoxArmed = 1;
+  g_gxBBoxArmed = 1;
   GX_WRITE_RAS_REG(0x550003FFu);
   GX_WRITE_RAS_REG(0x560003FFu);
   __gx->bpSent = 0;
 }
 
 void GXReadBoundingBox(u16* left, u16* right, u16* top, u16* bottom) {
-  g_spmBBoxArmed = 0;
+  g_gxBBoxArmed = 0;
   if (left) {
     *left = g_gxState.boundingBox[0];
   }

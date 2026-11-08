@@ -298,14 +298,14 @@ inline bool IsDisplayListActive() noexcept { return g_dlRecordState.active; }
 void BeginDisplayListRecording(uint32_t listAddr, uint32_t sizeBytes);
 void RegisterAuroraDisplayList(uint32_t addr, uint32_t size);
 bool IsAuroraDisplayList(uint32_t addr, uint32_t size);
-bool SpmHostDisplayList(const uint8_t* list, uint32_t n, const uint8_t*& data, uint32_t& size);
-bool SpmAuroraDlRecording();
-void SpmRecordRawVertexDisplayList();
-bool SpmDumpFrame();
-void SpmBBoxClear();
-void SpmBBoxRead(uint16_t& l, uint16_t& t, uint16_t& r, uint16_t& b);
-void SpmBBoxVertexMatrix(uint32_t index);
-void SpmBBoxPosition(const float* p, int count);
+bool GxHostDisplayList(const uint8_t* list, uint32_t n, const uint8_t*& data, uint32_t& size);
+bool GxAuroraDlRecording();
+void GxRecordRawVertexDisplayList();
+bool GxDumpFrame();
+void GxBBoxClear();
+void GxBBoxRead(uint16_t& l, uint16_t& t, uint16_t& r, uint16_t& b);
+void GxBBoxVertexMatrix(uint32_t index);
+void GxBBoxPosition(const float* p, int count);
 // Flushes the shadow cursor/count back into guest memory and stops recording.
 void EndDisplayListRecording();
 

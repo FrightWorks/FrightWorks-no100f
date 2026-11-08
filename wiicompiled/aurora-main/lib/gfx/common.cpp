@@ -1496,12 +1496,12 @@ void split_staging_batch() {
   std::lock_guard gpuLock(aurora::renderer_gpu_mutex());
   if (!has_current_render_pass())
     throw StagingCapacityError("Cannot split staging outside an active render pass");
-  {  // SPM diagnostic (env SPM_PASS_LOG): which staging buffer forced the split (V/U/I/S bytes used)
-    static const bool passLog = std::getenv("SPM_PASS_LOG") != nullptr;
+  {  // SPM diagnostic (env NO100F_PASS_LOG): which staging buffer forced the split (V/U/I/S bytes used)
+    static const bool passLog = std::getenv("NO100F_PASS_LOG") != nullptr;
     static int logged = 0;
     if (passLog && logged++ < 20) {
       const auto u = staging_usage();
-      std::fprintf(stderr, "[spmsplit] V %llu U %llu I %llu S %llu\n", (unsigned long long)u[0], (unsigned long long)u[1],
+      std::fprintf(stderr, "[gxsplit] V %llu U %llu I %llu S %llu\n", (unsigned long long)u[0], (unsigned long long)u[1],
                    (unsigned long long)u[2], (unsigned long long)u[3]);
     }
   }
@@ -1604,14 +1604,14 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
   // interpolation weight. Replay slots are rendered before the native frame, so the first slot encodes
   // them too: otherwise every slot sampled the previous frame's (HUD, icons and screen effects flickered).
   const bool encodeTextureBakes = interpolatedFrame <= 0;
-  {  // SPM diagnostic (env SPM_PASS_LOG): every 300th frame, the render passes with their clears and command counts
-    static const bool passLog = std::getenv("SPM_PASS_LOG") != nullptr;
+  {  // SPM diagnostic (env NO100F_PASS_LOG): every 300th frame, the render passes with their clears and command counts
+    static const bool passLog = std::getenv("NO100F_PASS_LOG") != nullptr;
     static u32 calls = 0, logged = 0;
     if (passLog && encodeTextureBakes && ++calls % 300 == 0 && logged++ < 12) {
-      std::fprintf(stderr, "[spmpass] frame call %u: %zu passes\n", calls, renderPasses.size());
+      std::fprintf(stderr, "[gxpass] frame call %u: %zu passes\n", calls, renderPasses.size());
       for (u32 i = 0; i < renderPasses.size(); ++i) {
         const auto& p = renderPasses[i];
-        std::fprintf(stderr, "[spmpass]   #%u clearColor %d clearDepth %d cmds %zu size %ux%u resolve %d copySrc %d rgba %.2f,%.2f,%.2f,%.2f\n", i,
+        std::fprintf(stderr, "[gxpass]   #%u clearColor %d clearDepth %d cmds %zu size %ux%u resolve %d copySrc %d rgba %.2f,%.2f,%.2f,%.2f\n", i,
                      p.clearColor, p.clearDepth, p.commands.size(), p.targetSize.width, p.targetSize.height, p.resolveTarget ? 1 : 0,
                      p.copySourceTexture ? 1 : 0, p.clearColorValue.x(), p.clearColorValue.y(), p.clearColorValue.z(), p.clearColorValue.w());
       }

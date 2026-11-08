@@ -1,4 +1,4 @@
-extern "C" unsigned g_spmAudit[8];
+extern "C" unsigned g_gxAudit[8];
 #include <memory>
 #include <tuple>
 #include <map>
@@ -474,7 +474,7 @@ extern "C" void GX__LoadTexObj_80170f2c(uint32_t oa, uint32_t tid) {
 
     if (tid >= g_boundTexMaps.size()) {
         if (s_invalidTidLogCount < 128) {
-            ++g_spmAudit[3];
+            ++g_gxAudit[3];
             RT_LOGF(RT_TAG_GX, "GXLoadTexObj: invalid tex map id %u (oa=0x%08X)\n", tid, oa);
             ++s_invalidTidLogCount;
         }
@@ -635,16 +635,16 @@ extern "C" void GX__LoadTexObj_80170f2c(uint32_t oa, uint32_t tid) {
 
         g_boundTexMaps[tid] = newBound;
         GetTexObjMeta(oa) = meta;
-        if (SpmDumpFrame()) {
+        if (GxDumpFrame()) {
             RT_LOGF(RT_TAG_GX, "[drawdump] loadtex map %u oa 0x%08X data 0x%08X %ux%u fmt 0x%X pal %d tlut %u skip %d init %d up %d\n", tid, oa,
                     meta.dataAddr, meta.width, meta.height, meta.format, isPalette ? 1 : 0, meta.tlut, canSkipHostLoad ? 1 : 0,
                     needsInit ? 1 : 0, textureDataUploaded ? 1 : 0);
         }
-        if (SpmAuroraDlRecording()) {
+        if (GxAuroraDlRecording()) {
             static int s_texLog = 0;
-            if (s_texLog++ < 60) RT_LOGF(RT_TAG_GX, "[spmdl] recorded tex load map %u data 0x%08X %ux%u fmt 0x%X pal %d\n", tid, meta.dataAddr, meta.width, meta.height, meta.format, isPalette ? 1 : 0);
+            if (s_texLog++ < 60) RT_LOGF(RT_TAG_GX, "[gxdl] recorded tex load map %u data 0x%08X %ux%u fmt 0x%X pal %d\n", tid, meta.dataAddr, meta.width, meta.height, meta.format, isPalette ? 1 : 0);
         }
-        if (SpmAuroraDlRecording() && !isPalette) {
+        if (GxAuroraDlRecording() && !isPalette) {
             // SPM builds map materials into display lists from a stack GXTexObj reused for every
             // material, so the shared host twin (keyed by that stack address) would give every recorded
             // load the same texture identity. Recorded loads get a permanent host object per image.
@@ -726,7 +726,7 @@ extern "C" void GX__InitTlutObj_80170f80(uint32_t oa, uint32_t da, uint32_t f, u
 PPC_NATIVE_OVERRIDE_VOID(80100260, GX__InitTlutObj_80170f80, (uint32_t oa, uint32_t da, uint32_t f, uint32_t e), (oa, da, f, e));
 
 extern "C" void GX__LoadTlut_80170fa8(uint32_t oa, uint32_t tl) {
-    if (SpmDumpFrame()) {
+    if (GxDumpFrame()) {
         auto it = g_TlutObjMeta.find(oa);
         RT_LOGF(RT_TAG_GX, "[drawdump] loadtlut oa 0x%08X slot %u known %d data 0x%08X n %u fmt %u\n", oa, tl, it != g_TlutObjMeta.end() ? 1 : 0,
                 it != g_TlutObjMeta.end() ? it->second.dataAddr : 0u, it != g_TlutObjMeta.end() ? it->second.entries : 0u,
@@ -753,7 +753,7 @@ extern "C" void GX__SetTexCoordBias_801711fc(uint32_t c, uint32_t se, uint32_t t
 // GXInitTexObjData (SPM 0x8028ED7C): repoints a texture object at new image data. SPM's smartTexObj
 // uses it for every animated paper-character frame; NSMBW never called it, so it ran translated and
 // changed only the guest struct, leaving the native twin on the first image (characters drew nothing).
-extern "C" void GX__InitTexObjData_SPM(uint32_t oa, uint32_t da) {
+extern "C" void GX__InitTexObjData_Gc(uint32_t oa, uint32_t da) {
     const uint32_t canonical = CanonicalizeGxMainRamAddress(da);
     {
         std::lock_guard<std::mutex> guard(g_texObjMutex);

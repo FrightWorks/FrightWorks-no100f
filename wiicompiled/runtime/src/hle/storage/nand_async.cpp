@@ -505,10 +505,10 @@ NAND_ASYNC_FWD_BODY(NANDCheckAsync_HLE, NANDCheck_HLE,
 // NANDChangeDirAsync: SPM only changes to its own home (data) directory, which is where the HLE
 // already resolves relative paths, so this reports success.
 // shortcut: other directories are not tracked; add a current-dir state if a game changes elsewhere.
-static int32_t NANDChangeDir_SPM(uint32_t pathPtr) {
+static int32_t NANDChangeDir_Gc(uint32_t pathPtr) {
     (void)pathPtr;
     return NAND_RESULT_OK;
 }
-NAND_ASYNC_FWD_BODY(NANDChangeDirAsync_HLE, NANDChangeDir_SPM,
+NAND_ASYNC_FWD_BODY(NANDChangeDirAsync_HLE, NANDChangeDir_Gc,
     (uint32_t pathPtr, uint32_t callbackPtr, uint32_t commandBlockPtr),
     (pathPtr))

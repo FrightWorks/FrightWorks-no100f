@@ -1,4 +1,4 @@
-extern "C" void aurora_spm_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3);
+extern "C" void aurora_gx_vtx_state(uint8_t* desc26, uint8_t* fmt8x26x3);
 #include "gx_internal.h"
 #include "runtime_log.h"
 #include "gx_stream_common.h"
@@ -1292,7 +1292,7 @@ static bool ApplyAuroraIndexedXFArraysForDisplayList(const std::array<uint32_t, 
 
 } // namespace
 
-extern "C" unsigned g_spmAudit[8];  // aurora command_processor (SPM diagnostics)
+extern "C" unsigned g_gxAudit[8];  // aurora command_processor (SPM diagnostics)
 extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
     GxGuestWrite::NotifyWrite(addr, size);
 }
@@ -1326,14 +1326,14 @@ extern "C" void GxNotifyDisplayListMemoryWrite(uint32_t addr, uint32_t size) {
 
 extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes) {
     if (nbytes == 0 || listAddr == 0) return;
-    static const int s_skipId = std::getenv("SPM_SKIP_MATDL") ? std::atoi(std::getenv("SPM_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>
+    static const int s_skipId = std::getenv("NO100F_SKIP_MATDL") ? std::atoi(std::getenv("NO100F_SKIP_MATDL")) : -1;  // diagnostic: drop the geometry list drawn after material list <id>
     static bool s_skipNext = false;
     try {
         const uint8_t* list = static_cast<const uint8_t*>(GuestToHostPtr(listAddr, nbytes));
         if (!list) return;
         if (const uint8_t* hostDl = nullptr; true) {
             uint32_t hostSize = 0;
-            if (SpmHostDisplayList(list, nbytes, hostDl, hostSize)) {
+            if (GxHostDisplayList(list, nbytes, hostDl, hostSize)) {
                 s_skipNext = s_skipId >= 0 && ((uint32_t(list[8]) << 24) | (uint32_t(list[9]) << 16) | (uint32_t(list[10]) << 8) | list[11]) == uint32_t(s_skipId);
                 g_boundTexMaps.fill(BoundTexInfo{});
                 EnsureAuroraFrameActive();
@@ -1378,7 +1378,7 @@ extern "C" void GX__CallDisplayList_80172f64(uint32_t listAddr, uint32_t nbytes)
         const bool auroraList = ListHasAuroraCommand(list, nbytes);
         if (auroraList) g_boundTexMaps.fill(BoundTexInfo{});
         { static int s_callLog = 0;
-          if (s_callLog++ < 60) RT_LOGF(RT_TAG_GX, "[spmdl] call 0x%08X %u bytes aurora=%d\n", listAddr, nbytes, auroraList ? 1 : 0); }  // the list rebinds textures behind the cache
+          if (s_callLog++ < 60) RT_LOGF(RT_TAG_GX, "[gxdl] call 0x%08X %u bytes aurora=%d\n", listAddr, nbytes, auroraList ? 1 : 0); }  // the list rebinds textures behind the cache
         const bool mayContainDraw = auroraList ? false
             : (cached != nullptr) ? cached->mayContainDraw : DisplayListMayContainDraw(list, nbytes);
         if (!mayContainDraw) {

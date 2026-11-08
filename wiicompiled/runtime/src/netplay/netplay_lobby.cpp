@@ -187,11 +187,11 @@ std::vector<uint8_t> Header(Type type, uint64_t roomId) {
     return w.data;
 }
 
-// NSMBW_NET_TAILSCALE_ONLY=1 (Android: debug.nsmbw.tsonly): no broadcasts, and anything not from a
+// NO100F_NET_TAILSCALE_ONLY=1 (Android: debug.no100f.tsonly): no broadcasts, and anything not from a
 // Tailscale address is ignored, as if the devices were on different networks. For testing.
 bool TailscaleOnly() {
     static const bool only = [] {
-        const char* value = std::getenv("NSMBW_NET_TAILSCALE_ONLY");
+        const char* value = std::getenv("NO100F_NET_TAILSCALE_ONLY");
         return value != nullptr && std::string(value) == "1";
     }();
     return only;

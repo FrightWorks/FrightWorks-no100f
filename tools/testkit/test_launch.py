@@ -13,17 +13,17 @@ from testkit._fakes import FakeGameCase  # noqa: E402
 
 class EnvTest(unittest.TestCase):
     def test_scrubs_leftover_switches_and_isolates_controllers(self):
-        base = {"PATH": "/bin", "NO100F_SKIP_LINES": "1", "AX_DIAG_DIR": "x", "NSMBW_SCRIPT_REMOTES": "2",
-                "AUDIO_RAW_DUMP": "x.raw", "BUTTON_ICONS": "xbox", "AURORA_GFX_FLAGS": "validate", "SPM_FLAT_TEST": "1",
+        base = {"PATH": "/bin", "NO100F_SKIP_LINES": "1", "AX_DIAG_DIR": "x", "NO100F_SCRIPT_REMOTES": "2",
+                "AUDIO_RAW_DUMP": "x.raw", "BUTTON_ICONS": "xbox", "AURORA_GFX_FLAGS": "validate", "NO100F_FLAT_TEST": "1",
                 "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS": "1", "SDL_GAMECONTROLLER_IGNORE_DEVICES": "0x1/0x2",
-                "SDL_WINDOW_ACTIVATE_WHEN_SHOWN": "1", "NSMBW_INPUT_SCRIPT": "1000:A"}
+                "SDL_WINDOW_ACTIVATE_WHEN_SHOWN": "1", "NO100F_INPUT_SCRIPT": "1000:A"}
         env = launch.test_env(base)
         self.assertEqual(env["PATH"], "/bin")
-        for gone in ("NO100F_SKIP_LINES", "AX_DIAG_DIR", "NSMBW_SCRIPT_REMOTES", "AUDIO_RAW_DUMP", "BUTTON_ICONS",
-                     "AURORA_GFX_FLAGS", "SPM_FLAT_TEST", "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",
+        for gone in ("NO100F_SKIP_LINES", "AX_DIAG_DIR", "NO100F_SCRIPT_REMOTES", "AUDIO_RAW_DUMP", "BUTTON_ICONS",
+                     "AURORA_GFX_FLAGS", "NO100F_FLAT_TEST", "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",
                      "SDL_GAMECONTROLLER_IGNORE_DEVICES", "SDL_WINDOW_ACTIVATE_WHEN_SHOWN"):
             self.assertNotIn(gone, env)
-        self.assertEqual(env["NSMBW_INPUT_SCRIPT"], launch.DUMMY_PAD_SCRIPT)  # the caller's script is replaced
+        self.assertEqual(env["NO100F_INPUT_SCRIPT"], launch.DUMMY_PAD_SCRIPT)  # the caller's script is replaced
         self.assertEqual(env["SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT"], launch.IGNORE_PADS_EXCEPT)
         self.assertEqual(env["NO100F_DEV_TOOLS"], "1")
 

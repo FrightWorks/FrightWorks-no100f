@@ -13,7 +13,7 @@ Every run gets, with nothing left to the caller:
   * the environment of the game process scrubbed of every test switch the caller's shell may have left behind
     (NO100F_*, AX_*, NSMBW_*, AUDIO_*, AURORA_*, SPM_*, BUTTON_ICONS) and of SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS,
     which must never be set (SDL then refuses the game's own hint call, and the game treats that as an error);
-  * controller isolation: NSMBW_INPUT_SCRIPT set (the game then reports pad 1 connected every frame) and
+  * controller isolation: NO100F_INPUT_SCRIPT set (the game then reports pad 1 connected every frame) and
     SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT set to a device ID that does not exist, so no real controller reaches the
     game. The process gets both; the player's own game is unaffected;
   * a build-ID check: the exe must have been built from the code under test: the same commit, or an older one with only
@@ -216,7 +216,7 @@ def test_env(base=None, extra=None, dev_tools=True) -> dict:
     if dev_tools:
         env["NO100F_DEV_TOOLS"] = "1"   # the F8 dev menu and its devmenu.txt
     env["NO100F_NO_POPUP"] = "1"        # a crash is logged, not shown in a window
-    env["NSMBW_INPUT_SCRIPT"] = DUMMY_PAD_SCRIPT
+    env["NO100F_INPUT_SCRIPT"] = DUMMY_PAD_SCRIPT
     env["SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT"] = IGNORE_PADS_EXCEPT
     env.update(extra or {})
     env.pop("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", None)  # whatever `extra` says

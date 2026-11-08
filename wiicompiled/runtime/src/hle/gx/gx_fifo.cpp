@@ -310,7 +310,7 @@ void SubmitAttribute(GXAttr attr, float* comps, const VtxAttrFmt& fmt, const u32
         if (rawComps && fmt.type != GX_F32) {
             for (int i = 0; i < n; ++i) bb[i] = ConvertCompToFloat(rawComps[i], fmt.type, fmt.frac);
         }
-        SpmBBoxPosition(bb, n);
+        GxBBoxPosition(bb, n);
     }
     auto r8 = [rawComps](int idx) { return static_cast<u8>(rawComps[idx]); };
     auto rs8 = [rawComps](int idx) { return static_cast<s8>(rawComps[idx]); };
@@ -718,7 +718,7 @@ void HleFifoWrite(u32 val, uint32_t sizeBytes) {
             u32 raw = 0;
             if (!consumeBytes(1, raw)) break;
             if (!recordOnly) {
-                if (attr == GX_VA_PNMTXIDX) SpmBBoxVertexMatrix(raw);
+                if (attr == GX_VA_PNMTXIDX) GxBBoxVertexMatrix(raw);
                 GXMatrixIndex1u8(attr, static_cast<u8>(raw));
             }
             finishVertexIfNeeded(attr);

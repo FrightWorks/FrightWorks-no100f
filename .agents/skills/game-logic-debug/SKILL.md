@@ -119,7 +119,7 @@ scripts: `Play/devmenu_press.txt`, read every 30 frames even outside play, lines
 (`cutscene` = only while one plays), injected into pad 1 by PADRead. `tools\debug\texhunt\look.ps1` presses A every 2 s
 while `cutscene yes`, then waits for `control yes`.
 
-**Stick and timed input without dev tools:** `tools/debug/patches/pad-script.patch` adds a scripted pad 1 (`devmenu_press.txt` needs dev tools and `NSMBW_INPUT_SCRIPT` has no stick). A route file has one step per line: `wait MS`, `waitmode MODE STATE`, `waitplay SCENE`, `do SX SY BUTTONS PERIOD_MS DURATION_MS [until SCENE | untilmode MODE STATE]`; `#` starts a comment. The full format is at the top of `no100f_pad_script.h`, which the patch adds; read it in the patch file. One bad line means no step of that file runs, and stderr says which line. `NO100F_PAD_SCRIPT_LIVE=<file>` takes more steps while the game runs. Routes: `tools/debug/game/pad-walk-check.txt`, `tools/debug/audio/issue14-route.txt`.
+**Stick and timed input without dev tools:** `tools/debug/patches/pad-script.patch` adds a scripted pad 1 (`devmenu_press.txt` needs dev tools and `NO100F_INPUT_SCRIPT` has no stick). A route file has one step per line: `wait MS`, `waitmode MODE STATE`, `waitplay SCENE`, `do SX SY BUTTONS PERIOD_MS DURATION_MS [until SCENE | untilmode MODE STATE]`; `#` starts a comment. The full format is at the top of `no100f_pad_script.h`, which the patch adds; read it in the patch file. One bad line means no step of that file runs, and stderr says which line. `NO100F_PAD_SCRIPT_LIVE=<file>` takes more steps while the game runs. Routes: `tools/debug/game/pad-walk-check.txt`, `tools/debug/audio/issue14-route.txt`.
 
 ```powershell
 git apply tools\debug\patches\pad-script.patch

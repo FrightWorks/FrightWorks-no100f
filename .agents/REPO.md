@@ -217,7 +217,7 @@ The dev menu (see Facts) is the way to script a run.
 - **Presses:** `devmenu_press.txt`, read every 30 frames even outside play.
   Each line is `BUTTON[+BUTTON] [FRAMES] [cutscene]`, with buttons `a b x y z start up down left right` and 10 frames by default.
   `cutscene` means only while a recorded cutscene plays.
-  `NSMBW_INPUT_SCRIPT` scripts pad input from the environment instead.
+  `NO100F_INPUT_SCRIPT` scripts pad input from the environment instead.
   For the stick or timed routes with dev tools off, use `tools/debug/patches/pad-script.patch` (usage in the `game-logic-debug` skill).
 - **Boot mods:** a folder `UserData/mods/<name>/files/sd2.ini` with `BOOT=e001` starts a level directly.
   A mod folder holds `files` mirroring the disc and/or `textures`, and/or a `patch.json` (see "Patch mods" under Facts); when two mods change the same file, the later name wins.

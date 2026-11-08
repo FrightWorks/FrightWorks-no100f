@@ -16,7 +16,7 @@ extern "C" void GxNotifyGuestRamDmaWrite(uint32_t addr, uint32_t size);   // hle
 
 #include "guest_profiler.h"
 extern "C" uint32_t OSGetResetButtonState_Gc() {
-    GuestProfiler::OnFramePresented();  // diagnostic: lets NSMBW_PROFILE start before the first frame (one-shot)
+    GuestProfiler::OnFramePresented();  // diagnostic: lets NO100F_PROFILE start before the first frame (one-shot)
     return 0;  // never pressed
 }
 PPC_NATIVE_OVERRIDE(80106E8C, OSGetResetButtonState_Gc, uint32_t, (), ());
