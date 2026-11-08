@@ -8,7 +8,7 @@ namespace Translator.Core.Disassembly;
 
 internal static class JumpTableDetector
 {
-    private const int MaxBacktrackInstructions = 8192;  // SPM: loop-hoisted table bases (lis far above the switch)
+    private const int MaxBacktrackInstructions = 8192;  // Loop-hoisted table bases (lis far above the switch)
     private const int MaxEntryCount = 512;
 
     public static bool TryRecognize(
@@ -66,7 +66,7 @@ internal static class JumpTableDetector
         {
             return true;
         }
-        // lwzx with the index in rA and the table in rB (Scooby-Doo! Unmasked logic modules). Tried as a whole:
+        // lwzx with the index in rA and the table in rB (seen in relocated modules). Tried as a whole:
         // rA can still resolve to a stale lis constant there, so only a table that validates counts.
         return TryTable(indexReg.Name, baseReg.Name, allowPcRelative: false, out targets);
 
@@ -164,7 +164,7 @@ internal static class JumpTableDetector
                 return true;
             }
 
-            // The base re-materialised in another register (Scooby-Doo! Unmasked logic modules:
+            // The base re-materialised in another register (seen in relocated modules:
             // lis/addi r11 -> lwzx; lis/addi r9 -> add r10,r10,r9).
             var other = RegistersEqual(left.Name, targetRegister) ? right.Name :
                         RegistersEqual(right.Name, targetRegister) ? left.Name : null;
@@ -450,8 +450,8 @@ internal static class JumpTableDetector
         // Preferred: the bound compare on the case index that feeds lwzx. Trace the index register
         // backwards through the scale-by-four that turns the case number into a byte offset (CodeWarrior
         // emits "cmplwi rI, N; bgt default; slwi rX, rI, 2; lwzx rT, rBase, rX"), and stop at any other
-        // write to the tracked register: a compare found beyond it tests an older, unrelated value (NSMBW's
-        // TagProcessor_c::preProcess reuses r0, whose earlier "cmplwi r0, 0" turned a 20-case table into one).
+        // write to the tracked register: a compare found beyond it tests an older, unrelated value (a
+        // function that reuses r0 had an earlier "cmplwi r0, 0" turn a 20-case table into one).
         var tracked = register;
         for (var i = startIndex - 1; i >= 0 && startIndex - i <= MaxBacktrackInstructions; i--)
         {

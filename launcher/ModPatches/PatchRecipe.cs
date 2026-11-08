@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace ScoobyReMasked.ModPatches;
+namespace FrightWorks.ModPatches;
 
 // A problem with one mod. The text is shown on the Mods page, so it's written for the player.
 sealed class PatchException : Exception

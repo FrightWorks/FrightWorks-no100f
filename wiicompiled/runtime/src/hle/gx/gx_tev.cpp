@@ -41,9 +41,9 @@ extern "C" void GX__SetTevOp_80171c4c(uint32_t s, uint32_t m) {
 }
 PPC_NATIVE_OVERRIDE_VOID(800011ac, GX__SetTevOp_80171c4c, (uint32_t s, uint32_t m), (s, m));
 
-bool SpmAuroraDlRecording();
+bool GxAuroraDlRecording();
 extern "C" void GX__SetTevOrder_8017214c(uint32_t s, uint32_t c, uint32_t m, uint32_t col) {
-    { static int n = 0; if (SpmAuroraDlRecording() && n++ < 6000) RT_LOGF(RT_TAG_GX, "[spmrec] tevorder st %u coord %u map %u chan %u\n", s, c, m, col); }
+    { static int n = 0; if (GxAuroraDlRecording() && n++ < 6000) RT_LOGF(RT_TAG_GX, "[gxrec] tevorder st %u coord %u map %u chan %u\n", s, c, m, col); }
     if (!TevStageOk(s)) return;
     GXSetTevOrder((GXTevStageID)s, (GXTexCoordID)c, (GXTexMapID)m, (GXChannelID)col);
 }
@@ -88,7 +88,7 @@ PPC_NATIVE_OVERRIDE_VOID(800011c0, GX__SetTevAlphaOp_80171db8, (uint32_t s, uint
 extern "C" void GX__SetTevColor_80171e10(uint32_t id, uint32_t cp) {
     if (!TevRegOk(id)) return;
     const uint8_t* p=Memory::GetPointer(cp, 4); GXColor c; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
-    if (SpmDumpFrame()) { const CpuContext* x = TryGetCpuContext(); RT_LOGF(RT_TAG_GX, "[drawdump] tevcolor %u %02X%02X%02X%02X lr %08X\n", id, c.r, c.g, c.b, c.a, x ? x->lr : 0);
+    if (GxDumpFrame()) { const CpuContext* x = TryGetCpuContext(); RT_LOGF(RT_TAG_GX, "[drawdump] tevcolor %u %02X%02X%02X%02X lr %08X\n", id, c.r, c.g, c.b, c.a, x ? x->lr : 0);
         if (x && x->lr == 0x8004ED88u) {
             uint32_t bg = 0, mw = 0, idx = 0, b12 = 0, fl = 0, e26 = 0, e30 = 0;
             Memory::TryRead32(0x8056CF80u, bg); Memory::TryRead32(0x8056D010u, mw);
@@ -108,7 +108,7 @@ extern "C" void GX__SetTevColorS10_80171e70(uint32_t id, uint32_t cp) {
     if (!TevRegOk(id)) return;
     const uint8_t* p=Memory::GetPointer(cp, 8); GXColorS10 c;
     c.r=(p[0]<<8)|p[1]; c.g=(p[2]<<8)|p[3]; c.b=(p[4]<<8)|p[5]; c.a=(p[6]<<8)|p[7];
-    if (SpmDumpFrame()) { const CpuContext* x = TryGetCpuContext(); RT_LOGF(RT_TAG_GX, "[drawdump] tevcolorS10 %u %d %d %d %d lr %08X\n", id, (int16_t)c.r, (int16_t)c.g, (int16_t)c.b, (int16_t)c.a, x ? x->lr : 0); }
+    if (GxDumpFrame()) { const CpuContext* x = TryGetCpuContext(); RT_LOGF(RT_TAG_GX, "[drawdump] tevcolorS10 %u %d %d %d %d lr %08X\n", id, (int16_t)c.r, (int16_t)c.g, (int16_t)c.b, (int16_t)c.a, x ? x->lr : 0); }
     GXSetTevColorS10((GXTevRegID)id, c);
 }
 PPC_NATIVE_OVERRIDE_VOID(800011c8, GX__SetTevColorS10_80171e70, (uint32_t id, uint32_t cp), (id, cp));
@@ -117,7 +117,7 @@ extern "C" void GX__SetTevKColor_80171ed4(uint32_t id, uint32_t cp) {
     if (!TevKColorOk(id)) return;
     const uint8_t* p=Memory::GetPointer(cp, 4); GXColor c; c.r=p[0]; c.g=p[1]; c.b=p[2]; c.a=p[3];
     { static int n = 0; const CpuContext* x = TryGetCpuContext();
-      if (n++ < 150) RT_LOGF(RT_TAG_GX, "[spmkcol] kcolor %u %02X%02X%02X%02X lr %08X\n", id, c.r, c.g, c.b, c.a, x ? x->lr : 0); }
+      if (n++ < 150) RT_LOGF(RT_TAG_GX, "[gxkcol] kcolor %u %02X%02X%02X%02X lr %08X\n", id, c.r, c.g, c.b, c.a, x ? x->lr : 0); }
     GXSetTevKColor((GXTevKColorID)id, c);
 }
 PPC_NATIVE_OVERRIDE_VOID(800011cc, GX__SetTevKColor_80171ed4, (uint32_t id, uint32_t cp), (id, cp));

@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Translator.Core.Parsing.Kamek;
-using Translator.Core.Mods.Mkwii;
 using Translator.Core.Loading;
 
 namespace Translator.Core.Mods;
@@ -43,9 +42,7 @@ public static class OverlayFunctionBuilder
         string outputDirectory,
         IReadOnlyCollection<uint>? additionalOverlayFunctionStarts = null,
         byte[]? additionalModuleImage = null,
-        uint? additionalModuleImageOffset = null,
-        IReadOnlyCollection<RetroWfcStaticBytePatchPlan>? retroWfcStaticBytePatches = null,
-        IReadOnlyCollection<RetroWfcExecutableHookPlan>? retroWfcExecutableHooks = null)
+        uint? additionalModuleImageOffset = null)
     {
         var overlayDir = Path.Combine(outputDirectory, "overlay_images");
         Directory.CreateDirectory(overlayDir);
@@ -81,29 +78,7 @@ public static class OverlayFunctionBuilder
             .Where(c => c.ContainingFunctionStart.HasValue)
             .GroupBy(c => c.ContainingFunctionStart!.Value)
             .ToDictionary(g => g.Key, g => g.ToList());
-        var retroWfcStaticBytePatchSource = retroWfcStaticBytePatches is null
-            ? Enumerable.Empty<RetroWfcStaticBytePatchPlan>()
-            : retroWfcStaticBytePatches;
-        var retroWfcStaticBytePatchGroups = retroWfcStaticBytePatchSource
-            .Where(p => p.SectionExecutable && p.ContainingFunctionStart.HasValue)
-            .GroupBy(p => p.ContainingFunctionStart!.Value)
-            .ToDictionary(g => g.Key, g => g.ToList());
-        var retroWfcExecutableHookSource = retroWfcExecutableHooks is null
-            ? Enumerable.Empty<RetroWfcExecutableHookPlan>()
-            : retroWfcExecutableHooks;
-        var retroWfcExecutableHookGroups = retroWfcExecutableHookSource
-            .Where(h => h.TargetAddress.HasValue)
-            .GroupBy(h => h.ContainingFunctionStart)
-            .ToDictionary(g => g.Key, g => g.ToList());
         var overlayStarts = new SortedSet<uint>(executablePatchGroups.Keys);
-        foreach (var start in retroWfcStaticBytePatchGroups.Keys)
-        {
-            overlayStarts.Add(start);
-        }
-        foreach (var start in retroWfcExecutableHookGroups.Keys)
-        {
-            overlayStarts.Add(start);
-        }
         if (additionalOverlayFunctionStarts is not null)
         {
             foreach (var start in additionalOverlayFunctionStarts)
@@ -159,47 +134,6 @@ public static class OverlayFunctionBuilder
                     diagnostics.Add(record);
                 }
             }
-            retroWfcExecutableHookGroups.TryGetValue(function.Start, out var executableHookGroup);
-            var executableHooks = executableHookGroup is null
-                ? Enumerable.Empty<RetroWfcExecutableHookPlan>()
-                : executableHookGroup;
-            foreach (var hook in executableHooks.OrderBy(h => h.Address).ThenBy(h => h.RecordIndex))
-            {
-                if (TryApplyRetroWfcExecutableHookPatch(
-                        bytes,
-                        function.Start,
-                        hook,
-                        out var record))
-                {
-                    patchRecords.Add(record);
-                }
-                else
-                {
-                    patchRecords.Add(record);
-                    diagnostics.Add(record);
-                }
-            }
-            retroWfcStaticBytePatchGroups.TryGetValue(function.Start, out var staticByteGroup);
-            var staticBytePatches = staticByteGroup is null
-                ? Enumerable.Empty<RetroWfcStaticBytePatchPlan>()
-                : staticByteGroup;
-            foreach (var patch in staticBytePatches.OrderBy(p => p.Address).ThenBy(p => p.RecordIndex))
-            {
-                if (TryApplyRetroWfcStaticBytePatch(
-                        bytes,
-                        function.Start,
-                        patch,
-                        out var record))
-                {
-                    patchRecords.Add(record);
-                }
-                else
-                {
-                    patchRecords.Add(record);
-                    diagnostics.Add(record);
-                }
-            }
-
             var imageFile = $"overlay_{function.Start:X8}.bin";
             File.WriteAllBytes(Path.Combine(overlayDir, imageFile), bytes);
 
@@ -251,10 +185,6 @@ public static class OverlayFunctionBuilder
         return result;
     }
 
-    private static bool RetroWfcHookUsesLink(RetroWfcExecutableHookPlan hook) =>
-        hook.TypeName is "call" or "branchCtrLink" ||
-        hook.Intent.Contains("Call", StringComparison.Ordinal);
-
     private static KamekCommand FindMatchingCommand(KamekChunk chunk, KamekPatchClassification classification)
     {
         return chunk.Commands.FirstOrDefault(command =>
@@ -296,93 +226,6 @@ public static class OverlayFunctionBuilder
         catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or OverflowException)
         {
             record = new PatchApplicationRecord(patchAddress, command.Id, FormatTarget(command, moduleGuestBase), "failed", ex.Message);
-            return false;
-        }
-    }
-
-    private static bool TryApplyRetroWfcExecutableHookPatch(
-        byte[] image,
-        uint imageGuestStart,
-        RetroWfcExecutableHookPlan hook,
-        out PatchApplicationRecord record)
-    {
-        try
-        {
-            if (!hook.TargetAddress.HasValue)
-            {
-                throw new InvalidDataException($"Retro WFC executable hook #{hook.RecordIndex} has no resolved semantic target.");
-            }
-            if (hook.InstructionCount <= 0)
-            {
-                throw new InvalidDataException($"Retro WFC executable hook #{hook.RecordIndex} has invalid instruction count {hook.InstructionCount}.");
-            }
-
-            var offset = checked((int)(hook.Address - imageGuestStart));
-            EnsureRange(image, offset, checked(hook.InstructionCount * sizeof(uint)));
-            var link = RetroWfcHookUsesLink(hook);
-            var branch = KamekPpcEncoding.EncodeBranch(hook.Address, hook.TargetAddress.Value, link);
-            WriteUInt32(image, offset, branch);
-            for (var i = 1; i < hook.InstructionCount; i++)
-            {
-                WriteUInt32(image, offset + i * sizeof(uint), kPpcNop);
-            }
-
-            var action = hook.TargetActionId ?? string.Join(",", hook.SemanticActionIds);
-            record = new PatchApplicationRecord(
-                hook.Address,
-                link ? KamekCommandId.BranchLink : KamekCommandId.Branch,
-                $"RetroWFC#{hook.RecordIndex}",
-                "applied",
-                $"retro wfc semantic hook {action} -> 0x{hook.TargetAddress.Value:X8}, continuation=0x{hook.ContinuationAddress:X8}, instructions={hook.InstructionCount:N0}");
-            return true;
-        }
-        catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException or OverflowException)
-        {
-            record = new PatchApplicationRecord(
-                hook.Address,
-                RetroWfcHookUsesLink(hook) ? KamekCommandId.BranchLink : KamekCommandId.Branch,
-                $"RetroWFC#{hook.RecordIndex}",
-                "failed",
-                ex.Message);
-            return false;
-        }
-    }
-
-    private static bool TryApplyRetroWfcStaticBytePatch(
-        byte[] image,
-        uint imageGuestStart,
-        RetroWfcStaticBytePatchPlan patch,
-        out PatchApplicationRecord record)
-    {
-        try
-        {
-            var patchBytes = Convert.FromHexString(patch.BytesHex);
-            if (patchBytes.Length != patch.Size)
-            {
-                throw new InvalidDataException(
-                    $"Retro WFC static byte patch #{patch.RecordIndex} declares {patch.Size:N0} byte(s) but contains {patchBytes.Length:N0} byte(s).");
-            }
-
-            var offset = checked((int)(patch.Address - imageGuestStart));
-            EnsureRange(image, offset, patchBytes.Length);
-            patchBytes.CopyTo(image.AsSpan(offset, patchBytes.Length));
-
-            record = new PatchApplicationRecord(
-                patch.Address,
-                KamekCommandId.Write8,
-                $"RetroWFC#{patch.RecordIndex}",
-                "applied",
-                $"retro wfc static byte patch {patchBytes.Length:N0} byte(s) sha256={patch.SourceSha256}");
-            return true;
-        }
-        catch (Exception ex) when (ex is FormatException or InvalidDataException or ArgumentOutOfRangeException or OverflowException)
-        {
-            record = new PatchApplicationRecord(
-                patch.Address,
-                KamekCommandId.Write8,
-                $"RetroWFC#{patch.RecordIndex}",
-                "failed",
-                ex.Message);
             return false;
         }
     }

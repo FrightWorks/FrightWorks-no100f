@@ -2,8 +2,8 @@
 // This header is precompiled to speed up builds
 // All common headers used by generated functions should be included here
 
-#ifndef MKW_RECOMPILED_PCH_H
-#define MKW_RECOMPILED_PCH_H
+#ifndef RECOMP_PCH_H
+#define RECOMP_PCH_H
 
 // Standard C++ headers
 #include <cstdint>
@@ -16,4 +16,4 @@
 #include "abi_bridge.h"
 #include "memory.h"
 
-#endif // MKW_RECOMPILED_PCH_H
+#endif // RECOMP_PCH_H

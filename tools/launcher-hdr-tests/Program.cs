@@ -6,7 +6,7 @@ using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using ScoobyReMasked;
+using FrightWorks;
 
 static class LauncherHdrTests
 {

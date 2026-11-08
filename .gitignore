@@ -14,7 +14,6 @@
 /autotest/
 /build-logs/
 /dist/
-/_runtime_spm_backup/
 /Play/*
 !/Play/portable.txt
 !/Play/Run with log.cmd
@@ -43,9 +42,6 @@
 /tools/hip-patch-tests/bin/
 /tools/hip-patch-tests/obj/
 
-# written by the build from the disc (build_logic_overlay.py) / build output
-/wiicompiled/projects/scooby/MAP_all.txt
-/wiicompiled/projects/scooby/MAP_logic.txt
 __pycache__/
 *.pyc
 wiicompiled/buildtools/artifacts/

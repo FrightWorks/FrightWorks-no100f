@@ -62,18 +62,18 @@ public:
     {
         g_currentCpuContext = ctx;
 
-        savedMxcsr_ = MkwGetHostFpControl();
+        savedMxcsr_ = RecompGetHostFpControl();
         if (ctx != nullptr)
-            MkwApplyHostNiMode(ctx->fpscr);
+            RecompApplyHostNiMode(ctx->fpscr);
     }
 
     ~CpuContextScope()
     {
         g_currentCpuContext = previous_;
         if (previous_ != nullptr)
-            MkwApplyHostNiMode(previous_->fpscr);
+            RecompApplyHostNiMode(previous_->fpscr);
         else
-            MkwRestoreHostMxcsr(savedMxcsr_);
+            RecompRestoreHostMxcsr(savedMxcsr_);
     }
 
     CpuContextScope(const CpuContextScope&) = delete;

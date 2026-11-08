@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 
-namespace ScoobyReMasked.ModPatches;
+namespace FrightWorks.ModPatches;
 
 // A Heavy Iron level file (HIP) that can be rebuilt with extra assets: the launcher's version of
 // tools/debug/game/hipedit.py, which it must match byte for byte (tools/hip-patch-tests checks that).

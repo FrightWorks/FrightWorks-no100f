@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using Rectangle = System.Drawing.Rectangle;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // The connected monitors for Settings > Display > Fullscreen monitor, with the same ids, labels, order and matching as
 // the game (aurora-main/lib/window.cpp query_monitors, find_monitor; monitor_labels.hpp): both read Windows' display config.

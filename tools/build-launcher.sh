@@ -11,6 +11,6 @@ dotnet="$root/toolchain/dotnet/dotnet"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
 rm -rf "$root/launcher/publish"
-"$dotnet" publish "$root/launcher/ScoobyReMasked.Launcher.csproj" -c Release -r linux-x64 --self-contained true \
+"$dotnet" publish "$root/launcher/FrightWorks.Launcher.csproj" -c Release -r linux-x64 --self-contained true \
     -p:PublishSingleFile=true -o "$root/launcher/publish"
 echo "DONE: $root/launcher/publish/FrightWorks"

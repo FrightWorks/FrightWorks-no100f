@@ -255,7 +255,7 @@ public sealed class RelFile
 
                 switch (type)
                 {
-                    // StaticR.rel uses exactly these five relocation types; any
+                    // RELs seen so far use exactly these five relocation types; any
                     // other encoding reaches the default arm and fails loudly.
                     case RelocationType.R_RVL_NONE:
                         break;

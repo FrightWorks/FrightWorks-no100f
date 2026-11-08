@@ -1,8 +1,8 @@
 diff --git a/wiicompiled/runtime/src/audio_backend.cpp b/wiicompiled/runtime/src/audio_backend.cpp
-index 7ceda4c..a72d49a 100644
+index 9c59fad..2367825 100644
 --- a/wiicompiled/runtime/src/audio_backend.cpp
 +++ b/wiicompiled/runtime/src/audio_backend.cpp
-@@ -127,6 +127,12 @@ bool AudioBackend::QueueHasCapacityLocked(int incomingBytes) {
+@@ -132,6 +132,12 @@ bool AudioBackend::QueueHasCapacityLocked(int incomingBytes) {
          // stream creates an audible discontinuity (the severe crackle seen when
          // VI-batched DMA briefly outran playback).
          // A drop is audible; report the first one so it is not invisible.

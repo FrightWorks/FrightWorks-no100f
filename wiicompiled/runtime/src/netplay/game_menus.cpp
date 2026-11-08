@@ -12,9 +12,6 @@
 namespace GameMenus {
 namespace {
 
-// fManager_c::m_connectManage (a cTreeMg_c): the root of every object's connect node. A node is
-// {parent, child, prev, next, owner}; the owner is an fBase_c whose profile name is at +8.
-constexpr uint32_t kTreeRoot = 0x80377A10u;
 constexpr uint16_t kProfileSelectPlayer = 0x2BC;
 constexpr uint16_t kProfileFileSelect = 0x2D5;
 constexpr uint16_t kProfileCourseSelectMenu = 0x2B5;  // the world map's + menu
@@ -26,7 +23,7 @@ constexpr uint32_t kSelectPlayerCursor = 0x26C;
 constexpr uint32_t kFileSelectState = 0x238;
 constexpr uint32_t kFileSelectCursor = 0x2A4;
 
-// dSelectPlayer_c::StateID_* (d_basesNP .bss, fixed by the pre-linked layout).
+// State IDs of the "Select Players" screen (fixed addresses).
 constexpr uint32_t kSpStartWait = 0x809953C0u;
 constexpr uint32_t kSpOnStage = 0x80995400u;
 constexpr uint32_t kSpInfoOnStage = 0x80995440u;
@@ -35,47 +32,15 @@ constexpr uint32_t kSpSelect = 0x809954C0u;
 constexpr uint32_t kSpMultiSelect = 0x80995500u;
 constexpr uint32_t kSpButtonAnime = 0x80995540u;
 constexpr uint32_t kSpExit = 0x80995580u;
-// dCourseSelectMenu_c's and Pausewindow_c's current StateID (it names itself at +4).
+// The pause menus' current state ID (it names itself at +4).
 constexpr uint32_t kPauseMenuState = 0x234;
-// dFileSelect_c::StateID_SelectWait.
+// State ID of the file select's wait state.
 constexpr uint32_t kFsSelectWait = 0x80992050u;
 
 uint32_t Find(uint16_t profile) {
-    // SPM has no NSMBW fManager/profile tree; never expose unrelated objects to pane writers.
+    // No object tree is mapped for this game; never expose unrelated objects to pane writers.
     (void)profile;
     return 0;
-#if 0
-    uint32_t node = 0;
-    if (!Memory::TryRead32(kTreeRoot, node)) {
-        return 0;
-    }
-    for (int guard = 0; node != 0 && guard < 4096; ++guard) {
-        uint32_t owner = 0;
-        uint32_t word = 0;
-        if (Memory::TryRead32(node + 0x10, owner) && owner != 0 && Memory::TryRead32(owner + 8, word) &&
-            static_cast<uint16_t>(word >> 16) == profile) {
-            return owner;
-        }
-        uint32_t child = 0;
-        Memory::TryRead32(node + 4, child);
-        if (child != 0) {
-            node = child;
-            continue;
-        }
-        while (node != 0) {
-            uint32_t next = 0;
-            Memory::TryRead32(node + 0xC, next);
-            if (next != 0) {
-                node = next;
-                break;
-            }
-            uint32_t parent = 0;
-            Memory::TryRead32(node, parent);
-            node = parent;
-        }
-    }
-    return 0;
-#endif
 }
 
 } // namespace
@@ -86,40 +51,6 @@ bool HasProfile(uint16_t profile) {
 
 std::vector<uint16_t> Profiles() {
     return {};
-#if 0
-    std::vector<uint16_t> profiles;
-    uint32_t node = 0;
-    if (!Memory::TryRead32(kTreeRoot, node)) {
-        return profiles;
-    }
-    for (int guard = 0; node != 0 && guard < 4096; ++guard) {
-        uint32_t owner = 0;
-        uint32_t word = 0;
-        if (Memory::TryRead32(node + 0x10, owner) && owner != 0 && Memory::TryRead32(owner + 8, word)) {
-            profiles.push_back(static_cast<uint16_t>(word >> 16));
-        }
-        uint32_t child = 0;
-        Memory::TryRead32(node + 4, child);
-        if (child != 0) {
-            node = child;
-            continue;
-        }
-        while (node != 0) {
-            uint32_t next = 0;
-            Memory::TryRead32(node + 0xC, next);
-            if (next != 0) {
-                node = next;
-                break;
-            }
-            uint32_t parent = 0;
-            Memory::TryRead32(node, parent);
-            node = parent;
-        }
-    }
-    std::sort(profiles.begin(), profiles.end());
-    profiles.erase(std::unique(profiles.begin(), profiles.end()), profiles.end());
-    return profiles;
-#endif
 }
 
 SelectPlayers SelectPlayersState() {
@@ -185,13 +116,13 @@ int FileSelectRawCursor() {
     return static_cast<int>(cursor);
 }
 
-// NSMBW_DUMP_STATES=2B5,2C6: every state machine field (a pointer to a StateID, which names
+// NO100F_DUMP_STATES=2B5,2C6: every state machine field (a pointer to a StateID, which names
 // itself through the string pointer at +4) in those objects, logged when it changes (finding
 // which field says a menu is open).
 std::string DumpStates() {
     static const std::vector<uint16_t> wanted = [] {
         std::vector<uint16_t> list;
-        if (const char* value = std::getenv("NSMBW_DUMP_STATES")) {
+        if (const char* value = std::getenv("NO100F_DUMP_STATES")) {
             for (const char* c = value; *c != 0;) {
                 char* end = nullptr;
                 const unsigned long v = std::strtoul(c, &end, 16);
@@ -235,11 +166,11 @@ std::string DumpStates() {
     return text;
 }
 
-// NSMBW_DUMP_OBJ=<profile>: log the words of that object's first 0x800 bytes that change (finding
+// NO100F_DUMP_OBJ=<profile>: log the words of that object's first 0x800 bytes that change (finding
 // fields such as a menu's cursor).
 void DumpObjectChanges() {
     static const int profile = [] {
-        const char* value = std::getenv("NSMBW_DUMP_OBJ");
+        const char* value = std::getenv("NO100F_DUMP_OBJ");
         return value != nullptr ? static_cast<int>(std::strtol(value, nullptr, 16)) : -1;
     }();
     if (profile < 0) {
@@ -341,7 +272,7 @@ uint32_t SelectCursorObject() {
 }
 
 uint16_t CurrentScene() {
-    return 0xFFFF;  // SPM seqdrv is not NSMBW's dScene profile ID.
+    return 0xFFFF;  // no scene ID is mapped for this game
 
 }
 

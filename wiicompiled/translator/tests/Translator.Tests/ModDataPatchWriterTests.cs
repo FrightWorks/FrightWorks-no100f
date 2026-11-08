@@ -7,7 +7,7 @@ public sealed class ModDataPatchWriterTests
     [Fact]
     public void WriteEmitsBinaryBlobsAndStableAssemblyWithoutHexArrays()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mkw-mod-data-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "recomp-mod-data-" + Guid.NewGuid().ToString("N"));
         try
         {
             var cppPath = Path.Combine(root, "cpp", "mod_data_patches.cpp");
@@ -56,7 +56,7 @@ public sealed class ModDataPatchWriterTests
     [Fact]
     public void WritePrunesOptionalDigestWhenItDisappears()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mkw-mod-data-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "recomp-mod-data-" + Guid.NewGuid().ToString("N"));
         try
         {
             var cppPath = Path.Combine(root, "mod_data_patches.cpp");
@@ -80,7 +80,7 @@ public sealed class ModDataPatchWriterTests
     [Fact]
     public void WriteCanReferencePublishedBlobsFromTransactionalStaging()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mkw-mod-data-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "recomp-mod-data-" + Guid.NewGuid().ToString("N"));
         try
         {
             var stagingCpp = Path.Combine(root, ".staging", "cpp", "mod_data_patches.cpp");
@@ -104,7 +104,7 @@ public sealed class ModDataPatchWriterTests
     [Fact]
     public void WriteChangesAssemblyWhenSameSizeBlobContentChanges()
     {
-        var root = Path.Combine(Path.GetTempPath(), "mkw-mod-data-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "recomp-mod-data-" + Guid.NewGuid().ToString("N"));
         try
         {
             var cppPath = Path.Combine(root, "mod_data_patches.cpp");
@@ -134,7 +134,7 @@ public sealed class ModDataPatchWriterTests
         string? publishedBlobDirectory = null)
     {
         var plan = new KamekPatchPlan { ModuleGuestBase = 0x81700000u, Classifications = [] };
-        var manifest = new BaseManifest("test", 1, "RMCP01", "P", "hash", 0, [], [], "ranges.json");
+        var manifest = new BaseManifest("test", 1, "TEST01", "P", "hash", 0, [], [], "ranges.json");
         ModDataPatchWriter.Write(
             path,
             plan,
@@ -143,7 +143,6 @@ public sealed class ModDataPatchWriterTests
             [],
             moduleImage,
             digest,
-            null,
             (uint)moduleImage.Length,
             0x40u,
             0x81700000u,

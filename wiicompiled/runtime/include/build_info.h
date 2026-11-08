@@ -2,7 +2,7 @@
 
 // What this build was made from, generated on every build by runtime/cmake/build_info.cmake.
 namespace BuildInfo {
-// FrightWorks version: <Version> in launcher/ScoobyReMasked.Launcher.csproj ("1.0.3").
+// FrightWorks version: <Version> in launcher/FrightWorks.Launcher.csproj ("1.0.3").
 const char* Version() noexcept;
 // Git branch ("detached" for a detached HEAD), short commit, and a 4-digit hash of the uncommitted changes to tracked
 // files ("" when there are none). All "" when git wasn't found at build time.

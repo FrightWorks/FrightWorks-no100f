@@ -1,7 +1,7 @@
 ﻿using System.IO.Compression;
 using System.Security.Cryptography;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // ffmpeg for the game's F3 video recording (developer tools only; never shipped). Find looks where the game looks
 // (no100f_recorder.cpp FindFfmpeg); Download fetches the BtbN win64 GPL build from GitHub, checks its SHA-256 against

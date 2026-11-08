@@ -25,5 +25,5 @@
 
 - Locked landing (`tools/debug/yn-bisect/curtain-repro.ps1`, needs `yn-bisect-harness.patch` for `STICK_*`) for a stable before/after view.
 - Toast Y/N (`curtain-ask.ps1`) for human confirmations without chat round-trips.
-- One visible mesh can be several host draws (cull twins); merged host draws can sum several FIFO commands (`NSMBW_NO_MERGE=1` for mapping).
+- One visible mesh can be several host draws (cull twins); merged host draws can sum several FIFO commands (`NO100F_NO_MERGE=1` for mapping).
 - Dolphin capture `autotest/manual/curtains-i001.dff` + `tools/debug/dff/` for OG ground truth.

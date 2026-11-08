@@ -10,7 +10,7 @@
 static __GXData_struct sSavedGXData;
 
 // process() stops at a draw that no longer fits the staging batch and returns where it stopped; submit the batch and
-// resume there, as fifo::drain does. Ignoring that return dropped the rest of the list (SPM: back walls and floors of
+// resume there, as fifo::drain does. Ignoring that return dropped the rest of the list (back walls and floors of
 // big map display lists never drew).
 static void process_display_list(const u8* data, u32 nbytes, bool bigEndian) {
   struct ReplayScope {

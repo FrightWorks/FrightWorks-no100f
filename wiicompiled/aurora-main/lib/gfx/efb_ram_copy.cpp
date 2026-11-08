@@ -30,7 +30,7 @@ constexpr size_t kAsyncReadbackMaxBytes = 256;
 // Each destination keeps its readback buffer forever. Only a handful are expected, and the cap
 // stops an unexpected pattern of one-shot destinations from leaking GPU buffers.
 constexpr size_t kMaxAsyncSlots = MaxAsyncReadbackSlots;
-// NSMBW: texture patches (animated tiles) are read back every frame, one slot per patch position.
+// Texture patches (animated tiles) are read back every frame, one slot per patch position.
 constexpr size_t kAsyncPatchMaxBytes = 16384;
 constexpr size_t kMaxAsyncPatchSlots = 512;
 

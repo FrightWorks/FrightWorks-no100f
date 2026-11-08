@@ -3,7 +3,7 @@
 Each instruction is reduced to Dolphin's signature key (opcode + non-address fields; branch targets and immediates
 dropped), so the same function compiled at another address, with other data addresses, still matches. A donor
 function matches when its whole masked body occurs exactly once in the target text (several hits = ambiguous).
-Donor symbols: "addr size name", both hex (projects/scooby/elf_symbols.txt of the Unmasked port).
+Donor symbols: "addr size name", both hex.
 
 Usage: donormatch.py <donor main.dol> <donor symbols> <target main.dol> <out MAP> [--min 24]
 """

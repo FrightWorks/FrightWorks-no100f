@@ -1,4 +1,4 @@
-extern "C" unsigned g_spmAudit[8];
+extern "C" unsigned g_gxAudit[8];
 #include <filesystem>
 #include <cstdlib>
 #include "gx.hpp"
@@ -559,8 +559,8 @@ gfx::TextureHandle get_tlut_texture(const GXTlutObj_& tlut) {
 
 } // namespace
 
-// NSMBW: every cached static texture whose RAM contains `dest`, with the patch's place in it. A copy
-// into part of a texture (NSMBW's animated tiles patch the tile atlas) is then applied on the GPU.
+// Every cached static texture whose RAM contains `dest`, with the patch's place in it. A copy
+// into part of a texture (animated tiles patching a tile atlas) is then applied on the GPU.
 std::vector<PatchTarget> find_patch_targets(const void* dest) {
   std::vector<PatchTarget> targets;
   const auto* d = static_cast<const uint8_t*>(dest);
@@ -611,8 +611,8 @@ static void note_debug_key(const gfx::TextureHandle& handle, const GXTexObj_& ob
 
 gfx::TextureHandle resolve_static_texture(const GXTexObj_& obj) {
   ZoneScoped;
-  static const bool spmTexNoCache = std::getenv("SPM_TEX_NOCACHE") != nullptr;
-  const bool canCacheUpload = !spmTexNoCache && !obj.no_cache() && can_cache_static_texture_upload(obj);
+  static const bool gxTexNoCache = std::getenv("NO100F_TEX_NOCACHE") != nullptr;
+  const bool canCacheUpload = !gxTexNoCache && !obj.no_cache() && can_cache_static_texture_upload(obj);
 
   if (canCacheUpload && obj.texObjId != 0) {
     if (const auto it = s_textureObjectCaches.find(obj.texObjId); it != s_textureObjectCaches.end()) {
@@ -686,8 +686,8 @@ gfx::TextureHandle resolve_static_texture(const GXTexObj_& obj) {
 gfx::TextureHandle resolve_static_palette_texture(const GXTexObj_& obj, const GXTlutObj_& tlut) {
   ZoneScoped;
 
-  static const bool spmTexNoCachePal = std::getenv("SPM_TEX_NOCACHE") != nullptr;
-  if (!spmTexNoCachePal && obj.texObjId != 0) {
+  static const bool gxTexNoCachePal = std::getenv("NO100F_TEX_NOCACHE") != nullptr;
+  if (!gxTexNoCachePal && obj.texObjId != 0) {
     if (const auto it = s_textureObjectCaches.find(obj.texObjId); it != s_textureObjectCaches.end()) {
       const auto& entry = it->second;
       if (entry.handle && entry.texDataVersion == obj.texDataVersion && entry.tlutObjId == tlut.tlutObjId &&
@@ -698,7 +698,7 @@ gfx::TextureHandle resolve_static_palette_texture(const GXTexObj_& obj, const GX
     }
   }
 
-  const bool canUseSourceCache = !spmTexNoCachePal && !obj.no_cache() && !tlut.no_cache() && obj.data != nullptr && tlut.data != nullptr;
+  const bool canUseSourceCache = !gxTexNoCachePal && !obj.no_cache() && !tlut.no_cache() && obj.data != nullptr && tlut.data != nullptr;
   const StaticPaletteTextureKey sourceKey =
       canUseSourceCache ? make_static_palette_texture_key(obj, tlut) : StaticPaletteTextureKey{};
   if (canUseSourceCache) {
@@ -979,7 +979,7 @@ MappedRenderState map_logical_render_state() noexcept {
 namespace {
 void apply_logical_render_state() noexcept;
 // The mapped viewport/scissor bake in the render-target scale. A game that sets its viewport once and then changes
-// the VI mode (Scooby-Doo! Unmasked: 640x480 -> 640x448) resizes the target afterwards; re-map after every resize
+// the VI mode (for example 640x480 -> 640x448) resizes the target afterwards; re-map after every resize
 // (it stopped 448*2.25 rows into a 448*2.41-row target: a black strip at the bottom).
 void reapply_after_resize() { apply_logical_render_state(); }
 
@@ -1379,7 +1379,7 @@ void evict_copy_texture(const void* dest) noexcept {
       }
     }
   }
-  // NSMBW: the pooled GPU textures stay: a destination evicted and copied again every frame (the
+  // The pooled GPU textures stay: a destination evicted and copied again every frame (the
   // animated tiles) reuses them instead of creating new ones; the pool releases idle ones itself.
   if (changed) {
     mark_copy_texture_cache_changed();
@@ -1450,8 +1450,8 @@ GXState::CopyTextureRef* find_copy_texture_for_texobj(const GXTexObj_& obj) noex
   }
 
   if (auto* cached = find_cached_copy_texture(obj.data, obj)) {
-    // NSMBW debugging: NSMBW_LOG_STALE_COPIES logs copies sampled in a frame that didn't produce them.
-    static const bool logStale = std::getenv("NSMBW_LOG_STALE_COPIES") != nullptr;
+    // Debugging: NO100F_LOG_STALE_COPIES logs copies sampled in a frame that didn't produce them.
+    static const bool logStale = std::getenv("NO100F_LOG_STALE_COPIES") != nullptr;
     if (logStale && cached->lastProducedFrame != gfx::current_frame()) {
       static u32 lastFrame = 0, count = 0;
       if (lastFrame != gfx::current_frame()) {
@@ -1469,9 +1469,9 @@ GXState::CopyTextureRef* find_copy_texture_for_texobj(const GXTexObj_& obj) noex
     mark_copy_texture_sampled(obj.data, exact->second);
     return &exact->second;
   }
-  // NSMBW debugging: NSMBW_LOG_COPY_MISSES logs a texture whose address holds an EFB copy that it
+  // Debugging: NO100F_LOG_COPY_MISSES logs a texture whose address holds an EFB copy that it
   // doesn't match (so it falls back to guest RAM, which GPU-only copies never wrote).
-  static const bool logMisses = std::getenv("NSMBW_LOG_COPY_MISSES") != nullptr;
+  static const bool logMisses = std::getenv("NO100F_LOG_COPY_MISSES") != nullptr;
   if (logMisses) {
     static int logged = 0;
     const GXState::CopyTextureRef* other = exact != g_gxState.copyTextures.end() ? &exact->second : nullptr;
@@ -1523,8 +1523,8 @@ void resolve_sampled_textures(const ShaderInfo& info) noexcept {
     GXTexObj_ obj = g_gxState.loadedTextures[i];
     auto& textureBind = g_gxState.textures[i];
     const TextureResolveIdentity identity = make_texture_resolve_identity(obj);
-    // NSMBW debugging: NSMBW_NO_TEXMEMO resolves every sampled texture from scratch (no memo shortcuts).
-    static const bool noTexMemo = std::getenv("NSMBW_NO_TEXMEMO") != nullptr;
+    // Debugging: NO100F_NO_TEXMEMO resolves every sampled texture from scratch (no memo shortcuts).
+    static const bool noTexMemo = std::getenv("NO100F_NO_TEXMEMO") != nullptr;
     if (noTexMemo) {
       s_lastTextureResolveIdentityValid[i] = false;
       s_lastStaticSourceResolveKeyValid[i] = false;
@@ -1602,16 +1602,16 @@ void resolve_sampled_textures(const ShaderInfo& info) noexcept {
       handle = resolve_static_texture(obj);
     }
 
-    // NSMBW debugging: NSMBW_TEX_PROBE logs each texture (address, size, format) the first time it
+    // Debugging: NO100F_TEX_PROBE logs each texture (address, size, format) the first time it
     // resolves from a given source: an EFB copy or guest RAM (and which GPU texture).
-    static const bool texProbe = std::getenv("NSMBW_TEX_PROBE") != nullptr || std::filesystem::exists("texprobe.txt");
-    if (!handle && obj.data != nullptr && (++g_spmAudit[2], texProbe)) {
+    static const bool texProbe = std::getenv("NO100F_TEX_PROBE") != nullptr || std::filesystem::exists("texprobe.txt");
+    if (!handle && obj.data != nullptr && (++g_gxAudit[2], texProbe)) {
       static u32 misses = 0;
       if (misses++ < 200) std::fprintf(stderr, "[texprobe] NO HANDLE map %u tex %p %ux%u fmt %u\n", static_cast<unsigned>(i), obj.data, obj.width(), obj.height(), obj.format());
     }
     if (!handle) {  // audit: a used texture slot that resolved to nothing (null data, or palette format without a valid TLUT)
-      ++g_spmAudit[6];
-      if (is_palette_format(obj.format())) ++g_spmAudit[7];
+      ++g_gxAudit[6];
+      if (is_palette_format(obj.format())) ++g_gxAudit[7];
     }
     if (texProbe && handle) {
       static absl::flat_hash_set<std::pair<const void*, const void*>> seen;

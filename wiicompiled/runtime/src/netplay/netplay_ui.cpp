@@ -225,7 +225,7 @@ struct Assets {
     GameLayout::Layout yesNo;
     GameLayout::Layout cursor;
     std::shared_ptr<GameLayout::Font> message;
-    std::shared_ptr<GameLayout::Font> mario;
+    std::shared_ptr<GameLayout::Font> title;
 };
 
 Assets& GetAssets() {
@@ -235,7 +235,7 @@ Assets& GetAssets() {
         assets.yesNo.Load("/Layout/yesnoWindow/yesnoWindow.arc");
         assets.cursor.Load("/Layout/select_cursor/select_cursor.arc");
         assets.message = GameLayout::LoadFont("mj2d00_MessageFont_32_I4.brfnt");
-        assets.mario = GameLayout::LoadFont("mj2d01_marioFont_64_IA4.brfnt");
+        assets.title = GameLayout::LoadFont("mj2d01_marioFont_64_IA4.brfnt");
     }
     return assets;
 }
@@ -324,13 +324,13 @@ void Text(const Canvas& c, const std::string& text, float x, float y, float size
     GameLayout::DrawText(c.list, c.view, *a.message, t, x, y, size, color, color, c.alpha, originH, 1);
 }
 
-// A title in the game's Mario font (yellow to orange), like "Select Players".
+// A title in the game's title font (yellow to orange), like "Select Players".
 void Title(const Canvas& c, const std::string& text, float x, float y, float size = 44.0f) {
     Assets& a = GetAssets();
-    if (!GameLayout::FontReady(a.mario.get())) {
+    if (!GameLayout::FontReady(a.title.get())) {
         return;
     }
-    GameLayout::DrawText(c.list, c.view, *a.mario, Utf16(text), x, y, size, 0xFFFF00FFu, 0xFF8C00FFu, c.alpha, 1, 1);
+    GameLayout::DrawText(c.list, c.view, *a.title, Utf16(text), x, y, size, 0xFFFF00FFu, 0xFF8C00FFu, c.alpha, 1, 1);
 }
 
 float Pulse(int frame) {
@@ -1538,12 +1538,12 @@ void OnSessionStall() {
     }
 }
 
-// NSMBW_LOBBY_TEST (Android: debug.nsmbw.lobbytest) drives the lobby without the menus, to test
+// NO100F_LOBBY_TEST (Android: debug.no100f.lobbytest) drives the lobby without the menus, to test
 // rooms between devices: "host" opens a room for 2 and starts it once someone joins, "join" joins
 // the first room it finds. The session then starts as it does from the menus.
 bool LobbyTest() {
     static const std::string mode = [] {
-        const char* value = std::getenv("NSMBW_LOBBY_TEST");
+        const char* value = std::getenv("NO100F_LOBBY_TEST");
         return value != nullptr ? std::string(value) : std::string();
     }();
     if (mode != "host" && mode != "join") {
@@ -1585,10 +1585,10 @@ bool LobbyTest() {
     return true;
 }
 
-// NSMBW_DUMP_PROFILES=1: log the object profiles whenever the set changes (finding screens).
+// NO100F_DUMP_PROFILES=1: log the object profiles whenever the set changes (finding screens).
 void DumpProfiles() {
     static const bool on = [] {
-        const char* value = std::getenv("NSMBW_DUMP_PROFILES");
+        const char* value = std::getenv("NO100F_DUMP_PROFILES");
         return value != nullptr && value[0] == '1';
     }();
     static int frame = 0;
@@ -1610,7 +1610,7 @@ void DumpProfiles() {
     last = profiles;
 }
 
-// NSMBW_WARP=<world>-<course> (debug.nsmbw.warp on Android): entering any course from the world map
+// NO100F_WARP=<world>-<course> (debug.no100f.warp on Android): entering any course from the world map
 // enters that one instead (testing a level without a save that reaches it). Courses 1-9 are the
 // numbered ones; others are STAGE_e numbers: 20 ghost house, 21 tower, 23 castle, 32-34 the map
 // enemies' courses (5-32: World 5's giant Piranha Plant), 37 airship. Works by
@@ -1618,14 +1618,14 @@ void DumpProfiles() {
 // +0xE/+0xF, all from 0)
 // while the map fades out to the course-in scene, which reads it.
 void Warp() {
-    // SPM uses seqSetSeq; NSMBW startGameInfo writes would overwrite SPM instructions.
+    // Not implemented for this game.
 }
 
-// NSMBW_DUMP_LAYOUT=<arc>;<arc>...: log every pane's position in those layouts once (finding
+// NO100F_DUMP_LAYOUT=<arc>;<arc>...: log every pane's position in those layouts once (finding
 // where the game's own buttons are).
 void DumpLayouts() {
     static bool done = false;
-    const char* value = std::getenv("NSMBW_DUMP_LAYOUT");
+    const char* value = std::getenv("NO100F_DUMP_LAYOUT");
     if (done || value == nullptr) {
         return;
     }
@@ -1649,13 +1649,13 @@ void DumpLayouts() {
     }
 }
 
-// NSMBW_TAP_SCRIPT="<ms>:<x>:<y>,..." (Android: debug.nsmbw.tapscript): taps at fractions of the
+// NO100F_TAP_SCRIPT="<ms>:<x>:<y>,..." (Android: debug.no100f.tapscript): taps at fractions of the
 // window, <ms> after the first frame, through the same path as real ones (testing without a hand).
 void ScriptedTaps() {
     struct ScriptTap { long long ms; float x, y; };
     static std::vector<ScriptTap> taps = [] {
         std::vector<ScriptTap> list;
-        const char* value = std::getenv("NSMBW_TAP_SCRIPT");
+        const char* value = std::getenv("NO100F_TAP_SCRIPT");
         if (value == nullptr) {
             return list;
         }
@@ -1687,7 +1687,7 @@ void ScriptedTaps() {
 void Draw() {
     DumpProfiles();
     Warp();
-    if (std::getenv("NSMBW_DUMP_STATES") != nullptr) {
+    if (std::getenv("NO100F_DUMP_STATES") != nullptr) {
         static std::string lastStates;
         std::string states = GameMenus::DumpStates();
         if (states != lastStates) {
@@ -1760,7 +1760,7 @@ void Draw() {
     }
     if (scene == kSceneWorldMap) {
         ApplyMenuLayout();
-        static const bool dumpMap = std::getenv("NSMBW_DUMP_WMAP") != nullptr;
+        static const bool dumpMap = std::getenv("NO100F_DUMP_WMAP") != nullptr;
         static int dumpFrame = 0;
         if (dumpMap && ++dumpFrame % 600 == 0) {
             WorldMapNav::Dump();

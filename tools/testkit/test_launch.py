@@ -13,17 +13,17 @@ from testkit._fakes import FakeGameCase  # noqa: E402
 
 class EnvTest(unittest.TestCase):
     def test_scrubs_leftover_switches_and_isolates_controllers(self):
-        base = {"PATH": "/bin", "NO100F_SKIP_LINES": "1", "AX_DIAG_DIR": "x", "NSMBW_SCRIPT_REMOTES": "2",
-                "AUDIO_RAW_DUMP": "x.raw", "BUTTON_ICONS": "xbox", "AURORA_GFX_FLAGS": "validate", "SPM_FLAT_TEST": "1",
+        base = {"PATH": "/bin", "NO100F_SKIP_LINES": "1", "AX_DIAG_DIR": "x", "NO100F_SCRIPT_REMOTES": "2",
+                "AUDIO_RAW_DUMP": "x.raw", "BUTTON_ICONS": "xbox", "AURORA_GFX_FLAGS": "validate", "NO100F_FLAT_TEST": "1",
                 "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS": "1", "SDL_GAMECONTROLLER_IGNORE_DEVICES": "0x1/0x2",
-                "SDL_WINDOW_ACTIVATE_WHEN_SHOWN": "1", "NSMBW_INPUT_SCRIPT": "1000:A"}
+                "SDL_WINDOW_ACTIVATE_WHEN_SHOWN": "1", "NO100F_INPUT_SCRIPT": "1000:A"}
         env = launch.test_env(base)
         self.assertEqual(env["PATH"], "/bin")
-        for gone in ("NO100F_SKIP_LINES", "AX_DIAG_DIR", "NSMBW_SCRIPT_REMOTES", "AUDIO_RAW_DUMP", "BUTTON_ICONS",
-                     "AURORA_GFX_FLAGS", "SPM_FLAT_TEST", "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",
+        for gone in ("NO100F_SKIP_LINES", "AX_DIAG_DIR", "NO100F_SCRIPT_REMOTES", "AUDIO_RAW_DUMP", "BUTTON_ICONS",
+                     "AURORA_GFX_FLAGS", "NO100F_FLAT_TEST", "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS",
                      "SDL_GAMECONTROLLER_IGNORE_DEVICES", "SDL_WINDOW_ACTIVATE_WHEN_SHOWN"):
             self.assertNotIn(gone, env)
-        self.assertEqual(env["NSMBW_INPUT_SCRIPT"], launch.DUMMY_PAD_SCRIPT)  # the caller's script is replaced
+        self.assertEqual(env["NO100F_INPUT_SCRIPT"], launch.DUMMY_PAD_SCRIPT)  # the caller's script is replaced
         self.assertEqual(env["SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT"], launch.IGNORE_PADS_EXCEPT)
         self.assertEqual(env["NO100F_DEV_TOOLS"], "1")
 
@@ -71,7 +71,7 @@ class BuildIdTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         (self.repo / "launcher").mkdir()
-        (self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj").write_text("<Version>2.3.4</Version>")
+        (self.repo / "launcher" / "FrightWorks.Launcher.csproj").write_text("<Version>2.3.4</Version>")
         git(self.repo, "init", "-q", "-b", "work")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-q", "-m", "x")
@@ -82,7 +82,7 @@ class BuildIdTest(unittest.TestCase):
         self.assertEqual(bid.changes, "")
 
     def test_uncommitted_change_adds_a_hash(self):
-        (self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
+        (self.repo / "launcher" / "FrightWorks.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
         bid = launch.expected_build_id(self.repo)
         self.assertRegex(str(bid), r"^2\.3\.4 work@[0-9a-f]{7}\+[0-9a-f]{4}$")
 
@@ -145,13 +145,13 @@ class BuildIdTest(unittest.TestCase):
 
     def test_uncommitted_game_change_fails(self):
         built = self.built_id()
-        (self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
+        (self.repo / "launcher" / "FrightWorks.Launcher.csproj").write_text("<Version>2.3.4</Version>\n")
         ok, msg = launch.check_build(built, launch.expected_build_id(self.repo), self.repo)
         self.assertFalse(ok)
         self.assertIn("csproj", msg)
 
     def test_a_build_made_from_uncommitted_changes_that_differ_now_fails(self):
-        csproj = self.repo / "launcher" / "ScoobyReMasked.Launcher.csproj"
+        csproj = self.repo / "launcher" / "FrightWorks.Launcher.csproj"
         csproj.write_text("<Version>2.3.4</Version>\n")
         built = self.built_id()
         self.assertIn("+", built)

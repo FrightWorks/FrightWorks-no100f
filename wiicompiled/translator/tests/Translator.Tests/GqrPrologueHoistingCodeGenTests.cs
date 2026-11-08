@@ -43,10 +43,10 @@ public class GqrPrologueHoistingCodeGenTests
         var code = Emit(Function("hoisted",
             PsqLoad(0), PsqLoad(0), PsqStore(0), new IrReturn(null)));
 
-        Assert.Contains("[[maybe_unused]] uint32_t mkw_gqr0 = ctx->gqr[0];", code, StringComparison.Ordinal);
+        Assert.Contains("[[maybe_unused]] uint32_t recomp_gqr0 = ctx->gqr[0];", code, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(code, "ctx->gqr[0]"));
-        Assert.Equal(2, CountOccurrences(code, "PPC_PsqLGqrInline<0u, 0u>(ctx, mkw_gqr0,"));
-        Assert.Equal(1, CountOccurrences(code, "PPC_PsqStGqrInline<0u, 0u>(ctx, mkw_gqr0,"));
+        Assert.Equal(2, CountOccurrences(code, "PPC_PsqLGqrInline<0u, 0u>(ctx, recomp_gqr0,"));
+        Assert.Equal(1, CountOccurrences(code, "PPC_PsqStGqrInline<0u, 0u>(ctx, recomp_gqr0,"));
         Assert.DoesNotContain("PPC_PsqLInline<", code, StringComparison.Ordinal);
         Assert.DoesNotContain("PPC_PsqStInline<", code, StringComparison.Ordinal);
     }
@@ -57,9 +57,9 @@ public class GqrPrologueHoistingCodeGenTests
         var code = Emit(Function("two_indices",
             PsqLoad(0), PsqLoad(5), new IrReturn(null)));
 
-        Assert.Contains("[[maybe_unused]] uint32_t mkw_gqr0 = ctx->gqr[0];", code, StringComparison.Ordinal);
-        Assert.Contains("[[maybe_unused]] uint32_t mkw_gqr5 = ctx->gqr[5];", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("mkw_gqr1", code, StringComparison.Ordinal);
+        Assert.Contains("[[maybe_unused]] uint32_t recomp_gqr0 = ctx->gqr[0];", code, StringComparison.Ordinal);
+        Assert.Contains("[[maybe_unused]] uint32_t recomp_gqr5 = ctx->gqr[5];", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("recomp_gqr1", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -72,9 +72,9 @@ public class GqrPrologueHoistingCodeGenTests
             new IrReturn(null)));
 
         // Prologue read plus the mtspr's own write, then the reload.
-        Assert.Contains("[[maybe_unused]] uint32_t mkw_gqr3 = ctx->gqr[3];", code, StringComparison.Ordinal);
-        Assert.Contains("mkw_gqr3 = ctx->gqr[3];", code, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Contains("[[maybe_unused]] uint32_t recomp_gqr3 = ctx->gqr[3];", code, StringComparison.Ordinal);
+        Assert.Contains("recomp_gqr3 = ctx->gqr[3];", code, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class GqrPrologueHoistingCodeGenTests
             PsqLoad(3),
             new IrReturn(null)));
 
-        Assert.Equal(1, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(1, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class GqrPrologueHoistingCodeGenTests
             PsqLoad(3),
             new IrReturn(null)));
 
-        Assert.Equal(2, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(2, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class GqrPrologueHoistingCodeGenTests
             PsqLoad(3),
             new IrReturn(null)));
 
-        Assert.Equal(2, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(2, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class GqrPrologueHoistingCodeGenTests
                 new IrReturn(null)),
             gqrCalleeWriteMasks: new Dictionary<uint, byte> { [0x80002000u] = 0b0100_0000 });
 
-        Assert.Equal(1, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(1, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class GqrPrologueHoistingCodeGenTests
                 new IrReturn(null)),
             gqrCalleeWriteMasks: new Dictionary<uint, byte> { [0x80002000u] = 0b0000_1000 });
 
-        Assert.Equal(2, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(2, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class GqrPrologueHoistingCodeGenTests
             PsqLoad(3),
             new IrReturn(null)));
 
-        Assert.Equal(1, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(1, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class GqrPrologueHoistingCodeGenTests
             PsqLoad(3),
             new IrReturn(null)));
 
-        Assert.Equal(2, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(2, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class GqrPrologueHoistingCodeGenTests
             PsqLoad(3),
             new IrReturn(null)));
 
-        Assert.Equal(1, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(1, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class GqrPrologueHoistingCodeGenTests
             PsqLoad(3),
             new IrReturn(null)));
 
-        Assert.Equal(2, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(2, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class GqrPrologueHoistingCodeGenTests
         var code = Emit(Function("psq_only",
             PsqLoad(3), PsqLoad(3), PsqStore(3), new IrReturn(null)));
 
-        Assert.Equal(1, CountOccurrences(code, "mkw_gqr3 = ctx->gqr[3];"));
+        Assert.Equal(1, CountOccurrences(code, "recomp_gqr3 = ctx->gqr[3];"));
     }
 
     [Fact]
@@ -211,7 +211,7 @@ public class GqrPrologueHoistingCodeGenTests
             new IrReturn(null)));
 
         Assert.DoesNotContain("PPC_PsqLGqrInline", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("mkw_gqr0", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("recomp_gqr0", code, StringComparison.Ordinal);
     }
 
     [Fact]

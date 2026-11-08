@@ -10,7 +10,7 @@
 #include <cstring>
 
 
-static void func_801A6D30(CpuContext*) {}  // SPM has no AXFX standard reverb
+static void func_801A6D30(CpuContext*) {}  // AXFX standard reverb: nothing to do
 
 #if defined(__clang__)
 // PowerPC uses discrete fmuls/fadds; a fused multiply-add would change sample rounding.
@@ -24,8 +24,8 @@ constexpr uint32_t kSamplesPerFrame = 96;
 constexpr uint32_t kChannels = 3;
 
 // .sdata2 constants the guest function loads through r2.
-constexpr uint32_t kOneConstantAddr = 0x80576060u;   // 1.0f (NSMBW .sdata2, loaded by AXFXReverbStdExpCallback)
-constexpr uint32_t kScaleConstantAddr = 0x80576064u; // 0.6f send pre-scale (NSMBW)
+constexpr uint32_t kOneConstantAddr = 0x80576060u;   // 1.0f (.sdata2, loaded by AXFXReverbStdExpCallback)
+constexpr uint32_t kScaleConstantAddr = 0x80576064u; // 0.6f send pre-scale
 
 // AXFX_REVERBSTD_EXP field offsets (byte offsets into the struct in r4).
 constexpr uint32_t kFieldPreDelayCoef = 0x18;
@@ -371,7 +371,3 @@ extern "C" void AXFXReverbStdExpCallback_8012b830(CpuContext* ctx) {
     ReverbStd::Render(stateAddr, frame);
 }
 
-#if 0  // SPM: AXFXReverbStdExpCallback: name not in SPM
-REGISTER_NATIVE_FUNCTION_AS(0x800010B0, AXFXReverbStdExpCallback_8012b830,
-                            "AXFXReverbStdExpCallback_8012b830");
-#endif

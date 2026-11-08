@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 static class Program
 {

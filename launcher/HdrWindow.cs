@@ -6,9 +6,9 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
-using static ScoobyReMasked.Skin;
+using static FrightWorks.Skin;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 sealed class HdrWindow : Window
 {

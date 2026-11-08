@@ -6,7 +6,7 @@ namespace RuntimeProduct {
 
 enum class Kind {
     BaseGame,
-    RetroRewind,
+    ModProduct,
 };
 
 struct Descriptor {
@@ -19,8 +19,8 @@ struct Descriptor {
 // runtime be compiled once and shared by every product.
 const Descriptor& Active() noexcept;
 
-inline bool IsRetroRewind() noexcept {
-    return Active().kind == Kind::RetroRewind;
+inline bool IsModProduct() noexcept {
+    return Active().kind == Kind::ModProduct;
 }
 
 } // namespace RuntimeProduct

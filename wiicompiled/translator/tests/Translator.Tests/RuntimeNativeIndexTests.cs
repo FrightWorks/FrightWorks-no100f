@@ -9,7 +9,7 @@ public sealed class RuntimeNativeIndexTests
     [Fact]
     public void BuildCapturesEveryRuntimeRegistrationKind()
     {
-        var directory = Path.Combine(Path.GetTempPath(), $"mkw-native-kinds-{Guid.NewGuid():N}");
+        var directory = Path.Combine(Path.GetTempPath(), $"recomp-native-kinds-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
         {
@@ -46,7 +46,7 @@ public sealed class RuntimeNativeIndexTests
     [Fact]
     public void BuildSharesTypedAbiAndEffectDataWithoutCreatingSidecarFiles()
     {
-        var directory = Path.Combine(Path.GetTempPath(), $"mkw-native-index-{Guid.NewGuid():N}");
+        var directory = Path.Combine(Path.GetTempPath(), $"recomp-native-index-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         var sourcePath = Path.Combine(directory, "fixture.cpp");
         try

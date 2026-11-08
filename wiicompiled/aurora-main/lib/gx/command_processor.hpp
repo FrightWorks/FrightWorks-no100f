@@ -9,7 +9,7 @@ namespace aurora::gx::fifo {
 void reset_cp_register_cache();
 
 // True while a recorded display list is being replayed. The game's SDK never flushes deferred state (genMode) into a
-// list, so genMode copies Aurora recorded must not switch coplanar mode off (SPM mi1_01 front grass).
+// list, so genMode copies Aurora recorded must not switch coplanar mode off.
 extern bool g_replayingDisplayList;
 
 // Process a buffer of GX FIFO commands

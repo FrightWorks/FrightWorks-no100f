@@ -61,17 +61,11 @@ extern "C" int32_t WPADGetStatus_HLE()
     // Reading r3 here would leak a caller's stale register value into the result.
     return g_state.contract.GetLibraryStatus();
 }
-#if 0  // SCOOBY: WPADGetStatus: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012D8, WPADGetStatus_HLE, int32_t, (), ());
-#endif
 
 extern "C" uint32_t WPADGetDpdSensitivity_HLE()
 {
     return static_cast<uint32_t>(g_state.dpdSensitivity);
 }
-#if 0  // SCOOBY: WPADGetDpdSensitivity: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012DC, WPADGetDpdSensitivity_HLE, uint32_t, (), ());
-#endif
 
 extern "C" int32_t WPADInitSub_HLE()
 {
@@ -81,27 +75,16 @@ extern "C" int32_t WPADInitSub_HLE()
     }
     return kStatusOk;
 }
-#if 0  // NSMBW: WPADInitSub is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801bf3b4: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(800012E0, WPADInitSub_HLE, int32_t, (), ());
-#endif
-#endif
 
 extern "C" int32_t WPADInit_HLE()
 {
     return InitializeWpadLibrary();
 }
-#if 0  // SCOOBY: WPADInit: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012E4, WPADInit_HLE, int32_t, (), ());
-#endif
 
 extern "C" int32_t WUDGetStatus_HLE()
 {
     return WpadContract::kStatusReady;
 }
-#if 0  // SCOOBY: WUDGetStatus: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012E8, WUDGetStatus_HLE, int32_t, (), ());
-#endif
 
 // WPADGetDataFormat reads the per-channel format set by WPADSetDataFormat. Can't reuse the
 // translated SDK implementation: it dereferences Bluetooth control blocks that HLE'd WPADInit
@@ -110,18 +93,12 @@ extern "C" int32_t WPADGetDataFormat_HLE(uint32_t chan)
 {
     return g_state.contract.GetDataFormat(chan);
 }
-#if 0  // SCOOBY: WPADGetDataFormat: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012EC, WPADGetDataFormat_HLE, int32_t, (uint32_t chan), (chan));
-#endif
 
 // WPADSetDataFormat: records the per-channel data format the game asked for.
 extern "C" int32_t WPADSetDataFormat_HLE(uint32_t chan, int32_t format)
 {
     return g_state.contract.SetDataFormat(chan, format);
 }
-#if 0  // SCOOBY: WPADSetDataFormat: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012F0, WPADSetDataFormat_HLE, int32_t, (uint32_t chan, int32_t format), (chan, format));
-#endif
 
 // WPADProbe: reports the extension type of a Bluetooth remote on `chan`, or no controller.
 extern "C" int32_t WPADProbe_HLE(uint32_t chan, uint32_t typePtr)
@@ -168,18 +145,12 @@ extern "C" int32_t WPADProbe_HLE(uint32_t chan, uint32_t typePtr)
     }
     return WpadContract::kErrorNoController;
 }
-#if 0  // SCOOBY: WPADProbe: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012F4, WPADProbe_HLE, int32_t, (uint32_t chan, uint32_t typePtr), (chan, typePtr));
-#endif
 
 extern "C" void WPADControlMotor_HLE(uint32_t chan, uint32_t command)
 {
     (void)chan;
     (void)command;
 }
-#if 0  // SCOOBY: WPADControlMotor: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012F8, WPADControlMotor_HLE, void, (uint32_t chan, uint32_t command), (chan, command));
-#endif
 
 extern "C" int32_t WPADGetInfoAsync_HLE(uint32_t chan, uint32_t infoPtr, uint32_t callback)
 {
@@ -190,10 +161,6 @@ extern "C" int32_t WPADGetInfoAsync_HLE(uint32_t chan, uint32_t infoPtr, uint32_
     (void)infoPtr;
     return CompleteWpadRequest(chan, callback, WpadContract::kErrorNoController);
 }
-#if 0  // SCOOBY: WPADGetInfoAsync: name not in Scooby
-PPC_NATIVE_OVERRIDE(800012FC, WPADGetInfoAsync_HLE, int32_t,
-         (uint32_t chan, uint32_t infoPtr, uint32_t callback), (chan, infoPtr, callback));
-#endif
 
 extern "C" int32_t WPADControlLed_HLE(uint32_t chan, uint32_t ledMask, uint32_t callback)
 {
@@ -203,10 +170,6 @@ extern "C" int32_t WPADControlLed_HLE(uint32_t chan, uint32_t ledMask, uint32_t 
     (void)ledMask;
     return CompleteWpadRequest(chan, callback, WpadContract::kErrorNoController);
 }
-#if 0  // SPM: WPADControlLed: name not in SPM
-PPC_NATIVE_OVERRIDE(80001300, WPADControlLed_HLE, int32_t,
-         (uint32_t chan, uint32_t ledMask, uint32_t callback), (chan, ledMask, callback));
-#endif
 
 extern "C" int32_t WPADStartSimpleSync_HLE()
 {
@@ -216,16 +179,6 @@ extern "C" int32_t WPADStartSimpleSync_HLE()
     g_state.simpleSyncActive = true;
     return 1;
 }
-#if 0  // NSMBW: WPADStartSimpleSync is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801bf634: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(80001304, WPADStartSimpleSync_HLE, int32_t, (), ()); // WUDStartSyncSimple
-#endif
-#endif
-#if 0  // NSMBW: WPADStartSimpleSync is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801bf638: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(80001308, WPADStartSimpleSync_HLE, int32_t, (), ()); // WPADStartSimpleSync (HBM)
-#endif
-#endif
 
 // due to multiplayer controller screen hle this to avoid startsyncdevice to return fail every frame
 // causing you to get softlocked in the game
@@ -240,9 +193,6 @@ extern "C" int32_t WPADStopSimpleSync_HLE()
     }
     return 1;
 }
-#if 0  // SCOOBY: WPADStopSimpleSync: name not in Scooby
-PPC_NATIVE_OVERRIDE(8000130C, WPADStopSimpleSync_HLE, int32_t, (), ());
-#endif
 
 extern "C" uint32_t WPADSetSyncDeviceCallback_HLE(uint32_t callback)
 {
@@ -250,8 +200,3 @@ extern "C" uint32_t WPADSetSyncDeviceCallback_HLE(uint32_t callback)
     g_state.syncDeviceCallback = callback;
     return previous;
 }
-#if 0  // NSMBW: WPADSetSyncDeviceCallback is not linked into NSMBW (was MKW-only)
-#if 0  // SPM: 0x801bf640: no NSMBW symbol at this address
-PPC_NATIVE_OVERRIDE(80001310, WPADSetSyncDeviceCallback_HLE, uint32_t, (uint32_t callback), (callback));
-#endif
-#endif

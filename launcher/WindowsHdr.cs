@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Read-only display queries. Advanced-color capability alone does not mean Windows HDR is enabled.
 static class WindowsHdr

@@ -94,7 +94,7 @@ reuse, dropping wrappers before readback completion, invalid dimensions/sRGB
 formats, the eight-set allocation bound, and the unavailable-backend stub.
 
 Readback is only the test oracle and is absent from the game upscaling path.
-These samples do not measure reconstruction quality at edges or race performance.
+These samples do not measure reconstruction quality at edges or in-game performance.
 
 ## Windowed presentation test
 
@@ -115,7 +115,7 @@ On the same M3, all 84 frames passed with Metal API/GPU validation: disabled,
 enabled, window resize, 4:3/16:9 aspect changes, native-size bypass, disable, and
 re-enable. Assertions check renderer status and errors; this is not a pixel-level
 verification of the window image. The core build and macOS 12 deployment-target
-availability compilation also passed. Full Mario Kart gameplay, race performance,
+availability compilation also passed. Full gameplay, in-game performance,
 visual quality, Intel Macs, other Apple GPUs, older macOS runtime versions, and
 non-macOS full builds remain untested.
 

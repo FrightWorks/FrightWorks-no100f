@@ -38,7 +38,7 @@ console = open(logdir / "console.log", "w", encoding="utf-8")
 console.write(f"FrightWorks {os.environ.get('FAKE_BUILD_ID', '0.0.0 fake@0000000')}\n")
 console.write(f"[dvdread] DATA\\files\\XX\\{boot}.HIP\n")
 console.flush()
-assert os.environ.get("NSMBW_INPUT_SCRIPT"), "dummy pad script missing"
+assert os.environ.get("NO100F_INPUT_SCRIPT"), "dummy pad script missing"
 assert os.environ.get("SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT"), "controller isolation missing"
 assert "SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS" not in os.environ
 
@@ -74,7 +74,7 @@ while True:
     if mode == "crash" and now > 1.0:
         sys.exit(3)
     if mode == "fault" and now > 1.0 and not os.path.exists("fault-printed"):
-        print("MKW AccessViolation at 0x80001234", file=sys.stderr, flush=True)
+        print("AccessViolation at 0x80001234", file=sys.stderr, flush=True)
         open("fault-printed", "w").close()
     if in_play():
         if os.path.exists("devmenu_press.txt"):

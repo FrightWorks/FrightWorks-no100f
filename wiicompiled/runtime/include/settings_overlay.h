@@ -9,9 +9,6 @@ void InitializeRuntimeSettings() noexcept;
 // Draw the F10 settings bar before each Aurora present.
 void HandleEvents(const AuroraEvent* events) noexcept;
 void Draw() noexcept;
-bool StartupScreenVisible() noexcept;
-void NotifyStrapInputAccepted() noexcept;
-void AdvancePresentedFrame() noexcept;
 // Put host controllers back to a neutral state before the process ends.
 void ReleaseControllers() noexcept;
 // FPS counter on or off (the Android menu sets it through JNI); saved to Config.toml.

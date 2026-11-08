@@ -5,7 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 
-namespace ScoobyReMasked;
+namespace FrightWorks;
 
 // Controller-originated flows use local themed browsers. Mouse/keyboard retain the native storage provider/portal.
 static class ControllerDialogs

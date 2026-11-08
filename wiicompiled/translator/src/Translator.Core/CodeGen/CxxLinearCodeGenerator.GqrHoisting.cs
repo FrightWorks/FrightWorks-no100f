@@ -20,7 +20,7 @@ public sealed partial class CxxLinearCodeGenerator
     [ThreadStatic]
     private static IReadOnlySet<uint>? _hoistedGqrIndices;
 
-    internal static string HoistedGqrName(long index) => $"mkw_gqr{index}";
+    internal static string HoistedGqrName(long index) => $"recomp_gqr{index}";
 
     private static bool IsGqrHoisted(long index) =>
         _hoistedGqrIndices is { Count: > 0 } && _hoistedGqrIndices.Contains((uint)index);

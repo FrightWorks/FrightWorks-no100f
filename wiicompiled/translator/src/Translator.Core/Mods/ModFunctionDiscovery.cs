@@ -7,7 +7,7 @@ namespace Translator.Core.Mods;
 public sealed record ModFunctionStart(uint Address, string Reason);
 
 /// <summary>
-/// Recovers module entry points from the relocated Kamek image alone. Retro Rewind
+/// Recovers module entry points from the relocated Kamek image alone. Mod
 /// packs ship no Code.map, so these heuristics are the only source of module
 /// function boundaries.
 /// </summary>

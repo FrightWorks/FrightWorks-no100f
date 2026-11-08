@@ -78,7 +78,7 @@ if ($Zip) {
 }
 if ($Installer) {
     if (-not $Version) {
-        $Version = ([xml](Get-Content -Raw "$root\launcher\ScoobyReMasked.Launcher.csproj")).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+        $Version = ([xml](Get-Content -Raw "$root\launcher\FrightWorks.Launcher.csproj")).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
     }
     if (-not $Feed) { $Feed = "$root\dist\installer" }
     New-Item -ItemType Directory -Force $Feed | Out-Null

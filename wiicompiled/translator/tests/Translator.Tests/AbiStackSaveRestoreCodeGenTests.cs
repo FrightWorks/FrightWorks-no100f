@@ -56,15 +56,15 @@ public class ResidentAbiCodeGenTests
         Assert.DoesNotContain("native_r5", variant, StringComparison.Ordinal);
         Assert.Contains("RECOMP_STATE_FREE_ABI", variant, StringComparison.Ordinal);
         Assert.Contains(
-            "extern \"C\" MKW_PPC_ALWAYS_INLINE_BODY void state_free_store_native_v0(",
+            "extern \"C\" RECOMP_PPC_ALWAYS_INLINE_BODY void state_free_store_native_v0(",
             code,
             StringComparison.Ordinal);
 
         var publicStart = code.IndexOf(
-            "extern \"C\" void state_free_store(CpuContext* MKW_RESTRICT ctx)",
+            "extern \"C\" void state_free_store(CpuContext* RECOMP_RESTRICT ctx)",
             StringComparison.Ordinal);
         var publicEnd = code.IndexOf(
-            "extern \"C\" MKW_PPC_ALWAYS_INLINE_BODY",
+            "extern \"C\" RECOMP_PPC_ALWAYS_INLINE_BODY",
             publicStart,
             StringComparison.Ordinal);
         var publicBody = code[publicStart..publicEnd];
@@ -321,10 +321,10 @@ public class ResidentAbiCodeGenTests
                 [0x80063FD0] = "state_free_results_native"
             });
 
-        var variantStart = code.IndexOf("MkwStateFreeResult2 state_free_results_native(", StringComparison.Ordinal);
+        var variantStart = code.IndexOf("RecompStateFreeResult2 state_free_results_native(", StringComparison.Ordinal);
         var markerEnd = code.IndexOf('\n', code.IndexOf("RECOMP_STATE_FREE_ABI", variantStart, StringComparison.Ordinal));
         var variant = code[variantStart..markerEnd];
-        Assert.Contains("MkwStateFreeResult2", variant, StringComparison.Ordinal);
+        Assert.Contains("RecompStateFreeResult2", variant, StringComparison.Ordinal);
         Assert.Contains("state_free_results_native(", variant, StringComparison.Ordinal);
         Assert.Contains("PPC_FPR native_f1", variant, StringComparison.Ordinal);
         Assert.Contains("PPC_FPR native_f2", variant, StringComparison.Ordinal);
@@ -362,9 +362,9 @@ public class ResidentAbiCodeGenTests
                 new GuestStateFreeCallVariant(address, "state_free_result_collision_native_v0", compactContract)
             });
 
-        Assert.Contains("MkwStateFreeResult_80063FC0 state_free_result_collision_native(", code, StringComparison.Ordinal);
-        Assert.Contains("MkwStateFreeResult2 state_free_result_collision_native_v0(", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("using MkwStateFreeResult_80063FC0", code, StringComparison.Ordinal);
+        Assert.Contains("RecompStateFreeResult_80063FC0 state_free_result_collision_native(", code, StringComparison.Ordinal);
+        Assert.Contains("RecompStateFreeResult2 state_free_result_collision_native_v0(", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("using RecompStateFreeResult_80063FC0", code, StringComparison.Ordinal);
     }
 
     [Fact]

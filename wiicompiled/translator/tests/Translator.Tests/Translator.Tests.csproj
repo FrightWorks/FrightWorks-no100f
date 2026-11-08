@@ -29,12 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="TestAssets\RetroWfcPayload\binary\payload.RMCPD00.bin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!--
     The default suite is intentionally binary-free and host-compiler-free. These
-    files need either MKWii game data or a working host C++ toolchain, so they are
+    files need either game data or a working host C++ toolchain, so they are
     excluded until they are moved into a separate asset-backed integration project.
     Every excluded file still compiles against this repository; the ones that did
     not (they referenced a REL base-address constant that does not exist here) were
