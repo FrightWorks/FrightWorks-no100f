@@ -52,7 +52,7 @@ class Recorder:
             self.fail(check, detail)
         self.passed(check, detail)
 
-    def shot(self, game, label):
+    def shot(self, game, label=""):
         """Save a picture of the game window as shots/<name>-<label>.png (shots/<name>.png without a label); None when the
         OS has no screenshot tool."""
         png = self.out / "shots" / (f"{self.name}-{label}.png" if label else f"{self.name}.png")

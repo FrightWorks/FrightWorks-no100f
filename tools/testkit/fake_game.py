@@ -8,7 +8,9 @@ Behaviour comes from the environment, FAKE_MODE:
   crash       exits with code 3 after a moment
   fault       prints AccessViolation on stderr, keeps running
 Other: FAKE_FPS (a frame rate: prints a `[vi] fps N:` line to stderr every half second once in play, as NSMBW_LOG_FPS does),
-FAKE_BOOT_DELAY (seconds before the game is in play), FAKE_BUILD_ID (printed to console.log), FAKE_CUTSCENE (0 = none).
+FAKE_BOOT_DELAY (seconds before the game is in play), FAKE_BUILD_ID (printed to console.log), FAKE_CUTSCENE (0 = none),
+FAKE_DIALOGUE (N: after the pan, no cutscene and no control until N plain `a` presses, as a "PRESS A TO CONTINUE" box),
+FAKE_DEAD (1: `player` answers "dead/dying", as while Scooby is killed and the screen fades).
 """
 import os
 import re
@@ -48,6 +50,8 @@ cutscene_wanted = os.environ.get("FAKE_CUTSCENE", "1") != "0"
 scene, pos, snacks = boot if boot != "title" else "title", [0.0, 0.121, 0.0, 0.0], 0
 pressed_a_at = None
 presses = []
+dialogue_needed = int(os.environ.get("FAKE_DIALOGUE", "0"))
+dialogue_presses = 0
 fake_fps = os.environ.get("FAKE_FPS")
 last_fps_line = 0.0
 
@@ -63,6 +67,8 @@ def phase():
         return "loading"
     if t < 0.8:
         return "pan"
+    if dialogue_presses < dialogue_needed:
+        return "dialogue"
     if cutscene_wanted and (pressed_a_at is None or time.time() - pressed_a_at < 0.6):
         return "cutscene"
     return "play"
@@ -95,6 +101,8 @@ while True:
                     if parts[0] == "a" and pressed_a_at is None:
                         pressed_a_at = time.time()
                     presses.append(parts[0])
+                    if parts[0] == "a" and len(parts) < 3:
+                        dialogue_presses += 1
                 append("devmenu.log", f"press {line} -> {answer}\n")
             os.remove("devmenu_press.txt")
         if os.path.exists("devmenu.txt"):
@@ -117,6 +125,8 @@ while True:
                 elif cmd == "snacks":
                     snacks = int(arg)
                     status = f"spendable snacks set to {snacks}"
+                elif cmd == "player" and os.environ.get("FAKE_DEAD"):
+                    status = "player unavailable: Player is dead/dying; resurrection is not supported"
                 elif cmd == "player":
                     status = f"player health=3/5 snacks={snacks}\n  second line"
                 else:

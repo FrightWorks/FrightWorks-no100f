@@ -12,9 +12,15 @@ Up to --workers (default 7) game windows at once. The build ID of the exe must m
 Per level: boot straight into it (sd2.ini BOOT=<level>, saves cleared), wait until it is playable (testkit/waitplay.py: skips a
 cutscene, waits out a camera pan; no fixed 30 s, no blind presses), then --seconds more while watching the game, then:
   * alive, no AccessViolation, no OS panic / missing_target / Unhandled / FATAL on stderr (a fault fails the level at once);
-  * a picture: the window is not black (screenshot, Windows only; "not run" elsewhere);
+  * a picture: the window is not black (screenshot, Windows only; "not run" elsewhere). A black one is shot again up to 4 times,
+    3 s apart, before it fails: with nobody at the pad an enemy can kill Scooby at the spawn (o005, p002), and the screen
+    is black during the death fade until he respawns. A retake that was lit is noted in REPORT.md ("picture retaken");
   * frame rate: the game's own two-second fps lines (NSMBW_LOG_FPS) after it was playable; the median must reach --min-fps
     (default: half the target, 30 at 60 fps, 15 at 30 fps).
+While the game says "no cutscene, no control" for more than 4 s (a dialogue box such as f003's "PRESS A TO CONTINUE") the wait presses
+A every 2 s, at most 12 times; every press is logged and counted in the report ("dialogue press(es)").
+A level in KNOWN_EXCEPTIONS (s006: a cutscene nothing can skip) is not run: REPORT.md lists it as "skipped (known)" with the reason,
+and the exit code is 3, never 0. --include-known runs it anyway.
 A level that does not become playable in --timeout gets one more try from a fresh launch ("passed on retry"); a crash or a failed
 check is final. A check that could not run is "not run", never a pass.
 
@@ -44,6 +50,17 @@ from testkit.waitplay import PlayTimeout  # noqa: E402
 DISC = REPO / "Disc" / "DATA" / "files"
 NOT_LEVELS = ("MN", "fmv")      # menu screens and movies: no player to wait for
 DEFAULT_WORKERS = 7
+PICTURE_RETAKES = 4             # a black picture is shot again this many times, PICTURE_RETAKE_WAIT apart, before it fails
+PICTURE_RETAKE_WAIT = 3.0
+
+# Levels the sweep does not run, with the reason (REPORT.md lists them as "skipped (known)", never as passed; --include-known runs them).
+KNOWN_EXCEPTIONS = {
+    # Measured 2026-11-08: the cutscene manager stays set with the player "in control" and no player placed (`where` = 0 0 0). Nothing
+    # ended it: A with the cutscene flag every 2 s for 40 s (and for 150 s in the sweep), A held 120 frames, Start, B, X, and the dev
+    # menu's own `skip`. The picture changes over time (a long talking cutscene, not a hang), so the wait for control cannot end.
+    "s006": "a cutscene that cannot be skipped: no press (A, Start, B, X) and not the dev menu's skip ended it in 40 s, nor "
+            "in 150 s in the sweep; the player is never placed",
+}
 
 
 def all_levels(disc=None):
@@ -83,6 +100,44 @@ def new_game(worker, args, out):
     return g
 
 
+def player_note(game):
+    """Why a picture may be black: the dev menu says the player is dead/dying (the death fade). '' when it does not."""
+    try:
+        text = game.devmenu.command("player", 5)
+    except DevMenuTimeout:
+        return ""
+    return "player dead/dying" if "dead/dying" in text else ""
+
+
+def check_picture(rec, game, retakes=None, wait=None):
+    """The picture check with retakes for a black frame. A retake that is lit passes and says so (rec.notes, REPORT.md)."""
+    retakes = PICTURE_RETAKES if retakes is None else retakes
+    wait = PICTURE_RETAKE_WAIT if wait is None else wait
+    png = rec.shot(game)
+    if png is None:
+        rec.not_run("picture", "no screenshot tool on this OS")
+        return
+    blank_why = []
+    for n in range(retakes + 1):
+        lit, total = checks.png_pixels_lit(png)
+        if not checks.png_is_blank(png):
+            if blank_why:
+                note = f"picture retaken {n}x ({n * wait:g} s): black at first ({', '.join(sorted(set(blank_why)))})"
+                rec.notes.append(note)
+                rec.passed("picture", f"{png.name}: {lit / total:.1%} lit after {n} retake(s); {note}")
+            else:
+                rec.passed("picture", f"{png.name}: {lit / total:.1%} of the pixels lit")
+            return
+        blank_why.append(player_note(game) or "no reason found")
+        if n == retakes:
+            break
+        time.sleep(wait)
+        game.check_crash()
+        png = rec.shot(game, f"retake{n + 1}")
+    rec.fail("picture", f"{png.name}: {lit / total:.1%} of the pixels lit, black in all {retakes + 1} shots over "
+                        f"{retakes * wait:g} s ({', '.join(sorted(set(blank_why)))})")
+
+
 def check_fps(rec, args, summary):
     target = 30 if args.fps30 else 60
     minimum = args.min_fps if args.min_fps is not None else target / 2
@@ -104,7 +159,10 @@ def play_level(rec, game, level, args, attempt):
     result = waitplay.wait_until_playable(
         game, level, timeout=args.timeout, screenshot=rec.out / "shots" / f"{level}-timeout-{attempt}.png", log=rec.log)
     rec.times["playable"] = round(time.time() - t0, 1)
-    rec.passed("playable", f"after {result['seconds']:.1f} s, {result['presses']} skip press(es)")
+    dialogue = result.get("dialogue_presses", 0)
+    rec.passed("playable", f"after {result['seconds']:.1f} s, {result['presses']} skip press(es), {dialogue} dialogue press(es)")
+    if dialogue:
+        rec.notes.append(f"{dialogue} A press(es) for a dialogue box before control")
     msg = game.check_console_build()
     if msg is None:
         rec.not_run("build ID in console.log", "the game printed none")
@@ -128,7 +186,7 @@ def play_level(rec, game, level, args, attempt):
     game.check_crash()
     rec.passed("alive, no crash or fault", f"still running {args.seconds:g} s after it was playable")
     problems = []
-    for check in (lambda: rec.check_picture(game), lambda: check_fps(rec, args, summary)):
+    for check in (lambda: check_picture(rec, game), lambda: check_fps(rec, args, summary)):
         try:
             check()
         except CheckFailed as e:
@@ -152,6 +210,10 @@ def run_level(level, game, args, out, pool, lease_held):
     """Run one level on a worker's game: slot, up to two attempts, result dict (outcome 'passed', 'passed on retry' or 'failed: ...')."""
     rec = Level(level, out)
     started = time.time()
+    if level in KNOWN_EXCEPTIONS and not getattr(args, "include_known", False):
+        rec.log(f"SKIPPED (known): {KNOWN_EXCEPTIONS[level]}")
+        return {"level": level, "outcome": "skipped (known)", "detail": KNOWN_EXCEPTIONS[level], "checks": [], "times": {},
+                "seconds": 0, "attempts": 0}
     result = {"level": level, "outcome": "failed", "detail": "", "checks": rec.checks, "times": rec.times}
 
     def attempt_fn(attempt):
@@ -171,7 +233,7 @@ def run_level(level, game, args, out, pool, lease_held):
             rec.times["slot wait"] = round(lease.waited, 1)
         outcome, _, notes = waitplay.retry_on_timeout(attempt_fn, log=rec.log)
         result["outcome"] = outcome
-        result["detail"] = "; ".join(notes)
+        result["detail"] = "; ".join(notes + rec.notes)
         if any(status == "not run" for _c, status, _d in rec.checks):
             result["outcome"] += " (some checks not run)"
     except BuildMismatch as e:
@@ -243,18 +305,28 @@ def is_problem(r):
     return r["outcome"].startswith("failed")
 
 
+def is_skipped(r):
+    return r["outcome"].startswith("skipped")
+
+
 def write_report(out, results, args, build_msg, wall, planned=None):
     (out / "results.json").write_text(json.dumps(results, indent=1, default=str), encoding="utf-8")
     bad = [r for r in results if is_problem(r)]
+    skipped = [r for r in results if is_skipped(r)]
     not_run = [r for r in results if "not run" in r["outcome"]]
     fps = "fps60 off, 30 fps" if args.fps30 else "fps60 on, 60 fps"
     lines = [f"# Level sweep {out.name}", "", f"Build: {build_msg}", "",
              f"{len(results)} of {planned or len(results)} level(s), {args.workers} worker(s), {args.slots} slot(s), {fps}, "
              f"{args.seconds:g} s watched after playable, {wall:.0f} s wall: "
-             f"{len(results) - len(bad)} passed, {len(bad)} failed, {len(not_run)} with checks not run.", ""]
+             f"{len(results) - len(bad) - len(skipped)} passed, {len(bad)} failed, {len(skipped)} skipped (known), "
+             f"{len(not_run)} with checks not run.", ""]
     if bad:
         lines += ["## Problems", "", "| Level | Outcome | Detail |", "|---|---|---|"]
         lines += [f"| {r['level']} | {r['outcome']} | {r['detail'].replace('|', '/')} |" for r in bad]
+        lines.append("")
+    if skipped:
+        lines += ["## Skipped (known exceptions: not tested, not passed)", "", "| Level | Why |", "|---|---|"]
+        lines += [f"| {r['level']} | {r['detail'].replace('|', '/')} |" for r in skipped]
         lines.append("")
     lines += ["## All levels", "", "| Level | Outcome | Seconds | Playable (s) | FPS median | FPS min | Detail |",
               "|---|---|---|---|---|---|---|"]
@@ -263,7 +335,7 @@ def write_report(out, results, args, build_msg, wall, planned=None):
         lines.append(f"| {r['level']} | {r['outcome']} | {r['seconds']} | {r['times'].get('playable', '')} | "
                      f"{f.get('median', '')} | {f.get('min', '')} | {r['detail'].replace('|', '/')} |")
     for r in results:
-        if is_problem(r) or r["outcome"] != "passed":
+        if (is_problem(r) or r["outcome"] != "passed") and not is_skipped(r):
             lines += ["", f"## {r['level']}", ""]
             lines += [f"- {c}: {s}" + (f" ({d})" if d else "") for c, s, d in r["checks"]]
             lines += [f"- time {k}: {v}" for k, v in r["times"].items()]
@@ -287,6 +359,8 @@ def main(argv=None):
                     help="run with [video] fps60 off (30 fps); default fps60 on")
     ap.add_argument("--min-fps", type=float, default=None, help="median fps a level must reach (default: half of 60, or of 30)")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--include-known", action="store_true",
+                    help="also run the levels in KNOWN_EXCEPTIONS (default: skipped, listed as 'skipped (known)')")
     ap.add_argument("--keep", action="store_true", help="keep the Play copies (default: delete them at the end)")
     ap.add_argument("--exclusive", action="store_true", help="take the machine alone (timing measurements)")
     ap.add_argument("--activate-when-shown", type=int, choices=(0, 1), default=None,
@@ -322,14 +396,16 @@ def main(argv=None):
     wall = time.time() - t0
     write_report(out, results, args, build_msg, wall, planned=len(levels))
     bad = [r for r in results if is_problem(r)]
-    print(f"level sweep: {len(results) - len(bad)}/{len(results)} passed in {wall:.0f} s; report {out / 'REPORT.md'}")
+    skipped = [r for r in results if is_skipped(r)]
+    print(f"level sweep: {len(results) - len(bad) - len(skipped)}/{len(results)} passed, {len(skipped)} skipped (known), "
+          f"in {wall:.0f} s; report {out / 'REPORT.md'}")
     for r in bad:
         print(f"  {r['level']}: {r['outcome']}: {r['detail']}")
     if not args.keep:
         launch.safe_rmtree(out / "work")
     if bad or len(results) < len(levels):
         return 1
-    return 3 if any("not run" in r["outcome"] for r in results) else 0
+    return 3 if skipped or any("not run" in r["outcome"] for r in results) else 0
 
 
 if __name__ == "__main__":

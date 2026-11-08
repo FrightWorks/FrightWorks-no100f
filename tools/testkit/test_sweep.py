@@ -105,6 +105,53 @@ class SweepTest(FakeGameCase):
         self.assertEqual(r["outcome"], "failed: picture", r)
         self.assertIn("0.0% of the pixels lit", r["detail"])  # says what was found, not "is not black"
 
+    def test_black_first_shot_is_retaken_and_the_note_goes_in_the_detail(self):
+        """The death fade (o005, p002): black at first, lit a moment later. Passes, and says so."""
+        shots = []
+
+        def screenshot(_game, png):
+            shots.append(Path(png).name)
+            self.lit = len(shots) > 2           # the first two shots are black
+            return self.fake_screenshot(png)
+        with mock.patch.object(launch.TestGame, "screenshot", screenshot), mock.patch.object(sweep, "PICTURE_RETAKE_WAIT", 0.1):
+            r = self.one(FAKE_DEAD="1")
+        self.assertEqual(r["outcome"], "passed", r)
+        self.assertEqual(shots, ["h001.png", "h001-retake1.png", "h001-retake2.png"])
+        self.assertIn("picture retaken 2x", r["detail"])
+        self.assertIn("player dead/dying", r["detail"])
+
+    def test_black_in_every_shot_still_fails_after_the_retakes(self):
+        self.lit = False
+        with mock.patch.object(sweep, "PICTURE_RETAKE_WAIT", 0.1):
+            r = self.one()
+        self.assertEqual(r["outcome"], "failed: picture", r)
+        self.assertIn("black in all 5 shots", r["detail"])
+        self.assertTrue((self.out / "shots" / "h001-retake4.png").exists())
+
+    def test_a_dialogue_box_is_dismissed_and_reported(self):
+        self.args.timeout = 30
+        with mock.patch.object(sweep.waitplay, "DIALOGUE_AFTER", 0.5), mock.patch.object(sweep.waitplay, "DIALOGUE_EVERY", 0.3):
+            r = self.one(FAKE_CUTSCENE="0", FAKE_DIALOGUE="2")
+        self.assertEqual(r["outcome"], "passed", r)
+        self.assertIn("2 A press(es) for a dialogue box", r["detail"])
+        self.assertIn("2 dialogue press(es)", [d for c, s, d in r["checks"] if c == "playable"][0])
+
+    def test_known_exception_is_skipped_not_passed_and_never_launched(self):
+        game = self.make_game()
+        with mock.patch.dict(sweep.KNOWN_EXCEPTIONS, {"h001": "cannot be skipped"}), \
+                mock.patch.object(sweep, "play_level", side_effect=AssertionError("launched")):
+            r = sweep.run_level("h001", game, self.args, self.out, self.pool, False)
+        self.assertEqual(r["outcome"], "skipped (known)")
+        self.assertEqual(r["detail"], "cannot be skipped")
+        self.assertTrue(sweep.is_skipped(r) and not sweep.is_problem(r))
+        self.args.include_known = True        # --include-known runs it like any level
+        with mock.patch.dict(sweep.KNOWN_EXCEPTIONS, {"h001": "cannot be skipped"}):
+            self.assertEqual(self.one()["outcome"], "passed")
+
+    def test_s006_is_a_known_exception_with_a_reason(self):
+        self.assertIn("s006", sweep.KNOWN_EXCEPTIONS)
+        self.assertIn("skip", sweep.KNOWN_EXCEPTIONS["s006"])
+
     def test_slow_frame_rate_fails_and_the_picture_check_still_ran(self):
         r = self.one(FAKE_FPS="12")
         self.assertEqual(r["outcome"], "failed: frame rate", r)
@@ -239,6 +286,14 @@ class SweepTest(FakeGameCase):
         self.assertIn("| i004 | failed: crash (exited) |", report)
         self.assertIn("| h001 | passed |", report)
         self.assertIn("fps60 on, 60 fps", report)
+        skipped = {"level": "s006", "outcome": "skipped (known)", "detail": "a cutscene | nothing skips", "checks": [], "times": {},
+                   "seconds": 0, "attempts": 0}
+        sweep.write_report(self.out, [ok, skipped], self.args, "b", 1.0)
+        report = (self.out / "REPORT.md").read_text()
+        self.assertIn("1 passed, 0 failed, 1 skipped (known)", report)
+        self.assertIn("## Skipped (known exceptions: not tested, not passed)", report)
+        self.assertIn("| s006 | a cutscene / nothing skips |", report)
+        self.assertNotIn("## Problems", report)
         self.args.fps30 = True
         sweep.write_report(self.out, [ok], self.args, "b", 1.0)
         self.assertIn("fps60 off, 30 fps", (self.out / "REPORT.md").read_text())
