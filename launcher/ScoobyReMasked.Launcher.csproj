@@ -14,6 +14,7 @@
     <DebugType>embedded</DebugType>
     <ApplicationIcon>frightworks.ico</ApplicationIcon>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <!-- The UI (Windows and Linux): Avalonia draws the whole window itself with Skia. -->
@@ -40,6 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="LauncherLayoutTests" />
+    <InternalsVisibleTo Include="LauncherHdrTests" />
     <InternalsVisibleTo Include="LauncherControllerTests" />
     <Compile Remove="tests\**" />
   </ItemGroup>

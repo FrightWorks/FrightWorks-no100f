@@ -46,6 +46,7 @@ sealed class MainWindow : Window
     internal ThemedCombo layoutBox = null!;
     readonly List<(PadMapping.Row Row, TextBlock Label, ThemedCombo Box)> padRows = new();
     bool askedLayout;
+    string hdrStatus = "Saved HDR settings are kept. Windows defaults are used only for settings not saved yet.";
     bool fillingLayout;
     bool startupReady;
     internal CheckBox autoLayout = null!;
@@ -412,9 +413,7 @@ sealed class MainWindow : Window
         }
         Row("Ink outlines", "ink_outlines", new[] { ("Off", "0"), ("Thin", "1"), ("Bold", "2") }, "0");
         Row("Intro movies", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
-        Row("HDR", "hdr", new[] { ("Off", "false"), (OperatingSystem.IsWindows() ? "On (needs HDR on in Windows)" : "On (needs HDR on in your desktop)", "true") }, "false");
-        Row("HDR brightness", "hdr_paper_white_nits", new[] { ("Dim (120 nits)", "120.0"), ("Normal (200 nits)", "200.0"), ("Bright (300 nits)", "300.0"), ("Brightest (400 nits)", "400.0") }, "200.0");
-        Row("HDR highlights", "hdr_peak_nits", new[] { ("Subtle (400 nits)", "400.0"), ("Standard (1000 nits)", "1000.0"), ("Strong (1500 nits)", "1500.0") }, "1000.0");
+        table.Add(FieldLabel("HDR"), new PlankButton("Adjust HDR", (_, _) => OpenHdr().Watch()));
         body.Children.Add(table);
         body.Children.Add(Note("Changes are saved at once and apply the next time the game starts. In the game, F10 has the " +
                                (MonitorChoice ? "resolution, picture shape, window, fullscreen monitor, frame interpolation, motion blur, ambient occlusion and ink outline settings too, and more (sound, controls); "
@@ -436,6 +435,54 @@ sealed class MainWindow : Window
         body.Children.Add(table);
         body.Children.Add(Note("Draws extra frames between the game's own for smoother motion. Only works at 60 fps, so it stays " +
                                "Off at 30 fps. Experimental: you might see visual glitches. At 120 or 180 FPS the resolution goes up to 4x (1920p)."));
+    }
+
+    internal HdrWindow CreateHdrWindow() => new(configPath, hdrStatus, this);
+
+    async Task OpenHdr()
+    {
+        var window = CreateHdrWindow();
+        await Dialogs.ShowModal(window, this);
+    }
+
+    // Import must finish before this can create Config.toml; construction stays read-only.
+    internal Task InitializeHdrDefaults() => InitializeHdrDefaults(OperatingSystem.IsWindows(),
+        () => WindowsHdr.Read(HdrSettings.TargetDisplay(new GameConfig(configPath))));
+
+    // Headless fixtures supply platform state and metadata without querying a real display.
+    internal async Task InitializeHdrDefaults(bool windows, Func<WindowsHdr.Snapshot> readDefaults)
+    {
+        if (!windows)
+        {
+            hdrStatus = "Windows HDR defaults are unavailable on this platform. Saved targets are kept.";
+            return;
+        }
+        // Nothing here may stop the launcher from starting: a query that throws counts as a failed query (the
+        // same safe defaults and status as one that returns a failure), and a config that can't be read stays as it is.
+        try
+        {
+            var config = new GameConfig(configPath);
+            if (!HdrSettings.NeedsDefaults(config)) return;
+            WindowsHdr.Snapshot defaults;
+            try { defaults = readDefaults(); }
+            catch (Exception e)
+            {
+                defaults = new(null, null, null, $"Windows HDR query failed ({e.GetType().Name}); using safe HDR defaults.");
+            }
+            config = new GameConfig(configPath);
+            HdrSettings.InitializeMissing(config, defaults);
+            hdrStatus = defaults.Status + " Saved adjustments are kept.";
+            try { config.Save(); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                hdrStatus = "Couldn't save initial HDR defaults: " + e.Message;
+                await Dialogs.Message(this, hdrStatus);
+            }
+        }
+        catch (Exception e)
+        {
+            hdrStatus = $"Couldn't set up the initial HDR defaults ({e.GetType().Name}); saved settings are unchanged.";
+        }
     }
 
     void BuildControls(StackPanel body)

@@ -1235,6 +1235,9 @@ bool present_presentation_job(const PresentationJob& job) {
         const auto pass = encoder.BeginRenderPass(&renderPassDescriptor);
         pass.SetPipeline(webgpu::g_PresentPipeline);
         pass.SetBindGroup(0, job.image->bindGroup, 0, nullptr);
+        if (webgpu::g_HdrCalibrationBindGroup) {
+          pass.SetBindGroup(1, webgpu::g_HdrCalibrationBindGroup, 0, nullptr);
+        }
         pass.SetViewport(0.f, 0.f,
                          static_cast<float>(webgpu::g_graphicsConfig.surfaceConfiguration.width),
                          static_cast<float>(webgpu::g_graphicsConfig.surfaceConfiguration.height),
@@ -1254,6 +1257,7 @@ bool present_presentation_job(const PresentationJob& job) {
         const auto submitStarted = PresentClock::now();
         {
           std::lock_guard submitLock(g_queueSubmitMutex);
+          webgpu::upload_hdr_calibration();
           g_queue.Submit(1, &buffer);
         }
         submitDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -2359,6 +2363,27 @@ void aurora_get_present_timing(AuroraPresentTiming* timing) {
 void aurora_set_vsync(bool enabled) { aurora::webgpu::request_vsync(enabled); }
 void aurora_set_hdr(bool enabled, float paperWhiteNits, float peakNits) {
   aurora::webgpu::request_hdr(enabled, paperWhiteNits, peakNits);
+}
+bool aurora_set_hdr_brightness(float paperWhiteNits, float peakNits) {
+  return aurora::webgpu::set_hdr_brightness(paperWhiteNits, peakNits);
+}
+AuroraHdrCalibrationStatus aurora_get_hdr_calibration_status() {
+  if (!aurora::webgpu::hdr_active())
+    return aurora::webgpu::hdr_sdr_display() ? AURORA_HDR_CALIBRATION_STAYED_SDR : AURORA_HDR_CALIBRATION_OUTPUT_OFF;
+  const auto backend = aurora::webgpu::g_backendType;
+  if (backend != wgpu::BackendType::D3D11 && backend != wgpu::BackendType::D3D12)
+    return AURORA_HDR_CALIBRATION_UNSUPPORTED_BACKEND;
+  const int state = aurora::window::hdr_display_state();
+  return state < 0 ? AURORA_HDR_CALIBRATION_DISPLAY_UNKNOWN :
+         state == 0 ? AURORA_HDR_CALIBRATION_DISPLAY_OFF : AURORA_HDR_CALIBRATION_READY;
+}
+const char* aurora_get_hdr_display_name() {
+  thread_local std::string name;
+  name = aurora::window::hdr_display_name();
+  return name.c_str();
+}
+void aurora_set_hdr_calibration(const AuroraHdrCalibration* calibration) {
+  aurora::webgpu::set_hdr_calibration(calibration);
 }
 bool aurora_get_vsync() { return aurora::webgpu::vsync_enabled(); }
 void aurora_set_frame_interpolation_fps(uint32_t targetFps) {

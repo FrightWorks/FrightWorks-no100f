@@ -23,6 +23,7 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_pixels.h>
+#include <SDL3/SDL_timer.h>
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -48,6 +49,79 @@ extern "C" void Android_UnlockActivityMutex(void);
 #include <aurora/window_owner_sdl.hpp>
 
 namespace aurora::window {
+int hdr_display_state() {
+  if (window_owner::enabled() && !window_owner::is_owner())
+    return window_owner::call([] { return hdr_display_state(); });
+#if defined(_WIN32)
+  const auto display = SDL_GetDisplayForWindow(get_sdl_window());
+  static SDL_DisplayID cachedDisplay = 0;
+  static Uint64 checkedAt = 0;
+  static int cachedState = -1;
+  const auto now = SDL_GetTicks();
+  if (display == cachedDisplay && checkedAt != 0 && now - checkedAt < 500) return cachedState;
+  cachedDisplay = display;
+  checkedAt = now;
+  cachedState = -1;
+  const auto monitor = static_cast<HMONITOR>(SDL_GetPointerProperty(SDL_GetDisplayProperties(display),
+      SDL_PROP_DISPLAY_WINDOWS_HMONITOR_POINTER, nullptr));
+  MONITORINFOEXW monitorInfo{};
+  monitorInfo.cbSize = sizeof(monitorInfo);
+  if (!monitor || !GetMonitorInfoW(monitor, reinterpret_cast<MONITORINFO*>(&monitorInfo))) return cachedState;
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    UINT32 pathCount = 0, modeCount = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) != ERROR_SUCCESS) break;
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    const auto result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr);
+    if (result == ERROR_INSUFFICIENT_BUFFER) continue;
+    if (result != ERROR_SUCCESS) break;
+    const DISPLAYCONFIG_PATH_INFO* match = nullptr;
+    for (UINT32 i = 0; i < pathCount; ++i) {
+      DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+      source.header = {DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, sizeof(source), paths[i].sourceInfo.adapterId,
+                       paths[i].sourceInfo.id};
+      if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS) return cachedState;
+      if (wcscmp(source.viewGdiDeviceName, monitorInfo.szDevice) != 0) continue;
+      if (match != nullptr) return cachedState; // Mirrored outputs are ambiguous.
+      match = &paths[i];
+    }
+    if (match == nullptr) break;
+    // Local layout also builds against SDKs predating Windows 11's active-color-mode query.
+    struct AdvancedColor2 {
+      DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+      UINT32 flags, encoding, bitsPerChannel, activeMode;
+    } color{};
+    color.header = {static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(15), sizeof(color),
+                    match->targetInfo.adapterId, match->targetInfo.id};
+    auto error = DisplayConfigGetDeviceInfo(&color.header);
+    if (error == ERROR_SUCCESS) {
+      cachedState = (color.flags & 2) != 0 && color.activeMode == 2 ? 1 : 0;
+    } else if (error == ERROR_INVALID_PARAMETER || error == ERROR_NOT_SUPPORTED) {
+      DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO legacy{};
+      legacy.header = {DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO, sizeof(legacy),
+                       match->targetInfo.adapterId, match->targetInfo.id};
+      if (DisplayConfigGetDeviceInfo(&legacy.header) == ERROR_SUCCESS) {
+        if (!legacy.advancedColorEnabled) cachedState = 0;
+        // SDL confirms PQ output with headroom. Otherwise legacy ACM/HDR is ambiguous.
+        else if (SDL_GetBooleanProperty(SDL_GetWindowProperties(get_sdl_window()),
+                     SDL_PROP_WINDOW_HDR_ENABLED_BOOLEAN, false)) cachedState = 1;
+      }
+    }
+    break;
+  }
+  return cachedState;
+#else
+  return -1;
+#endif
+}
+
+std::string hdr_display_name() {
+  if (window_owner::enabled() && !window_owner::is_owner())
+    return window_owner::call([] { return hdr_display_name(); });
+  const char* name = SDL_GetDisplayName(SDL_GetDisplayForWindow(get_sdl_window()));
+  return name != nullptr ? name : "Unknown display";
+}
+
 namespace {
 Module Log("aurora::window");
 

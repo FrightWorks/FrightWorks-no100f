@@ -98,6 +98,9 @@ const char* GraphicsApiDisplayName() {
 }
 
 bool g_topBarVisible = false;
+bool g_hdrCalibrationOpen = false;
+bool g_hdrCalibrationFocusPending = false;
+AuroraHdrCalibration g_hdrCalibrationFrame{};
 bool g_exitPromptOpen = false;
 bool g_rumbleEnabled = RuntimeConfigFile::RumbleEnabled(true);
 int g_controllerPort = 0;
@@ -305,6 +308,7 @@ void SetTopBarVisible(bool visible) {
         return;
     }
     g_topBarVisible = visible;
+    if (!visible) g_hdrCalibrationOpen = false;
     if (visible) {
         g_panelOpenedAt = Clock::now();
         g_panelFocusPending = true;
@@ -1238,6 +1242,124 @@ void DrawLanPlaySettings() {
     }
 }
 
+#if defined(_WIN32)
+void DrawHdrCalibration() {
+    using namespace OverlayTheme;
+    const auto* viewport = ImGui::GetMainViewport();
+    const ImVec2 size(std::min(Px(690), viewport->Size.x - Px(24)),
+                      std::min(Px(710), viewport->Size.y - Px(24)));
+    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x * 0.5f,
+                                 viewport->Pos.y + viewport->Size.y * 0.5f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    if (ImGui::Begin("HDR calibration", &g_hdrCalibrationOpen,
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGuiContext& g = *ImGui::GetCurrentContext();
+        if (g_hdrCalibrationFocusPending) {
+            ImGui::FocusWindow(ImGui::GetCurrentWindow());
+            ImGui::NavInitWindow(ImGui::GetCurrentWindow(), true);
+            g_hdrCalibrationFocusPending = false;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_NavGamepadActivate, false)) ImGui::SetNavCursorVisible(true);
+        if (!ImGui::IsAnyItemActive() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) &&
+            ImGui::IsKeyPressed(ImGuiKey_NavGamepadCancel, false)) {
+            g_hdrCalibrationOpen = false;
+        }
+        SectionTitle("HDR brightness");
+        bool hdr = RuntimeConfigFile::Hdr();
+        float paper = RuntimeConfigFile::HdrPaperWhiteNits();
+        float peak = RuntimeConfigFile::HdrPeakNits();
+        static bool saveFailed = false;
+        bool brightnessChanged = false;
+        if (Toggle("HDR on next start", &hdr)) saveFailed = !RuntimeConfigFile::SetHdr(hdr);
+        const auto status = aurora_get_hdr_calibration_status();
+        ImGui::Text("Display: %s", aurora_get_hdr_display_name());
+        const bool ready = status == AURORA_HDR_CALIBRATION_READY;
+        switch (status) {
+        case AURORA_HDR_CALIBRATION_READY:
+            Hint("Live scRGB HDR test patches. Normal picture brightness should feel comfortable; "
+                 "bright highlights should retain the checker detail.");
+            break;
+        case AURORA_HDR_CALIBRATION_OUTPUT_OFF:
+            Hint("HDR preview unavailable: turn HDR on and restart the game with Windows HDR enabled.");
+            break;
+        case AURORA_HDR_CALIBRATION_UNSUPPORTED_BACKEND:
+            Hint("True HDR calibration currently requires the Direct3D HDR output path.");
+            break;
+        case AURORA_HDR_CALIBRATION_DISPLAY_OFF:
+            Hint("HDR preview unavailable: Windows HDR is off for the display containing the game.");
+            break;
+        case AURORA_HDR_CALIBRATION_DISPLAY_UNKNOWN:
+            Hint("HDR preview unavailable: the current display's HDR state could not be confirmed.");
+            break;
+        case AURORA_HDR_CALIBRATION_STAYED_SDR:
+            Hint("HDR is on in the settings, but Windows HDR was off for the game's display when it started, so the game "
+                 "is showing the standard picture. Turn Windows HDR on and restart the game.");
+            break;
+        }
+        const float width = std::max(Px(140), ImGui::GetContentRegionAvail().x - Px(155));
+        RowLabel("Paper white", Px(145), width);
+        if (ImGui::SliderFloat("##hdr-paper", &paper, 80.f, 1000.f, "%.1f nits", ImGuiSliderFlags_AlwaysClamp)) {
+            saveFailed = !RuntimeConfigFile::SetHdrPaperWhiteNits(paper);
+            brightnessChanged = !saveFailed;
+        }
+        Hint("Normal picture brightness: adjust for comfortable viewing.");
+        RowLabel("Peak highlights", Px(145), width);
+        if (ImGui::SliderFloat("##hdr-peak", &peak, 80.f, 10000.f, "%.1f nits", ImGuiSliderFlags_AlwaysClamp)) {
+            saveFailed = !RuntimeConfigFile::SetHdrPeakNits(peak);
+            brightnessChanged = brightnessChanged || !saveFailed;
+        }
+        if (brightnessChanged && !aurora_set_hdr_brightness(RuntimeConfigFile::HdrPaperWhiteNits(),
+                                                          RuntimeConfigFile::HdrPeakNits()))
+            saveFailed = true;
+        if (peak < paper)
+            Hint("Highlights never fall below paper white; the effective game peak is the paper-white value.");
+        const float patchWidth = std::max(Px(80), (ImGui::GetContentRegionAvail().x - Px(16)) * 0.5f);
+        const float patchHeight = std::clamp(viewport->Size.y * 0.16f, Px(70), Px(125));
+        auto Patch = [&](const char* title, float nits, float* rect) {
+            ImGui::BeginGroup();
+            ImGui::TextUnformatted(title);
+            ImGui::Text("%.1f nits target", nits);
+            ImGui::Dummy(ImVec2(patchWidth, patchHeight));
+            const auto min = ImGui::GetItemRectMin();
+            const auto max = ImGui::GetItemRectMax();
+            auto* list = ImGui::GetWindowDrawList();
+            list->AddRectFilled(min, max, IM_COL32(0, 0, 0, 255));
+            if (ready && g_hdrCalibrationOpen && ImGui::IsItemVisible()) {
+                const auto clipMin = list->GetClipRectMin();
+                const auto clipMax = list->GetClipRectMax();
+                rect[0] = (std::max(min.x, clipMin.x) - viewport->Pos.x) / viewport->Size.x;
+                rect[1] = (std::max(min.y, clipMin.y) - viewport->Pos.y) / viewport->Size.y;
+                rect[2] = (std::min(max.x, clipMax.x) - viewport->Pos.x) / viewport->Size.x;
+                rect[3] = (std::min(max.y, clipMax.y) - viewport->Pos.y) / viewport->Size.y;
+            } else {
+                list->AddText(ImVec2(min.x + Px(8), min.y + Px(8)), Col(Colour::CreamDim), "HDR preview unavailable");
+            }
+            ImGui::EndGroup();
+        };
+        Patch("Normal picture", paper, g_hdrCalibrationFrame.paperRect);
+        ImGui::SameLine(0.f, Px(16));
+        Patch("Bright highlights", std::max(paper, peak), g_hdrCalibrationFrame.peakRect);
+        g_hdrCalibrationFrame.paperWhiteNits = paper;
+        g_hdrCalibrationFrame.peakNits = std::max(paper, peak);
+        Hint("Targets are encoded output values, not measured panel luminance. Windows/display tone mapping "
+             "may compress highlights, so this is a visual guide, not a luminance measurement.");
+        Hint("Brightness and patches update live while HDR is active. Turning HDR on or off requires a restart. "
+             "Windows HDR settings are not changed.");
+        if (saveFailed) Hint("Couldn't apply or save HDR settings. Check the runtime log and configuration folder permissions.");
+        if (Plank("BACK", true, ImVec2(Px(130), Px(38)))) {
+            g_hdrCalibrationOpen = false;
+            g_hdrCalibrationFrame = {};
+        }
+    }
+    ImGui::End();
+    if (!g_hdrCalibrationOpen) {
+        g_hdrCalibrationFrame = {};
+        g_pageFocusPending = true;
+    }
+}
+#endif
+
 void DrawVideoSettings() {
     using namespace OverlayTheme;
     g_displayMode = static_cast<int>(aurora_get_display_mode());
@@ -1399,6 +1521,15 @@ void DrawVideoSettings() {
         }
         Hint("Cartoon lines around characters and objects. Bold also draws sharp edges inside them.");
     }
+#endif
+
+#if defined(_WIN32)
+    SectionTitle("HDR");
+    if (Plank("HDR calibration...", false, ImVec2(Px(250), Px(38)))) {
+        g_hdrCalibrationOpen = true;
+        g_hdrCalibrationFocusPending = true;
+    }
+    Hint("Open brightness controls and real HDR test patterns. HDR output changes require a restart.");
 #endif
 
     SectionTitle("Smoothness");
@@ -2070,6 +2201,12 @@ void DrawTopBar() {
     if (!g_topBarVisible) {
         return;
     }
+#if defined(_WIN32)
+    if (g_hdrCalibrationOpen) {
+        DrawHdrCalibration();
+        return;
+    }
+#endif
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float fade = std::clamp(std::chrono::duration<float>(Clock::now() - g_panelOpenedAt).count() / 0.14f, 0.0f, 1.0f);
 
@@ -2530,6 +2667,9 @@ void HandleEvents(const AuroraEvent* events) noexcept {
         if (!g_rebind.active && IsToggleKey(ev->sdl, SDL_SCANCODE_ESCAPE)) {
             if (g_exitPromptOpen) {
                 g_exitPromptOpen = false;
+            } else if (g_hdrCalibrationOpen) {
+                g_hdrCalibrationOpen = false;
+                g_pageFocusPending = true;
             } else if (g_topBarVisible) {
                 SetTopBarVisible(false);
             }
@@ -2918,6 +3058,7 @@ void Draw() noexcept {
     // Wait for the frame worker's DONE phase: it has replayed the previous frame's ImGui draw lists
     // and started the next ImGui frame, so all overlay callers can now safely issue ImGui commands.
     aurora_wait_for_frame_worker();
+    g_hdrCalibrationFrame = {};
     // Also drive the Wii Remote rescan from here: PADRead runs it too, but this
     // runs once per presented frame whatever the game is doing (e.g. sitting in
     // its "communications interrupted" prompt without polling pads). Same guest
@@ -2946,6 +3087,7 @@ void Draw() noexcept {
     controller_mapping_wizard::Draw();
     ApplyInputBlockState();
     DrawStartupScreen();
+    aurora_set_hdr_calibration(&g_hdrCalibrationFrame);
 }
 
 bool StartupScreenVisible() noexcept {

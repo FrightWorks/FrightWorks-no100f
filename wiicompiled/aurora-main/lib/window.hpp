@@ -2,6 +2,7 @@
 
 #include <aurora/aurora.h>
 #include <aurora/event.h>
+#include <string>
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -38,6 +39,9 @@ AuroraWindowSize get_window_size();
 const AuroraEvent* poll_events();
 SDL_Window* get_sdl_window();
 SDL_Renderer* get_sdl_renderer();
+// -1 unknown, 0 off, 1 active HDR (not merely wide-color/ACM).
+int hdr_display_state();
+std::string hdr_display_name();
 bool is_paused() noexcept;
 bool is_presentable() noexcept;
 void pump_events();

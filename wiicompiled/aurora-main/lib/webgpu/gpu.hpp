@@ -2,6 +2,8 @@
 
 #include <aurora/aurora.h>
 #include <aurora/math.hpp>
+#include <string>
+#include <aurora/gfx.h>
 
 #include "wgpu.hpp"
 
@@ -76,6 +78,7 @@ extern bool g_float32Blendable;
 extern wgpu::RenderPipeline g_CopyPipeline;
 extern wgpu::RenderPipeline g_PresentPipeline;
 extern wgpu::BindGroup g_CopyBindGroup;
+extern wgpu::BindGroup g_HdrCalibrationBindGroup;
 extern wgpu::Instance g_instance;
 extern bool g_bcTexturesSupported;
 // Vertex fetch written for drivers that miscompile aurora's storage-buffer vertex pulling (Adreno:
@@ -101,6 +104,17 @@ bool refresh_surface(bool recreate = true);
 // NSMBW: V-Sync (Fifo) on or off; the change is applied by take_vsync_change at a frame boundary.
 // HDR output for the next device setup (startup only).
 void request_hdr(bool enabled, float paperWhiteNits, float peakNits) noexcept;
+bool set_hdr_brightness(float paperWhiteNits, float peakNits) noexcept;
+bool hdr_active() noexcept;
+// HDR was requested but startup found Windows HDR off for the game's display (so hdr_active() is false).
+bool hdr_sdr_display() noexcept;
+// The present shader: the shared copy shader plus, for HDR, the calibration uniform and the HDR fragment tail.
+// Exposed so the renderer tests run the same text the game does.
+const char* hdr_fragment_tail();
+std::string copy_shader_source(const std::string& fragmentTail, bool calibration);
+void set_hdr_calibration(const AuroraHdrCalibration* calibration) noexcept;
+// Called under the presentation queue-submit lock, before submitting the HDR copy.
+void upload_hdr_calibration();
 void request_vsync(bool enabled) noexcept;
 bool vsync_enabled() noexcept;
 // Applies a pending V-Sync change to the surface configuration; true when the swapchain must be reconfigured.

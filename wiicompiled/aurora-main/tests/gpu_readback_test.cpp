@@ -12,6 +12,7 @@
 #include "gx/frame_interpolation.hpp"
 #include <dolphin/gx.h>
 #include <aurora/aurora.h>
+#include "webgpu/hdr_presentation.hpp"
 #include <array>
 #include <bit>
 #include <atomic>
@@ -23,6 +24,7 @@
 #include <optional>
 #include <stdexcept>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -420,8 +422,7 @@ void check_alpha_pixel(const Pixels& pixels, unsigned x, std::array<int, 3> rgb)
   }
 }
 
-// ----- Motion vectors: the same perspective quad on consecutive frames, moved by its position matrix.
-
+// Half-float to float (shared by the HDR present shader test and the motion vector tests).
 float half_to_float(uint16_t h) {
   const uint32_t sign = (h & 0x8000u) << 16;
   const uint32_t exponent = (h >> 10) & 0x1fu;
@@ -432,6 +433,149 @@ float half_to_float(uint16_t h) {
   }
   return std::bit_cast<float>(sign | ((exponent + 112u) << 23) | (mantissa << 13));
 }
+
+// The HDR present shader (calibration uniform + scRGB picture) on the real device: the exact WGSL the game builds,
+// drawn onto an RGBA16Float target from a flat grey source with both calibration patches on. Checks that it compiles
+// and pipelines without validation errors, that the picture is the linearised, paper-white-scaled, peak-boosted grey,
+// that both checker patches show their nit targets (bright and dim cells), and that pixels outside them are the picture.
+void check_hdr_present_shader() {
+  constexpr uint32_t size = 64;
+  constexpr float paper = 200.f, peak = 1000.f, paperPatchNits = 300.f, peakPatchNits = 1000.f;
+  const auto code = webgpu::copy_shader_source(webgpu::hdr_fragment_tail(), true);
+  wgpu::ShaderSourceWGSL source{};
+  source.code = code.c_str();
+  const wgpu::ShaderModuleDescriptor moduleDescriptor{.nextInChain = &source, .label = "HDR present test shader"};
+  const auto module = webgpu::g_device.CreateShaderModule(&moduleDescriptor);
+
+  const std::array<wgpu::BindGroupLayoutEntry, 2> pictureEntries{
+      wgpu::BindGroupLayoutEntry{.binding = 0, .visibility = wgpu::ShaderStage::Fragment,
+                                 .sampler = {.type = wgpu::SamplerBindingType::Filtering}},
+      wgpu::BindGroupLayoutEntry{.binding = 1, .visibility = wgpu::ShaderStage::Fragment,
+                                 .texture = {.sampleType = wgpu::TextureSampleType::Float,
+                                             .viewDimension = wgpu::TextureViewDimension::e2D}}};
+  const wgpu::BindGroupLayoutDescriptor pictureLayoutDescriptor{.entryCount = pictureEntries.size(),
+                                                                .entries = pictureEntries.data()};
+  const auto pictureLayout = webgpu::g_device.CreateBindGroupLayout(&pictureLayoutDescriptor);
+  const wgpu::BindGroupLayoutEntry uniformEntry{
+      .binding = 0, .visibility = wgpu::ShaderStage::Fragment,
+      .buffer = {.type = wgpu::BufferBindingType::Uniform, .minBindingSize = sizeof(webgpu::HdrPresentationUniform)}};
+  const wgpu::BindGroupLayoutDescriptor uniformLayoutDescriptor{.entryCount = 1, .entries = &uniformEntry};
+  const auto uniformLayout = webgpu::g_device.CreateBindGroupLayout(&uniformLayoutDescriptor);
+  const std::array layouts{pictureLayout, uniformLayout};
+  const wgpu::PipelineLayoutDescriptor pipelineLayoutDescriptor{.bindGroupLayoutCount = layouts.size(),
+                                                                .bindGroupLayouts = layouts.data()};
+  const auto pipelineLayout = webgpu::g_device.CreatePipelineLayout(&pipelineLayoutDescriptor);
+  const wgpu::ColorTargetState colorTarget{.format = wgpu::TextureFormat::RGBA16Float,
+                                           .writeMask = wgpu::ColorWriteMask::All};
+  const wgpu::FragmentState fragment{.module = module, .entryPoint = "fs_main", .targetCount = 1,
+                                     .targets = &colorTarget};
+  const wgpu::RenderPipelineDescriptor pipelineDescriptor{
+      .label = "HDR present test pipeline", .layout = pipelineLayout,
+      .vertex = {.module = module, .entryPoint = "vs_main"}, .fragment = &fragment};
+  const auto pipeline = webgpu::g_device.CreateRenderPipeline(&pipelineDescriptor);
+
+  // A 4x4 grey (128/255) source, so every sample, filtered or not, is the same grey.
+  const wgpu::TextureDescriptor sourceDescriptor{
+      .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst,
+      .size = {4, 4, 1}, .format = wgpu::TextureFormat::RGBA8Unorm};
+  const auto sourceTexture = webgpu::g_device.CreateTexture(&sourceDescriptor);
+  std::vector<uint8_t> grey(256 * 4, 0);
+  for (unsigned row = 0; row < 4; ++row)
+    for (unsigned texel = 0; texel < 4; ++texel)
+      for (unsigned c = 0; c < 4; ++c) grey[row * 256 + texel * 4 + c] = c == 3 ? 255 : 128;
+  const wgpu::TexelCopyTextureInfo sourceCopy{.texture = sourceTexture};
+  const wgpu::TexelCopyBufferLayout sourceLayout{.bytesPerRow = 256, .rowsPerImage = 4};
+  const wgpu::Extent3D sourceExtent{4, 4, 1};
+  webgpu::g_queue.WriteTexture(&sourceCopy, grey.data(), grey.size(), &sourceLayout, &sourceExtent);
+  const wgpu::SamplerDescriptor samplerDescriptor{.magFilter = wgpu::FilterMode::Linear,
+                                                  .minFilter = wgpu::FilterMode::Linear};
+  const auto sampler = webgpu::g_device.CreateSampler(&samplerDescriptor);
+  const std::array<wgpu::BindGroupEntry, 2> pictureBindings{
+      wgpu::BindGroupEntry{.binding = 0, .sampler = sampler},
+      wgpu::BindGroupEntry{.binding = 1, .textureView = sourceTexture.CreateView()}};
+  const wgpu::BindGroupDescriptor pictureGroupDescriptor{.layout = pictureLayout, .entryCount = pictureBindings.size(),
+                                                         .entries = pictureBindings.data()};
+  const auto pictureGroup = webgpu::g_device.CreateBindGroup(&pictureGroupDescriptor);
+
+  // The uniform comes from the production helper; only the two patch rectangles and nit targets are set here.
+  auto uniform = webgpu::hdr_presentation_uniform(paper, peak, size, size);
+  const std::array<float, 4> paperRect{.1f, .1f, .4f, .4f}, peakRect{.6f, .1f, .9f, .4f};
+  uniform.paperRect = paperRect;
+  uniform.peakRect = peakRect;
+  uniform.parameters[0] = paperPatchNits;
+  uniform.parameters[1] = peakPatchNits;
+  const wgpu::BufferDescriptor uniformDescriptor{.usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+                                                 .size = sizeof(uniform)};
+  const auto uniformBuffer = webgpu::g_device.CreateBuffer(&uniformDescriptor);
+  webgpu::g_queue.WriteBuffer(uniformBuffer, 0, &uniform, sizeof(uniform));
+  const wgpu::BindGroupEntry uniformBinding{.binding = 0, .buffer = uniformBuffer, .size = sizeof(uniform)};
+  const wgpu::BindGroupDescriptor uniformGroupDescriptor{.layout = uniformLayout, .entryCount = 1,
+                                                         .entries = &uniformBinding};
+  const auto uniformGroup = webgpu::g_device.CreateBindGroup(&uniformGroupDescriptor);
+
+  const wgpu::TextureDescriptor targetDescriptor{
+      .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc,
+      .size = {size, size, 1}, .format = wgpu::TextureFormat::RGBA16Float};
+  const auto target = webgpu::g_device.CreateTexture(&targetDescriptor);
+  constexpr uint32_t rowBytes = size * 8;  // already a multiple of 256
+  const wgpu::BufferDescriptor readbackDescriptor{.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead,
+                                                  .size = rowBytes * size};
+  const auto readback = webgpu::g_device.CreateBuffer(&readbackDescriptor);
+  const auto encoder = webgpu::g_device.CreateCommandEncoder();
+  const wgpu::RenderPassColorAttachment attachment{.view = target.CreateView(), .loadOp = wgpu::LoadOp::Clear,
+                                                   .storeOp = wgpu::StoreOp::Store};
+  const wgpu::RenderPassDescriptor passDescriptor{.colorAttachmentCount = 1, .colorAttachments = &attachment};
+  const auto pass = encoder.BeginRenderPass(&passDescriptor);
+  pass.SetPipeline(pipeline);
+  pass.SetBindGroup(0, pictureGroup);
+  pass.SetBindGroup(1, uniformGroup);
+  pass.SetViewport(0.f, 0.f, size, size, 0.f, 1.f);
+  pass.Draw(3);
+  pass.End();
+  const wgpu::TexelCopyTextureInfo from{.texture = target};
+  const wgpu::TexelCopyBufferInfo to{.layout = {.bytesPerRow = rowBytes, .rowsPerImage = size}, .buffer = readback};
+  const wgpu::Extent3D extent{size, size, 1};
+  encoder.CopyTextureToBuffer(&from, &to, &extent);
+  const auto commands = encoder.Finish();
+  webgpu::g_queue.Submit(1, &commands);
+  bool mapped = false;
+  const auto mapFuture = readback.MapAsync(wgpu::MapMode::Read, 0, rowBytes * size, wgpu::CallbackMode::WaitAnyOnly,
+                                           [&](wgpu::MapAsyncStatus status, wgpu::StringView) {
+                                             mapped = status == wgpu::MapAsyncStatus::Success;
+                                           });
+  webgpu::g_instance.WaitAny(mapFuture, 5000000000ull);
+  require(mapped, "HDR shader test readback did not map");
+  const auto* data = static_cast<const uint16_t*>(readback.GetConstMappedRange(0, rowBytes * size));
+  const auto at = [&](unsigned x, unsigned y, unsigned c) { return half_to_float(data[y * size * 4 + x * 4 + c]); };
+  const auto near = [](float got, float want) { return std::fabs(got - want) <= 0.01f * std::max(1.f, std::fabs(want)) + 0.002f; };
+  const auto patch = [&](unsigned x, unsigned y, const std::array<float, 4>& rect, float nits, float dim) {
+    const float u = (x + .5f) / size, v = (y + .5f) / size;
+    const int cx = static_cast<int>(std::floor((u - rect[0]) / (rect[2] - rect[0]) * 8));
+    const int cy = static_cast<int>(std::floor((v - rect[1]) / (rect[3] - rect[1]) * 4));
+    return nits * (((cx + cy) & 1) == 0 ? 1.f : dim) / 80.f;
+  };
+  const float linear = std::pow(128.f / 255.f, 2.2f);
+  const float picture = linear * (1.f + (peak / paper - 1.f) * std::pow(linear, 4.f)) * paper / 80.f;
+  require(near(at(32, 48, 0), picture) && near(at(32, 48, 1), picture) && near(at(32, 48, 2), picture) &&
+          near(at(32, 48, 3), 1.f), "HDR present picture is not the scaled, boosted grey");
+  require(near(at(5, 5, 0), picture) && near(at(62, 62, 0), picture), "HDR present picture changed outside the patches");
+  bool brightSeen = false, dimSeen = false;
+  for (const auto& [rect, nits, dim] : {std::tuple{paperRect, paperPatchNits, 0.6f}, std::tuple{peakRect, peakPatchNits, 0.9f}}) {
+    for (unsigned y = static_cast<unsigned>(rect[1] * size) + 1; y < static_cast<unsigned>(rect[3] * size) - 1; y += 3) {
+      for (unsigned x = static_cast<unsigned>(rect[0] * size) + 1; x < static_cast<unsigned>(rect[2] * size) - 1; x += 3) {
+        const float want = patch(x, y, rect, nits, dim);
+        require(near(at(x, y, 0), want) && near(at(x, y, 1), want) && near(at(x, y, 2), want) && near(at(x, y, 3), 1.f),
+                "HDR calibration patch value differs from its nit target");
+        (want == nits / 80.f ? brightSeen : dimSeen) = true;
+      }
+    }
+  }
+  require(brightSeen && dimSeen, "HDR calibration patches did not show both checker cells");
+  readback.Unmap();
+  std::puts("Actual Aurora HDR present shader: picture, both calibration patches and checker cells match");
+}
+
+// ----- Motion vectors: the same perspective quad on consecutive frames, moved by its position matrix.
 
 // The 4 bytes of a 32-bit target's pixel (x, y), as the screenshot path reads them: copied to a buffer.
 std::array<uint8_t, 4> read_texel(const wgpu::Texture& texture, unsigned x, unsigned y) {
@@ -1414,6 +1558,7 @@ int main(int argc, char** argv) {
     aurora_set_frame_interpolation_fps(0);
     gfx::set_staging_capacity_limits_for_testing(physical);
     std::puts("Actual Aurora frame worker completed 16 capacity-split perspective frames");
+    check_hdr_present_shader();
     require(errors == 0, "Renderer reported an error");
   } catch (const std::exception& error) {
     std::fprintf(stderr, "FAIL: %s\n", error.what());

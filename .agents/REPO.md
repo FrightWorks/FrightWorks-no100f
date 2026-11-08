@@ -318,6 +318,15 @@ Never name a session `main`.
   Other platforms, Windows included, use the stock package.
   Pipelines cached for another MSAA setting are skipped, not failed.
 - A launcher Display setting mirrors F10 Video (#91): a new F10 video setting with a lasting effect belongs in both.
+- HDR output (`[video] hdr`, `hdr_paper_white_nits`, `hdr_peak_nits`) is chosen once at startup: a float16 scRGB swapchain that only the final copy writes.
+  Only Windows with Direct3D has been checked; Vulkan and Metal have no colour-space chain yet.
+  The game stays SDR when `window::hdr_display_state()` says Windows HDR is off for its display (the F10 hint says so); an unknown state changes nothing.
+  Moving the window to another monitor or switching Windows HDR while it runs changes nothing until the next start.
+  F10 > Video > HDR calibration (Windows) shows the state, changes the brightness live and draws real scRGB patches.
+  F2 and F3 captures are the SDR picture whatever HDR is doing.
+  `gx_readback_tests` runs the HDR present shader on the real device.
+- On Windows the launcher fills missing HDR keys once, at start after the data import, from the game's display (Windows HDR state, SDR white level, display peak).
+  Saved values are never overwritten; a failed query saves HDR off with 200 and 1000 nits.
 - Monitor labels are duplicated in `aurora-main/lib/monitor_labels.hpp` and `launcher/Monitors.cs`: change both (#95).
 - Aurora's standalone tests aren't built by the game build and nothing runs them, so they fall behind the code: build and run them when changing the renderer.
 

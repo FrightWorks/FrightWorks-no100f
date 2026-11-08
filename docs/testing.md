@@ -101,7 +101,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
 
 ## 3. Unit tests
 
-**Avalonia launcher (.NET 10).** Both suites use Avalonia's headless platform with CPU Skia drawing and disposable
+**Avalonia launcher (.NET 10).** The suites use Avalonia's headless platform with CPU Skia drawing and disposable
 portable data. Windows and Linux use the same managed test projects; no disc/game is needed. Run with an existing
 .NET 10 SDK and an owned scratch directory:
 
@@ -117,7 +117,8 @@ same-value native selection intent, cancellation, browsing/text/folder creation,
 layout policy. Generic navigation regressions cover narrow buttons beneath wide fields, horizontal button rows,
 ordinary slider precision and opt-in `ControllerSlider` coarse steps. Coarse steps retain the selected device's input
 source, give horizontal D-pad input precision priority, clamp to bounds and preserve repeat/ownership/neutral gates.
-The shared slider is only an opt-in control; this controller change does not add HDR settings or choose HDR increments.
+The HDR window is covered too: the pad opens it from Display, the left stick steps paper white by 10 nits and peak by 100,
+the D-pad by 0.1, ends clamp, the dropdown uses the themed popup and Back closes it.
 The layout suite deliberately provokes save/background/UI faults to check error routing; those expected
 errors appear on stderr even when the suite passes. Screenshots are synthetic headless evidence, not a hardware test.
 
@@ -125,6 +126,22 @@ Physical verification needs a separate isolated runtime allocation: test held co
 foreground loss/return, disconnect/reconnect, scheme matching/manual persistence and game launch/exit ownership.
 Repeat on Windows and Linux (including X11/Wayland and native storage portals as applicable); Windows headless results
 do not establish Linux hardware, SDL availability, native portal or compositor behavior.
+
+The HDR launcher checks run with an existing .NET 10 SDK and an owned scratch directory:
+
+```powershell
+dotnet run --project tools\launcher-hdr-tests\LauncherHdrTests.csproj -c Release -- autotest\launcher-hdr
+```
+
+They use services-disabled portable fixtures and CPU-rendered Avalonia windows, not SDL/game/GPU input. Windows display
+metadata is synthetic; unsupported-platform gating, missing/partial settings, saved precision, slider endpoints,
+keyboard increments, modal ownership and save failures are covered. The opt-in controller slider metadata is checked
+independently; stick-versus-D-pad dispatch is in the controller suite above.
+A query that throws is covered too: it ends like a returned failure and the launcher still starts.
+The native decision to stay SDR on a display that reports HDR off is `hdr_output_allowed` in `hdr_presentation_tests`;
+`gx_readback_tests` also runs the HDR present shader (the real WGSL, an RGBA16Float target, both calibration patches).
+The decision itself, made at device setup from the real display, shows only in the game log (an SDR PC logs "showing the standard picture" when `hdr = true`); the HDR-on side needs an HDR PC.
+Compilation/headless checks do not establish HDR hardware or Linux compositor support.
 
 The tests are CMake targets in `wiicompiled/runtime/CMakeLists.txt`; the game build doesn't build them. After a game
 build has created `wiicompiled\native-build`:

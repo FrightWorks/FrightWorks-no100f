@@ -866,9 +866,35 @@ inline bool SetFrameGraph(bool value) {
     return WriteSetting("video", "frame_graph", value ? "true" : "false");
 }
 
-inline bool Hdr() { return Get().hdr.value_or(false); }
-inline float HdrPaperWhiteNits() { return std::clamp(Get().hdrPaperWhiteNits.value_or(200.f), 80.f, 1000.f); }
-inline float HdrPeakNits() { return std::clamp(Get().hdrPeakNits.value_or(1000.f), 80.f, 10000.f); }
+inline bool Hdr(const RuntimeUserConfig& config = Get()) { return config.hdr.value_or(false); }
+inline float HdrPaperWhiteNits(const RuntimeUserConfig& config = Get()) { return std::clamp(config.hdrPaperWhiteNits.value_or(200.f), 80.f, 1000.f); }
+inline float HdrPeakNits(const RuntimeUserConfig& config = Get()) { return std::clamp(config.hdrPeakNits.value_or(1000.f), 80.f, 10000.f); }
+
+inline bool SetHdr(bool value) {
+    if (!WriteSetting("video", "hdr", value ? "true" : "false")) return false;
+    Mutable().hdr = value;
+    return true;
+}
+
+inline bool SetHdrPaperWhiteNits(float value) {
+    if (!std::isfinite(value) || value < 80.f || value > 1000.f) {
+        std::cerr << "[runtime-config] Invalid HDR paper white: " << value << std::endl;
+        return false;
+    }
+    if (!WriteSetting("video", "hdr_paper_white_nits", std::to_string(value))) return false;
+    Mutable().hdrPaperWhiteNits = value;
+    return true;
+}
+
+inline bool SetHdrPeakNits(float value) {
+    if (!std::isfinite(value) || value < 80.f || value > 10000.f) {
+        std::cerr << "[runtime-config] Invalid HDR peak: " << value << std::endl;
+        return false;
+    }
+    if (!WriteSetting("video", "hdr_peak_nits", std::to_string(value))) return false;
+    Mutable().hdrPeakNits = value;
+    return true;
+}
 
 inline bool VSync(bool fallback = false) {
     return Get().vsync.value_or(fallback);
