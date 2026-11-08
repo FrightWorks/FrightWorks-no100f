@@ -19,7 +19,7 @@ cutscene, waits out a camera pan; no fixed 30 s, no blind presses), then --secon
     (default: half the target, 30 at 60 fps, 15 at 30 fps).
 While the game says "no cutscene, no control" for more than 4 s (a dialogue box such as f003's "PRESS A TO CONTINUE") the wait presses
 A every 2 s, at most 12 times; every press is logged and counted in the report ("dialogue press(es)").
-A level in KNOWN_EXCEPTIONS (s006: a cutscene nothing can skip) is not run: REPORT.md lists it as "skipped (known)" with the reason,
+A scene in KNOWN_EXCEPTIONS (s006: the ending cutscene, not a playable level) is not run: REPORT.md lists it as "skipped (known)" with the reason,
 and the exit code is 3, never 0. --include-known runs it anyway.
 A level that does not become playable in --timeout gets one more try from a fresh launch ("passed on retry"); a crash or a failed
 check is final. A check that could not run is "not run", never a pass.
@@ -53,13 +53,20 @@ DEFAULT_WORKERS = 7
 PICTURE_RETAKES = 4             # a black picture is shot again this many times, PICTURE_RETAKE_WAIT apart, before it fails
 PICTURE_RETAKE_WAIT = 3.0
 
-# Levels the sweep does not run, with the reason (REPORT.md lists them as "skipped (known)", never as passed; --include-known runs them).
+# Levels where an unattended Scooby is caught at the spawn within seconds. Measured 2026-11-08 (dev menu `player` next to a shot every
+# ~3 s): health 3, 2 (, 1), then "dead/dying" with the picture black (the game's own death fade), then back at 3 and lit; about every
+# 13 s, in both levels. Their monsters: o005 HEADY1/2, WOLFMAN/2, WITCH ...; p002 ZOMBIE1/2, HEADLESS1/2, GARGOYLE1, BAT2 ...
+DEADLY_SPAWN = ("o005", "p002")
+DEATH_FADE = "Scooby caught by the level's monsters at the spawn (the game's own death fade, then he respawns)"
+
+# Scenes on the disc that are not playable levels, so the sweep does not run them (REPORT.md lists them as "skipped (known)", never as
+# passed; --include-known runs them anyway). The rest of the disc's scenes are all in the level table of tools/debug/game/levels.md
+# (checked 2026-11-08; the menus mnu3/mnu4 and the movies are left out by NOT_LEVELS).
 KNOWN_EXCEPTIONS = {
-    # Measured 2026-11-08: the cutscene manager stays set with the player "in control" and no player placed (`where` = 0 0 0). Nothing
-    # ended it: A with the cutscene flag every 2 s for 40 s (and for 150 s in the sweep), A held 120 frames, Start, B, X, and the dev
-    # menu's own `skip`. The picture changes over time (a long talking cutscene, not a hang), so the wait for control cannot end.
-    "s006": "a cutscene that cannot be skipped: no press (A, Start, B, X) and not the dev menu's skip ended it in 40 s, nor "
-            "in 150 s in the sweep; the player is never placed",
+    # levels.md: "Ending: OUTTRO cutscene, BACK TO HUB portal; not in the level table". Booted anyway (2026-11-08): the cutscene manager
+    # stays set, no player is placed (`where` = 0 0 0) and no press (A, Start, B, X, the dev menu's `skip`) ended it in 40 s, so the wait
+    # for player control never ends.
+    "s006": "the ending (OUTTRO cutscene), not a playable level; see tools/debug/game/levels.md",
 }
 
 
@@ -117,25 +124,31 @@ def check_picture(rec, game, retakes=None, wait=None):
     if png is None:
         rec.not_run("picture", "no screenshot tool on this OS")
         return
-    blank_why = []
+    blank = 0            # black shots so far
+    why = set()          # what the dev menu said at those moments (the death fade), if anything
     for n in range(retakes + 1):
         lit, total = checks.png_pixels_lit(png)
         if not checks.png_is_blank(png):
-            if blank_why:
-                note = f"picture retaken {n}x ({n * wait:g} s): black at first ({', '.join(sorted(set(blank_why)))})"
+            if blank:
+                note = f"black frame retaken {n}x ({n * wait:g} s)"
+                if why or rec.name in DEADLY_SPAWN:
+                    note += ": " + DEATH_FADE + (" [dev menu: player dead/dying at the black shot]" if why else "")
                 rec.notes.append(note)
                 rec.passed("picture", f"{png.name}: {lit / total:.1%} lit after {n} retake(s); {note}")
             else:
                 rec.passed("picture", f"{png.name}: {lit / total:.1%} of the pixels lit")
             return
-        blank_why.append(player_note(game) or "no reason found")
+        blank += 1
+        note = player_note(game)
+        if note:
+            why.add(note)
         if n == retakes:
             break
         time.sleep(wait)
         game.check_crash()
         png = rec.shot(game, f"retake{n + 1}")
     rec.fail("picture", f"{png.name}: {lit / total:.1%} of the pixels lit, black in all {retakes + 1} shots over "
-                        f"{retakes * wait:g} s ({', '.join(sorted(set(blank_why)))})")
+                        f"{retakes * wait:g} s" + (f" ({', '.join(sorted(why))})" if why else ""))
 
 
 def check_fps(rec, args, summary):

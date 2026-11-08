@@ -284,7 +284,7 @@ The pieces are in `tools/testkit/` and are meant for every automated game run (t
   crashed run's slot is taken over after 90 s. While any slot is held a `game-run.lock` exists in the old format (its `root` is the slots folder, so no checkout's old script takes it over), and a lock held by an old PowerShell script makes
   the kit wait: `python tools/testkit/slots.py status` shows who holds what.
 - `devmenu.py` and `waitplay.py`: the dev menu's `devmenu.txt` / `devmenu_press.txt` as a client, and the one wait-until-playable routine (from `texhunt\look.ps1`): uses `cutscene`
-  (`cutscene yes|no control yes|no`): skip (A) every 2 s while a cutscene plays, nothing while there is no control and no cutscene (a camera pan, a dialogue box), ready the moment the player has control; a time limit fails with the last state and a screenshot.
+  (`cutscene yes|no control yes|no`): skip (A) every 2 s while a cutscene plays; with no control and no cutscene it waits 4 s (a camera pan ends by itself), then presses A every 2 s, at most 12 times, for a dialogue box ("PRESS A TO CONTINUE"), logging each press; ready the moment the player has control; a time limit fails with the last state and a screenshot.
 - `checks.py`: black-picture test (PNG, no Pillow), audio peak and loop check, the HD-drawn probe, the frame rate from the game's own `fps` log lines.
 - `recorder.py`: the per-job / per-level record of checks (passed, FAILED, not run) that the smoke test and the sweep print into their reports.
 
@@ -301,17 +301,18 @@ Per level: boot straight into it (`sd2.ini` `BOOT=<level>`, saves cleared), wait
 keep running `--seconds` (8) more, then check:
 - alive, and no `AccessViolation`, `OS panic`, `missing_target`, `Unhandled` or `FATAL` on stderr: a fault or an exit fails the level at once (`failed: crash (access violation | panic | exited)`);
 - the dev menu says the scene is the level (`failed: in <level>`);
-- the picture is not black (a screenshot, Windows only; "not run" elsewhere);
+- the picture is not black (a screenshot, Windows only; "not run" elsewhere). A black one is shot again up to 4 times, 3 s apart, before it fails, and a retake that was lit is noted in the report. With nobody at the pad the monsters of `o005` and `p002` catch Scooby at the spawn within seconds (health 3, 2, dead, then back at 3 about every 13 s), and the screen is black during the game's own death fade until he respawns. A picture that stays black through all five shots (12 s) still fails;
 - frame rate: the game's own `fps` lines (the sweep sets `NSMBW_LOG_FPS`) after it was playable; the median must reach `--min-fps` (default half the target: 30 at 60 fps, 15 at 30 fps).
 A level that does not become playable in `--timeout` (150 s) gets one more try from a fresh launch ("passed on retry"); a crash or a failed check is final.
 A check that could not run is "not run" (`passed (some checks not run)`, exit code 3), never a pass.
+A scene in `KNOWN_EXCEPTIONS` (in `level-sweep.py`, with the reason) is not run: `REPORT.md` lists it as "skipped (known)", never as passed, and the exit code is 3; `--include-known` runs it anyway. Today that is `s006`, the ending (`OUTTRO` cutscene, not a playable level: it is the one scene on the disc missing from the level table in `tools/debug/game/levels.md`).
 
 What the sweep sets, on top of the game's defaults (the kit's test config, the same as the smoke test): windowed 1280x720 with the render size following the window and 16:9, `skip_intro`, MSAA off (so 7 windows stay fast), HD textures off (the smoke test covers them),
 `fps60 = true` (`--fps30` sets `fps60 = false`: 30 fps), muted, rumble off. Frame interpolation is not set, so it is off: the old script wrote a target of 120.
 
-Options: `--levels h001,c003`, `--workers N` (7), `--slots N` (as many as workers), `--seconds S`, `--timeout S`, `--fps30`, `--min-fps N`, `--keep`, `--exclusive` (the machine to yourself), `--out DIR`, `--activate-when-shown 0|1`, `--skip-build-check`.
+Options: `--levels h001,c003`, `--include-known`, `--workers N` (7), `--slots N` (as many as workers), `--seconds S`, `--timeout S`, `--fps30`, `--min-fps N`, `--keep`, `--exclusive` (the machine to yourself), `--out DIR`, `--activate-when-shown 0|1`, `--skip-build-check`.
 Exit codes: 0 passed, 1 a level failed, 2 wrong build, 3 only checks not run. Output: `autotest\level-sweep-<time>\` with `REPORT.md` (problems first, then one row per level: outcome, seconds, seconds to playable, fps median and min), `results.json`, `shots\<level>.png` and `logs\<level>-<attempt>.err.log` / `.console.log`.
-Measured on one PC (2026-11-08): `h001`, `i004` and `w020` at once passed in 28 s (playable after 11-17 s, 60 fps median in each), and `i004` with `--fps30` in 19 s (30 fps).
+Measured on one PC (2026-11-08): `h001`, `i004` and `w020` at once passed in 28 s (playable after 11-17 s, 60 fps median in each), and `i004` with `--fps30` in 19 s (30 fps). The first full run (87 levels, 7 windows, fps60) took 538 s: 83 passed and 4 failed. The four were `f003` (a dialogue box nobody dismissed), `s006` (the ending cutscene, which is not a level) and `o005` and `p002` (a black picture caught during the death fade); after the dialogue presses, the retake and the exception above, `f003`, `o005` and `p002` pass.
 
 ## 5. Dev menu (F8)
 

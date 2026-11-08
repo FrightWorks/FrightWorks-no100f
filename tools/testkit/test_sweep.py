@@ -28,7 +28,7 @@ class SweepTest(FakeGameCase):
         for sub in ("shots", "logs", "work"):
             (self.out / sub).mkdir(parents=True)
         self.pool = slots.SlotPool(slots=7, state=Path(self.tmp.name) / "kit", poll=0.05)
-        self.args = types.SimpleNamespace(timeout=6, seconds=1.5, skip_build_check=True, fps30=False, min_fps=None, workers=2,
+        self.args = types.SimpleNamespace(timeout=6, seconds=2.5, skip_build_check=True, fps30=False, min_fps=None, workers=2,
                                           slots=7)
         self.env = {"FAKE_STATE_DIR": str(self.state), "FAKE_BOOT_DELAY": "0.3", "FAKE_FPS": "60"}
         self.lit = True
@@ -117,8 +117,34 @@ class SweepTest(FakeGameCase):
             r = self.one(FAKE_DEAD="1")
         self.assertEqual(r["outcome"], "passed", r)
         self.assertEqual(shots, ["h001.png", "h001-retake1.png", "h001-retake2.png"])
-        self.assertIn("picture retaken 2x", r["detail"])
-        self.assertIn("player dead/dying", r["detail"])
+        self.assertIn("black frame retaken 2x", r["detail"])
+        self.assertIn("the game's own death fade", r["detail"])
+        self.assertIn("player dead/dying at the black shot", r["detail"])
+
+    def test_black_frame_without_a_known_cause_is_retaken_and_says_no_cause(self):
+        """h001 is no deadly-spawn level and the dev menu does not say dead: the retake still passes, with no explanation made up."""
+        shots = []
+
+        def screenshot(_game, png):
+            shots.append(1)
+            self.lit = len(shots) > 1
+            return self.fake_screenshot(png)
+        with mock.patch.object(launch.TestGame, "screenshot", screenshot), mock.patch.object(sweep, "PICTURE_RETAKE_WAIT", 0.1):
+            r = self.one()
+        self.assertEqual(r["outcome"], "passed", r)
+        self.assertIn("black frame retaken 1x", r["detail"])
+        self.assertNotIn("death fade", r["detail"])
+
+    def test_deadly_spawn_levels_get_the_reason_in_the_detail(self):
+        shots = []
+
+        def screenshot(_game, png):
+            shots.append(1)
+            self.lit = len(shots) > 1
+            return self.fake_screenshot(png)
+        with mock.patch.object(launch.TestGame, "screenshot", screenshot), mock.patch.object(sweep, "PICTURE_RETAKE_WAIT", 0.1):
+            r = self.one("o005")
+        self.assertIn("monsters at the spawn", r["detail"])
 
     def test_black_in_every_shot_still_fails_after_the_retakes(self):
         self.lit = False
@@ -150,7 +176,8 @@ class SweepTest(FakeGameCase):
 
     def test_s006_is_a_known_exception_with_a_reason(self):
         self.assertIn("s006", sweep.KNOWN_EXCEPTIONS)
-        self.assertIn("skip", sweep.KNOWN_EXCEPTIONS["s006"])
+        self.assertIn("ending", sweep.KNOWN_EXCEPTIONS["s006"])
+        self.assertNotIn("cannot", sweep.KNOWN_EXCEPTIONS["s006"])
 
     def test_slow_frame_rate_fails_and_the_picture_check_still_ran(self):
         r = self.one(FAKE_FPS="12")
@@ -286,13 +313,13 @@ class SweepTest(FakeGameCase):
         self.assertIn("| i004 | failed: crash (exited) |", report)
         self.assertIn("| h001 | passed |", report)
         self.assertIn("fps60 on, 60 fps", report)
-        skipped = {"level": "s006", "outcome": "skipped (known)", "detail": "a cutscene | nothing skips", "checks": [], "times": {},
+        skipped = {"level": "s006", "outcome": "skipped (known)", "detail": "the ending | not a level", "checks": [], "times": {},
                    "seconds": 0, "attempts": 0}
         sweep.write_report(self.out, [ok, skipped], self.args, "b", 1.0)
         report = (self.out / "REPORT.md").read_text()
         self.assertIn("1 passed, 0 failed, 1 skipped (known)", report)
         self.assertIn("## Skipped (known exceptions: not tested, not passed)", report)
-        self.assertIn("| s006 | a cutscene / nothing skips |", report)
+        self.assertIn("| s006 | the ending / not a level |", report)
         self.assertNotIn("## Problems", report)
         self.args.fps30 = True
         sweep.write_report(self.out, [ok], self.args, "b", 1.0)
