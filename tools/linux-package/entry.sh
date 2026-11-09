@@ -26,12 +26,17 @@ git submodule status >/dev/null 2>&1 || true
 echo "Building commit $(git rev-parse --short=12 HEAD) ($(git log -1 --format=%s)), branch ${HOST_BRANCH:-detached}"
 echo "Tags on it: $(git tag --points-at HEAD | tr '\n' ' ')"
 
-# The user's disc, the HD pack and the game's main.dol come from the main checkout, mounted read only; the folders the
-# build writes (toolchain, Play, wiicompiled/generated and native-build-linux, dist) are this volume's own.
+# The user's disc and the game's main.dol come from the main checkout, mounted read only. The HD pack is copied: the build
+# adds the Creeper frames (tools/hd-pack-additions) to texture_pack/ScoobyHD, which must not touch the original.
+# The folders the build writes (toolchain, Play, wiicompiled/generated and native-build-linux, dist) are this volume's own.
 for d in Disc texture_pack game; do
     [[ -e "/ro/$d" ]] || { echo "/ro/$d is not mounted." >&2; exit 2; }
-    ln -sfn "/ro/$d" "$src/$d"
 done
+ln -sfn /ro/Disc "$src/Disc"
+ln -sfn /ro/game "$src/game"
+[[ -L "$src/texture_pack" ]] && rm "$src/texture_pack"
+mkdir -p "$src/texture_pack"
+rsync -a /ro/texture_pack/ "$src/texture_pack/"
 
 if [[ -z "${FRIGHTWORKS_JOBS:-}" ]]; then
     # About 1.5 GB of RAM per job for the compiler, at most one per core, at most 16.
