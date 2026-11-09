@@ -2,7 +2,7 @@
 # Linux release package: an AppImage made with Velopack (vpk), the Linux counterpart of `package-scooby.ps1 -Installer`.
 #   tools/package-linux.sh [--build] [--version <v>] [--feed <dir>] [--no-download]
 # Needs the same things as tools/build-no100f-linux.sh (clang 18, Ninja, Python 3 with Pillow, ImageMagick, curl, bsdtar,
-# the X11 and ALSA headers) plus squashfs-tools, zstd and patchelf for vpk and the packaging. The .NET 10 SDK is downloaded into toolchain/ and vpk into
+# the X11 and ALSA headers; the release container adds the Wayland and PipeWire ones) plus squashfs-tools, zstd and patchelf for vpk and the packaging. The .NET 10 SDK is downloaded into toolchain/ and vpk into
 # dist/.vpk. tools/package-linux-docker.ps1 runs this in an Ubuntu 22.04 container (from Windows, or anywhere with Docker),
 # which is how the release package is made: the build machine's glibc sets the oldest Linux the package runs on.
 #

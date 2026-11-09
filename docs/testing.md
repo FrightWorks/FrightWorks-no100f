@@ -121,10 +121,14 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   Next to the game the package ships `libSDL3.so.0` (for the launcher's controller detection), `libpng16.so.16` and
   `libz.so.1` (the ones the game was built with). Everything else comes from the system: glibc 2.34 or newer, libstdc++
   (GLIBCXX 3.4.30, GCC 12) and the Vulkan loader and driver (`libvulkan.so.1`, dlopen'd); the launcher also needs
-  fontconfig and FreeType (Skia). The beta keeps the configuration the source build has been tested with: the game's SDL
-  has the X11 video driver only (Wayland desktops run it through XWayland) and the ALSA audio driver only (PipeWire
-  needs `pipewire-alsa`, PulseAudio its ALSA plugin). The AppImage itself needs FUSE 2 (`libfuse2`); without it run it with
-  `APPIMAGE_EXTRACT_AND_RUN=1` or `--appimage-extract-and-run`.
+  fontconfig and FreeType (Skia). The game's SDL has the Wayland and X11 video drivers and the PipeWire and ALSA audio
+  drivers; SDL loads each at run time and picks the first that works, so a Wayland desktop gets a native Wayland window,
+  PipeWire gets sound directly, and a system without them falls back to X11 and ALSA (PulseAudio-only systems through
+  ALSA's PulseAudio plugin). There is no PulseAudio driver: `libpulse-dev` brings `zlib1g-dev`, and the game would then
+  link the system zlib instead of the one shipped beside it. The launcher is X11 (Avalonia) and runs through XWayland.
+  The AppImage starts with AppImage's static type2 runtime (`--appimage-version` names it), which has FUSE built in: it
+  needs `/dev/fuse` and a `fusermount` or `fusermount3` on `PATH` (fuse2 or fuse3), not `libfuse2`. Without them run it
+  with `APPIMAGE_EXTRACT_AND_RUN=1` or `--appimage-extract-and-run`.
   An installed AppImage updates itself through Velopack: it needs `releases.linux.json` in a published release, and
   downloads the full package (about 650 MB) the first time; the downloaded package is kept in `/var/tmp/velopack`, so
   later updates can use a delta. The `FRIGHTWORKS_UPDATE_SOURCE` local feed works as on Windows: pack two versions with

@@ -3,6 +3,12 @@
 # Debian 12, Fedora, Arch and SteamOS. Ubuntu's own clang is 14 and can't build the game, so clang 18 comes from LLVM's
 # apt repository (its signing key is checked against the fingerprint below). The other packages are the ones the README
 # lists for a native Linux build, plus what packaging and the headless checks need (xvfb, squashfs-tools for vpk).
+# SDL builds in a video or audio driver only when its headers are here, so the Wayland (with libdecor for window frames
+# on GNOME) and PipeWire headers are here too: a Wayland desktop gets a native window and PipeWire gets sound without
+# pipewire-alsa. SDL loads them at run time (SDL_*_SHARED), so neither is needed to start the game: a system without
+# Wayland or PipeWire gets X11 and ALSA as before. Not libpulse-dev: it brings GLib's headers and with them zlib1g-dev,
+# and Aurora then links the system zlib instead of building the one the package ships (PulseAudio-only systems keep
+# using ALSA's PulseAudio plugin, as before).
 # The base image is pinned by digest (the multi-platform index of ubuntu:22.04).
 FROM ubuntu:22.04@sha256:076e7bf82319619f28dd0aa9c02ab34b055ad37100395b4f49a2ffba04fb5e11
 
@@ -16,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg git rsync xz-utils unzip file binutils \
         ninja-build python3 python3-pil imagemagick librsvg2-bin libarchive-tools pkg-config \
         libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxtst-dev libasound2-dev \
+        libwayland-dev libegl-dev libxkbcommon-dev libdecor-0-dev libpipewire-0.3-dev \
         squashfs-tools desktop-file-utils xvfb xauth libssl3 \
     && rm -rf /var/lib/apt/lists/*
 

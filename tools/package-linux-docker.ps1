@@ -23,7 +23,7 @@
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$image = 'frightworks-linux-package:1'  # bump with a change to tools\linux-package\Dockerfile or entry.sh
+$image = 'frightworks-linux-package:2'  # bump with a change to tools\linux-package\Dockerfile or entry.sh
 
 & docker info --format '{{.ServerVersion}}' *> $null
 if ($LASTEXITCODE -ne 0) { throw 'Docker is not running. Start Docker Desktop and run this again.' }
