@@ -125,8 +125,9 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   PipeWire gets sound directly, and a system without them falls back to X11 and ALSA (PulseAudio-only systems through
   ALSA's PulseAudio plugin). There is no PulseAudio driver: `libpulse-dev` brings `zlib1g-dev`, and the game would then
   link the system zlib instead of the one shipped beside it. The launcher is X11 (Avalonia) and runs through XWayland.
-  The AppImage itself needs FUSE 2 (`libfuse2`); without it run it with
-  `APPIMAGE_EXTRACT_AND_RUN=1` or `--appimage-extract-and-run`.
+  The AppImage starts with AppImage's static type2 runtime (`--appimage-version` names it), which has FUSE built in: it
+  needs `/dev/fuse` and a `fusermount` or `fusermount3` on `PATH` (fuse2 or fuse3), not `libfuse2`. Without them run it
+  with `APPIMAGE_EXTRACT_AND_RUN=1` or `--appimage-extract-and-run`.
   An installed AppImage updates itself through Velopack: it needs `releases.linux.json` in a published release, and
   downloads the full package (about 650 MB) the first time; the downloaded package is kept in `/var/tmp/velopack`, so
   later updates can use a delta. The `FRIGHTWORKS_UPDATE_SOURCE` local feed works as on Windows: pack two versions with

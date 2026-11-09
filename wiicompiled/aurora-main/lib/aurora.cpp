@@ -20,6 +20,7 @@
 #include "window.hpp"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_init.h>
 #include <SDL3/SDL_thread.h>
 #include <magic_enum.hpp>
 
@@ -908,6 +909,10 @@ AuroraInfo initialize(int argc, char* argv[], const AuroraConfig& config) {
   } else {
     g_config.appName = strdup(g_config.appName);
   }
+  // SDL's name for the app on Linux: the sound stream in volume mixers (PipeWire, PulseAudio, JACK) and the screensaver
+  // inhibit; without it they say "SDL Application". Read when the audio device opens, so it is set before. SDL_APP_NAME in
+  // the environment still wins.
+  SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, g_config.appName);
   if (g_config.userPath == nullptr) {
     g_config.userPath = SDL_GetPrefPath(nullptr, g_config.appName);
   } else {
