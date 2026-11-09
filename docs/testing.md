@@ -155,7 +155,7 @@ ctest --test-dir wiicompiled\native-build --output-on-failure
 One test: `cmake --build wiicompiled\native-build --target <name>`, then run `wiicompiled\native-build\<name>.exe`.
 New pure logic (no SDL, no guest memory) belongs in a header with a test next to the existing ones.
 
-**Aurora tests (Windows).** They are Aurora's own build, configured from `wiicompiled/aurora-main` (not its `tests/` folder), and the game build doesn't make them.
+**Aurora tests (Windows and Linux; the Linux side has not been run).** They are Aurora's own build, configured from `wiicompiled/aurora-main` (not its `tests/` folder), and the game build doesn't make them.
 `tools/aurora-tests.py` (Python 3.8+, no packages) does all of this: it finds a built `Play` folder (or takes `--play DIR`), checks that SDL3 and the other libraries the test loads are there before running anything, configures only when the build folder isn't configured yet, builds the two targets, runs CTest with `Play` on `PATH` (Windows) or `LD_LIBRARY_PATH` (Linux) for that run only, and prints a summary.
 `os_alloc_tests_NOT_BUILT` is listed as not run, not as a pass or a failure.
 The exit code is non-zero on any failure.
@@ -167,7 +167,8 @@ python tools/aurora-tests.py --play DIR --build-dir DIR2 --reconfigure
 ```
 
 The script's own tests need no build: `python -m unittest discover -s tools/testkit -p "test_aurora*.py"`.
-The script was run on Windows only; the Linux side (library path, the file check for libSDL3, clang) has not been run.
+The script was run on Windows only.
+Linux has not been run: there Play is optional (SDL3 and Dawn are linked statically, as in the game build, and the built test binary is checked with `ldd`), and configure uses the game build's clang, `AURORA_SDL3_PROVIDER=vendor` and `AURORA_DAWN_PROVIDER=package`.
 
 The same by hand, which ran on Windows only. From the checkout root:
 

@@ -2,6 +2,7 @@
 import importlib.util
 import io
 import contextlib
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,6 +29,15 @@ FAILED = """\
 1/2 Test #1: gx_readback_tests ....................***Failed    1.00 sec
 2/2 Test #2: gx_readback_tests_validate ...........***Timeout 300.00 sec
 """
+
+
+def ldd_lines(*lines):
+    """What ldd prints: one tab-indented line each."""
+    return "".join(chr(9) + line + chr(10) for line in lines)
+
+
+LDD_SAMPLE = ldd_lines("linux-vdso.so.1 (0x00007ffd)", "libSDL3.so.0 => not found",
+                       "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f)", "libfoo.so => not found")
 
 
 def touch(folder, *names):
@@ -77,9 +87,17 @@ class FindPlayTest(Tmp):
             at.find_play(self.root, bare, system=NT)
         self.assertIn("SDL3.dll", str(cm.exception))
 
-    def test_linux_versioned_soname(self):
-        touch(self.root / "Play", "libSDL3.so.0.4.4")
-        self.assertEqual(at.find_play(self.root, system=POSIX), self.root / "Play")
+    def test_linux_play_is_optional(self):
+        self.assertIsNone(at.find_play(self.root, system=POSIX))
+        touch(self.root / "Play", "FrightWorks Game", "dsp_coef.bin")   # what the Linux build stages: no .so
+        self.assertEqual(at.find_play(self.root, system=POSIX), self.root / "Play")   # used if there, not required
+
+    def test_linux_argument_is_honoured(self):
+        other = Path(self.tmp.name) / "elsewhere"
+        other.mkdir()
+        self.assertEqual(at.find_play(self.root, other, system=POSIX), other)
+        with self.assertRaises(at.SetupError):
+            at.find_play(self.root, Path(self.tmp.name) / "nope", system=POSIX)
 
 
 class LibraryCheckTest(Tmp):
@@ -99,12 +117,35 @@ class LibraryCheckTest(Tmp):
         touch(play, "webgpu_dawn.dll")
         self.assertEqual(at.check_libraries(play, self.root, NT), ["SDL3.dll", "libc++.dll", "libunwind.dll"])
 
-    def test_linux_check(self):
+    def test_linux_needs_no_file_in_play(self):
         play = self.root / "Play"
         play.mkdir()
-        self.assertEqual(at.check_libraries(play, self.root, POSIX), ["libSDL3.so*"])
-        touch(play, "libSDL3.so.0")
         self.assertEqual(at.check_libraries(play, self.root, POSIX), [])
+
+    def test_ldd_output(self):
+        out = LDD_SAMPLE
+        self.assertEqual(at.ldd_missing(out), ["libSDL3.so.0", "libfoo.so"])
+        self.assertEqual(at.ldd_missing(ldd_lines("libc.so.6 => /lib/libc.so.6 (0x1)")), [])
+
+    def test_binary_gaps_runs_ldd_on_the_built_binary(self):
+        build = self.root / "b"
+        touch(build / "tests", "gx_readback_tests")
+        seen = []
+
+        class R:
+            stdout = ldd_lines("libSDL3.so.0 => not found")
+
+        def run(cmd, **kw):
+            seen.append((cmd, kw["env"]))
+            return R()
+
+        gaps = at.binary_gaps(build, {"E": "1"}, POSIX, run, which=lambda n: "/usr/bin/ldd")
+        self.assertEqual(gaps, ["libSDL3.so.0"])
+        self.assertEqual(seen[0][0], ["ldd", str(build / "tests" / "gx_readback_tests")])
+        self.assertEqual(seen[0][1], {"E": "1"})
+        self.assertEqual(at.binary_gaps(build, {}, POSIX, run, which=lambda n: None), [])   # no ldd: no check
+        self.assertEqual(at.binary_gaps(build, {}, NT, run, which=lambda n: "x"), [])        # Windows: not used
+        self.assertEqual(at.binary_gaps(self.root / "none", {}, POSIX, run, which=lambda n: "x"), [])
 
 
 class CommandTest(Tmp):
@@ -116,9 +157,12 @@ class CommandTest(Tmp):
         self.assertNotIn("-DCMAKE_CXX_COMPILER=clang++", cmd)
         self.assertNotIn("tests", Path(cmd[2]).parts)
 
-    def test_configure_linux_names_compilers(self):
+    def test_configure_linux_mirrors_the_game_build(self):
         cmd = at.configure_cmd("cmake", self.root, "B", POSIX)
-        self.assertIn("-DCMAKE_CXX_COMPILER=clang++", cmd)
+        for flag in ("-DCMAKE_CXX_COMPILER=clang++", "-DAURORA_DAWN_PROVIDER=package", "-DAURORA_SDL3_PROVIDER=vendor",
+                     "-DCMAKE_POLICY_DEFAULT_CMP0168=NEW", "-DAURORA_BUILD_GPU_TESTS=ON"):
+            self.assertIn(flag, cmd)
+        self.assertNotIn("-DAURORA_SDL3_PROVIDER=vendor", at.configure_cmd("cmake", self.root, "B", NT))
 
     def test_build_has_both_targets(self):
         cmd = at.build_cmd("cmake", "B")
@@ -154,6 +198,7 @@ class EnvTest(Tmp):
         self.assertEqual(env["LD_LIBRARY_PATH"], "/p" + at.os.pathsep + "/old")
         self.assertEqual(env["PATH"], "/bin")
         self.assertEqual(at.run_env({}, "/p", self.root, POSIX)["LD_LIBRARY_PATH"], "/p")
+        self.assertNotIn("LD_LIBRARY_PATH", at.run_env({"PATH": "/bin"}, None, self.root, POSIX))
 
 
 class ResultsTest(unittest.TestCase):
@@ -203,13 +248,13 @@ class MainTest(Tmp):
         at.ROOT = self.root
         self.addCleanup(setattr, at, "ROOT", self.old_root)
 
-    def go(self, argv, ctest_out=PASS_RUN, ctest_rc=0, step_rc=0):
+    def go(self, argv, ctest_out=PASS_RUN, ctest_rc=0, step_rc=0, system=None, ldd=None, which=lambda n: None):
         class Done:
             returncode = step_rc
 
-        def run(cmd, env=None, cwd=None):
+        def run(cmd, env=None, cwd=None, **kw):
             self.calls.append(("run", cmd, env))
-            return Done()
+            return ldd() if ldd and cmd[0] == "ldd" else Done()
 
         class P:
             returncode = ctest_rc
@@ -224,7 +269,7 @@ class MainTest(Tmp):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             rc = at.main(["--build-dir", str(self.build)] + argv, base_env={"Path": "C:\\x"}, run=run, popen=P,
-                         which=lambda n: n)
+                         which=lambda n: n if n != "ldd" else which(n), system=system)
         return rc, out.getvalue(), err.getvalue()
 
     @unittest.skipUnless(at.is_windows(), "uses the Windows library list")
@@ -259,6 +304,27 @@ class MainTest(Tmp):
         self.assertEqual(rc, 1)
         self.assertIn("FAIL", out)
         self.assertEqual(self.calls[-1][1][-2:], ["-R", "gx_readback"])
+
+    def test_linux_run_with_no_play(self):
+        shutil.rmtree(self.play)
+        rc, out, err = self.go([], system=POSIX)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual([c[0] for c in self.calls], ["run", "run", "ctest"])
+        self.assertIn("-DAURORA_SDL3_PROVIDER=vendor", self.calls[0][1])
+        self.assertNotIn("LD_LIBRARY_PATH", self.calls[2][2])
+        self.assertIn("none; not needed", out)
+
+    def test_linux_unresolved_library_stops_before_ctest(self):
+        shutil.rmtree(self.play)
+        touch(self.build / "tests", "gx_readback_tests")
+
+        class R:
+            stdout = ldd_lines("libSDL3.so.0 => not found")
+
+        rc, _, err = self.go([], system=POSIX, ldd=R, which=lambda n: n)
+        self.assertEqual(rc, 2)
+        self.assertEqual([c[1][0] for c in self.calls], [self.calls[0][1][0], self.calls[1][1][0], "ldd"])   # no ctest
+        self.assertIn("libSDL3.so.0", err)
 
     @unittest.skipUnless(at.is_windows(), "uses the Windows library list")
     def test_build_failure_stops(self):

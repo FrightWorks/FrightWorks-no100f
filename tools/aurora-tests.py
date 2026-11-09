@@ -9,8 +9,10 @@ It does what docs/testing.md "Aurora tests" lists by hand: configure wiicompiled
 -DAURORA_BUILD_GPU_TESTS=ON, build gx_fifo_tests and gx_readback_tests, then `ctest --output-on-failure --timeout 300`.
 Configuring downloads googletest and Dawn.
 
-The test needs a built Play folder for its runtime libraries (SDL3 and the rest). Without them Windows pops a modal
-"SDL3.dll not found" dialog on the desktop instead of failing, so the libraries are checked before anything runs.
+On Windows the test needs a built Play folder for its runtime libraries (SDL3 and the rest). Without them Windows pops a
+modal "SDL3.dll not found" dialog on the desktop instead of failing, so the libraries are checked before anything runs.
+On Linux Play is optional (SDL3 and Dawn are linked statically there, as in the game build): the built test binary is
+checked with `ldd` instead, and a --play folder is only put on the library path.
 PATH (Windows) or LD_LIBRARY_PATH (Linux) is changed for the test run only, never for this shell.
 
 The tests open a small window. A build folder that already has a build.ninja (a finished configure; a failed one leaves only CMakeCache.txt) is not configured again (--reconfigure).
@@ -32,7 +34,9 @@ CTEST_TIMEOUT = "300"
 
 # Libraries the GPU test loads at start. A name with a * is a glob (Linux sonames carry versions).
 WINDOWS_LIBS = ["SDL3.dll", "webgpu_dawn.dll", "libc++.dll", "libunwind.dll"]
-LINUX_LIBS = ["libSDL3.so*"]
+# Linux needs none from Play: Aurora's standalone build links SDL3 and Dawn statically there (see configure_cmd), so
+# the check is `ldd` on the built test binary instead (ldd_missing).
+LINUX_LIBS = []
 
 
 class SetupError(Exception):
@@ -81,11 +85,15 @@ def missing_libs(folders, system=None):
 
 def play_ok(play, system=None):
     """A Play folder is usable when it has SDL3 (the library whose absence pops the dialog) and the game's dawn."""
-    return Path(play).is_dir() and not [m for m in missing_libs([play], system) if m.startswith(("SDL3", "libSDL3", "webgpu_dawn", "libwebgpu"))]
+    return Path(play).is_dir() and not [m for m in missing_libs([play], system) if m.startswith(("SDL3", "webgpu_dawn"))]
 
 
 def find_play(root, given=None, system=None):
-    """The Play folder to take libraries from: the argument if given (it must be usable), else <root>/Play."""
+    """The Play folder to take libraries from: the argument if given (it must be usable), else <root>/Play.
+
+    Windows needs one. On Linux Play is optional: an existing one (or --play) is only added to LD_LIBRARY_PATH, and
+    without one this returns None (no libraries are needed from it).
+    """
     if given:
         p = Path(given)
         if not p.is_dir():
@@ -97,6 +105,8 @@ def find_play(root, given=None, system=None):
     p = Path(root) / "Play"
     if play_ok(p, system):
         return p
+    if not is_windows(system):
+        return None
     raise SetupError(f"No usable built Play folder at {p} (needs {', '.join(required_libs(system))}). "
                      "Build the game first (tools/build-no100f.ps1 or tools/build-no100f-linux.sh), or pass --play.")
 
@@ -113,7 +123,7 @@ def run_env(base_env, play, root, system=None):
         key = next((k for k in env if k.upper() == "PATH"), "PATH")
         dirs = [str(play)] + [str(d) for d in toolchain_dirs(root, system)]
         env[key] = os.pathsep.join(dirs + ([env[key]] if env.get(key) else []))
-    else:
+    elif play:
         dirs = [str(play)]
         env["LD_LIBRARY_PATH"] = os.pathsep.join(dirs + ([env["LD_LIBRARY_PATH"]] if env.get("LD_LIBRARY_PATH") else []))
     return env
@@ -133,7 +143,11 @@ def configure_cmd(cmake, root, build_dir, system=None):
     cmd = [cmake, "-S", str(Path(root) / "wiicompiled" / "aurora-main"), "-B", str(build_dir), "-G", "Ninja",
            "-DCMAKE_BUILD_TYPE=Release", "-DAURORA_BUILD_GPU_TESTS=ON"]
     if not is_windows(system):
-        cmd += ["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"]
+        # The same compilers and providers as tools/build-no100f-linux.sh, so the tests use the game's SDL3 and Dawn
+        # (standalone defaults differ: SDL3 would be the system one when it is new enough).
+        cmd += ["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++",
+                "-DAURORA_DAWN_PROVIDER=package", "-DAURORA_SDL3_PROVIDER=vendor",
+                "-DCMAKE_POLICY_DEFAULT_CMP0168=NEW"]
     return cmd
 
 
@@ -147,6 +161,27 @@ def ctest_cmd(ctest, build_dir, test_filter=DEFAULT_FILTER):
     if test_filter:
         cmd += ["-R", test_filter]
     return cmd
+
+
+def ldd_missing(output):
+    """Libraries `ldd` could not resolve (Linux)."""
+    return [m.group(1) for m in re.finditer(r"^\s*(\S+)\s*=>\s*not found", output, re.M)]
+
+
+def find_test_exe(build_dir, system=None):
+    """The built gx_readback_tests (it sits in the tests/ subfolder of the build folder)."""
+    found = sorted(Path(build_dir).glob("**/gx_readback_tests" + exe_suffix(system)))
+    return found[0] if found else None
+
+
+def binary_gaps(build_dir, env, system=None, run=subprocess.run, which=None):
+    """Linux: libraries the built test binary cannot find with `env`'s library path (none if ldd is not there)."""
+    import shutil
+    exe = None if is_windows(system) else find_test_exe(build_dir, system)
+    if not exe or not (which or shutil.which)("ldd"):
+        return []
+    out = run(["ldd", str(exe)], env=env, stdout=subprocess.PIPE, universal_newlines=True).stdout
+    return ldd_missing(out)
 
 
 _LINE = re.compile(r"^\s*\d+/\d+ Test\s+#\d+:\s+(\S+)\s+\.+\s*(\*\*\*)?\s*(.*?)\s+[\d.]+ sec\s*$")
@@ -191,7 +226,7 @@ def verdict(results, ctest_rc):
 def summary(results, ok, reason, play, build_dir):
     lines = [f"Aurora tests: {'PASS' if ok else 'FAIL'} ({reason})",
              f"  passed {len(results['passed'])}, failed {len(results['failed'])}, not run {len(results['not_run'])}",
-             f"  Play: {play}", f"  build folder: {build_dir}"]
+             f"  Play: {play or '(none; not needed here)'}", f"  build folder: {build_dir}"]
     gpu = [n for n in results["passed"] if n.startswith("gx_readback")]
     if gpu:
         lines.append(f"  GPU test passed: {', '.join(gpu)}")
@@ -220,7 +255,7 @@ def run_ctest(cmd, env, popen=subprocess.Popen):
     return p.returncode, "".join(out)
 
 
-def main(argv=None, base_env=None, run=subprocess.run, popen=subprocess.Popen, which=None):
+def main(argv=None, base_env=None, run=subprocess.run, popen=subprocess.Popen, which=None, system=None):
     ap = argparse.ArgumentParser(description="Build and run Aurora's GPU tests.")
     ap.add_argument("--play", help="built Play folder to take SDL3 and the other libraries from (default: <checkout>/Play)")
     ap.add_argument("--build-dir", help="build folder (default: <checkout>/autotest/aurora-tests-build)")
@@ -231,12 +266,12 @@ def main(argv=None, base_env=None, run=subprocess.run, popen=subprocess.Popen, w
     base_env = os.environ if base_env is None else base_env
 
     try:
-        play = find_play(ROOT, args.play)
-        cmake = find_tool("cmake", ROOT, which=which)
-        ctest = find_tool("ctest", ROOT, which=which)
+        play = find_play(ROOT, args.play, system)
+        cmake = find_tool("cmake", ROOT, system, which)
+        ctest = find_tool("ctest", ROOT, system, which)
         if not cmake or not ctest:
             raise SetupError("cmake/ctest not found (the toolchain/ folder has them after tools/build-no100f.*, or put them on PATH)")
-        gaps = check_libraries(play, ROOT)
+        gaps = check_libraries(play, ROOT, system) if play else []
         if gaps:
             raise SetupError(f"Missing libraries (not in {play} or the toolchain folders): {', '.join(gaps)}. Nothing was run.")
     except SetupError as e:
@@ -244,9 +279,9 @@ def main(argv=None, base_env=None, run=subprocess.run, popen=subprocess.Popen, w
         return 2
 
     build_dir = Path(args.build_dir) if args.build_dir else ROOT / "autotest" / "aurora-tests-build"
-    tool_env = build_tool_env(base_env, ROOT)
+    tool_env = build_tool_env(base_env, ROOT, system)
     if args.reconfigure or not (build_dir / "build.ninja").is_file():
-        if run_step(configure_cmd(cmake, ROOT, build_dir), tool_env, "configure", run):
+        if run_step(configure_cmd(cmake, ROOT, build_dir, system), tool_env, "configure", run):
             print("error: configure failed", file=sys.stderr)
             return 1
     else:
@@ -255,7 +290,12 @@ def main(argv=None, base_env=None, run=subprocess.run, popen=subprocess.Popen, w
         print("error: build failed", file=sys.stderr)
         return 1
 
-    rc, out = run_ctest(ctest_cmd(ctest, build_dir, args.filter), run_env(base_env, play, ROOT), popen)
+    env = run_env(base_env, play, ROOT, system)
+    gone = binary_gaps(build_dir, env, system, run, which)
+    if gone:
+        print(f"error: the test binary cannot find: {', '.join(gone)}. Nothing was run.", file=sys.stderr)
+        return 2
+    rc, out = run_ctest(ctest_cmd(ctest, build_dir, args.filter), env, popen)
     results = parse_ctest(out)
     ok, reason = verdict(results, rc)
     print("\n" + summary(results, ok, reason, play, build_dir))
