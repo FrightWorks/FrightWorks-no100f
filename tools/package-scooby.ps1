@@ -2,7 +2,8 @@
 # data\ with the game's runtime files. No disc data in the package (but the HD pack fix reads the repo's Disc\DATA).
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 [-Build] [-Zip]
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 -Installer [-Version <v>] [-Feed <dir>] [-NoDownload]
-# -Build first rebuilds the game (build-no100f.ps1 -SkipTools) and the launcher.
+# -Build first rebuilds the game (build-no100f.ps1, without -SkipTools: the pinned dependencies are brought up to date
+# first, so a changed pin is picked up) and the launcher.
 # -Zip also writes dist\FrightWorks.zip from a clean copy (never the player's disc, saves or settings).
 # Updating dist in place only replaces program files: data\Disc and data\UserData (saves, Config.toml, mods) are kept,
 # so a disc set up there by the launcher survives a repackage. An old Play\ layout is moved into data\ first.
@@ -17,7 +18,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $launcher = "$root\launcher\publish\FrightWorks.exe"
 $VpkVersion = '1.2.161'  # keep in step with the Velopack PackageReference in the launcher's .csproj
 $RepoUrl = 'https://github.com/FrightWorks/FrightWorks-no100f'
-if ($Build) { & "$PSScriptRoot\build-no100f.ps1" -SkipTools; & "$PSScriptRoot\build-launcher.ps1" }
+if ($Build) { & "$PSScriptRoot\build-no100f.ps1"; & "$PSScriptRoot\build-launcher.ps1" }
 elseif (-not (Test-Path -LiteralPath $launcher)) { & "$PSScriptRoot\build-launcher.ps1" }
 
 # Program files only: what a new download replaces. -Installed: no portable marker (the game then keeps the player's

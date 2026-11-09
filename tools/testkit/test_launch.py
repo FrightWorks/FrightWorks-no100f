@@ -169,6 +169,57 @@ class BuildIdTest(unittest.TestCase):
         self.assertIn("not in this repository", msg)
 
 
+class ReleaseBuildTest(unittest.TestCase):
+    """--release <ver>: a release build's ID is the plain version (build_info.cmake, clean checkout at the tag)."""
+
+    def exe(self, *strings):
+        return b"\x00".join([b"MZ\x90"] + [s.encode() for s in strings] + [b"\x01"]).decode("latin-1")
+
+    def test_release_exe_passes(self):
+        ok, msg = launch.check_release_exe(self.exe("1.1.2", "other"), "1.1.2")
+        self.assertTrue(ok, msg)
+
+    def test_dev_exe_of_the_same_version_fails(self):
+        for ident in ("1.1.2 main@abcdef0", "1.1.2 main@abcdef0+1a2b", "1.1.2 (unknown build: no git)"):
+            ok, msg = launch.check_release_exe(self.exe("1.1.2", "main", "abcdef0", ident), "1.1.2")
+            self.assertFalse(ok, ident)
+            self.assertIn("not a release build", msg)
+
+    def test_other_version_or_none_fails(self):
+        self.assertFalse(launch.check_release_exe(self.exe("1.1.3"), "1.1.2")[0])
+        self.assertFalse(launch.check_release_exe(self.exe("11.1.2", "1.1.2.0"), "1.1.2")[0])  # not the version as a whole
+        self.assertFalse(launch.check_release_exe(self.exe("nothing"), "1.1.2")[0])
+
+    def test_console_line(self):
+        self.assertEqual(launch.find_console_build("x\nFrightWorks build 1.1.2\nmore"), "1.1.2")
+        self.assertEqual(launch.find_console_build("FrightWorks build 1.1.2 (dev tools on)\r\n"), "1.1.2")
+        self.assertEqual(launch.find_console_build("FrightWorks build 1.1.2 main@abcdef0"), "1.1.2 main@abcdef0")
+        self.assertEqual(launch.find_console_build("FrightWorks build 1.1.2"), "1.1.2")
+        self.assertEqual(launch.find_console_build("no line"), "")
+
+    def test_console_check_is_exact(self):
+        self.assertTrue(launch.check_release_console("1.1.2", "1.1.2")[0])
+        for bad in ("1.1.2 main@abcdef0", "1.1.2+1a2b", "1.1.3", ""):
+            self.assertFalse(launch.check_release_console(bad, "1.1.2")[0], bad)
+
+
+class ReleaseGameTest(FakeGameCase):
+    def test_console_build_of_a_started_game(self):
+        g = self.game(env={"FAKE_BUILD_ID": "1.1.2"}, release="1.1.2")
+        g.start()
+        self.assertTrue(g.wait_console("h001.HIP", 20))
+        self.assertIn("release build 1.1.2", g.check_console_build())
+        g.stop()
+
+    def test_dev_build_id_fails_the_console_check(self):
+        g = self.game(env={"FAKE_BUILD_ID": "1.1.2 work@abcdef0"}, release="1.1.2")
+        g.start()
+        self.assertTrue(g.wait_console("h001.HIP", 20))
+        with self.assertRaises(launch.BuildMismatch):
+            g.check_console_build()
+        g.stop()
+
+
 class LinkTest(unittest.TestCase):
     def test_safe_rmtree_never_deletes_through_a_link(self):
         with tempfile.TemporaryDirectory() as d:

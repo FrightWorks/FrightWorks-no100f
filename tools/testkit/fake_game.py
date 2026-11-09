@@ -38,7 +38,7 @@ if ini.exists():
 logdir = Path("UserData/Logs") / time.strftime("%Y%m%d-%H%M%S")
 logdir.mkdir(parents=True, exist_ok=True)
 console = open(logdir / "console.log", "w", encoding="utf-8")
-console.write(f"FrightWorks {os.environ.get('FAKE_BUILD_ID', '0.0.0 fake@0000000')}\n")
+console.write(f"FrightWorks build {os.environ.get('FAKE_BUILD_ID', '0.0.0 fake@0000000')}\n")
 console.write(f"[dvdread] DATA\\files\\XX\\{boot}.HIP\n")
 console.flush()
 assert os.environ.get("NO100F_INPUT_SCRIPT"), "dummy pad script missing"

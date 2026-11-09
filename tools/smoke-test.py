@@ -55,7 +55,7 @@ class Job(Recorder):
 
     def new_game(self, attempt, **kw):
         g = launch.TestGame(self.name, self.out / "work" / f"{self.name}-{attempt}",
-                            build_check=not self.args.skip_build_check,
+                            build_check=not self.args.skip_build_check, release=getattr(self.args, "release", None),
                             activate_when_shown=getattr(self.args, "activate_when_shown", None), **kw)
         g.prepare()
         self.games.append(g)
@@ -324,7 +324,10 @@ def main():
                     help="set SDL_WINDOW_ACTIVATE_WHEN_SHOWN for the games (0: new windows do not take focus); default: SDL's")
     ap.add_argument("--sequential", action="store_true", help="one job after another (solo timings; with --exclusive)")
     ap.add_argument("--skip-build-check", action="store_true", help="manual override: do not check the build ID (reported)")
+    ap.add_argument("--release", metavar="VER", help="check a release build: its ID (exe and console.log) must be exactly the plain version VER")
     args = ap.parse_args()
+    if args.release and args.skip_build_check:
+        ap.error("--release and --skip-build-check exclude each other")
     args.slots = slots.slot_count(args.slots)
     names = [j for j in args.jobs.split(",") if j]
     unknown = [j for j in names if j not in JOBS]
@@ -340,7 +343,7 @@ def main():
         (out / sub).mkdir(parents=True, exist_ok=True)
 
     try:
-        build_msg = launch.TestGame("check", out / "work" / "check", build_check=not args.skip_build_check).check_build()
+        build_msg = launch.TestGame("check", out / "work" / "check", build_check=not args.skip_build_check, release=args.release).check_build()
     except (BuildMismatch, FileNotFoundError) as e:
         print(f"smoke test not started: {e}", file=sys.stderr)
         return 2
