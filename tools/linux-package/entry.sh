@@ -2,7 +2,7 @@
 # Runs inside the container (tools/package-linux-docker.ps1 starts it). The source is a clone, kept in the /work volume with
 # the toolchain and build folders, of the repository mounted read-only at /host-git, checked out at exactly the commit the
 # caller names: the package is built from committed state, never from a working copy.
-#   entry.sh [--shell] [package-linux.sh arguments]
+#   entry.sh [--shell | --run '<command>'] [package-linux.sh arguments]
 # Environment: HOST_SHA (commit), HOST_BRANCH (its branch name, or empty when detached), FRIGHTWORKS_JOBS (optional).
 # Mounts: /host-git (the repository's .git, read only), /ro/Disc, /ro/texture_pack, /ro/game (read only, from the main
 # checkout), /out (the feed folder).
@@ -52,5 +52,8 @@ echo "Jobs: $FRIGHTWORKS_JOBS"
 if [[ "${1:-}" == "--shell" ]]; then
     shift
     exec bash "$@"
+fi
+if [[ "${1:-}" == "--run" ]]; then  # --run '<command>': a command in the clone, for checks (package-linux-docker.ps1 -Run)
+    exec bash -c "${2:?--run needs a command}"
 fi
 exec tools/package-linux.sh --build --feed /out "$@"

@@ -13,11 +13,12 @@
 #  - read only mounts from the main checkout: Disc\ (the extracted disc), texture_pack\ and game\ (main.dol).
 #  - -Feed (default dist\installer-linux): the finished AppImage, packages and releases.linux.json. Old files in it are
 #    kept (the delta needs the previous package), so clear test builds out of it before a release.
-# -Jobs caps the parallel compile jobs (default: RAM / 1.5 GB, at most 16 and the core count). -Shell opens a shell in the
+# -Run '<bash command>' runs that in the clone (at the commit, with the toolchain and build folders) instead of packaging, for
+# checks such as running the runtime tests; the run needs no -Feed. -Jobs caps the parallel compile jobs (default: RAM / 1.5 GB, at most 16 and the core count). -Shell opens a shell in the
 # container instead of packaging (for looking around and for checks: the volume is mounted at /work, the clone is
 # /work/src).
 [CmdletBinding()] param(
-    [string]$Version, [string]$Feed, [switch]$NoDownload, [int]$Jobs = 0, [switch]$Clean, [switch]$Shell,
+    [string]$Version, [string]$Feed, [switch]$NoDownload, [int]$Jobs = 0, [switch]$Clean, [switch]$Shell, [string]$Run,
     [string]$Volume = 'frightworks-linux-build'
 )
 $ErrorActionPreference = 'Stop'
@@ -27,7 +28,7 @@ $image = 'frightworks-linux-package:1'  # bump with a change to tools\linux-pack
 & docker info --format '{{.ServerVersion}}' *> $null
 if ($LASTEXITCODE -ne 0) { throw 'Docker is not running. Start Docker Desktop and run this again.' }
 
-if (-not $Shell -and (git -C $root status --porcelain --untracked-files=no)) {
+if (-not $Shell -and -not $Run -and (git -C $root status --porcelain --untracked-files=no)) {
     throw 'There are uncommitted changes to tracked files. The package is built from the last commit: commit them first.'
 }
 $sha = (git -C $root rev-parse HEAD).Trim()
@@ -61,13 +62,14 @@ if ($Shell) { $run = $run + @('-t') }
 $run += $image
 $args2 = @()
 if ($Shell) { $args2 += '--shell' }
+elseif ($Run) { $args2 += @('--run', $Run) }
 else {
     if ($Version) { $args2 += @('--version', $Version) }
     if ($NoDownload) { $args2 += '--no-download' }
 }
 & docker @run @args2
 if ($LASTEXITCODE -ne 0) { throw "the container build failed (exit $LASTEXITCODE)" }
-if (-not $Shell) {
+if (-not $Shell -and -not $Run) {
     Write-Host "DONE: $Feed"
     Get-ChildItem -LiteralPath $Feed -File | Sort-Object LastWriteTime | ForEach-Object { '  {0}  {1:N0} MB' -f $_.Name, ($_.Length / 1MB) }
 }

@@ -99,6 +99,37 @@ int main(int argc, char** argv) {
             }
         }
     }
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
+    {
+        // F2 / F3 folders without the portable marker (the AppImage): the XDG Pictures and Videos folders, else ~/Pictures and
+        // ~/Videos; a relative path in user-dirs.dirs is ignored.
+        namespace fs = std::filesystem;
+        const fs::path scratch = fs::temp_directory_path() / "frightworks-xdg-folders-test";
+        fs::remove_all(scratch);
+        fs::create_directories(scratch / "config");
+        setenv("HOME", (scratch / "home").c_str(), 1);
+        setenv("XDG_CONFIG_HOME", (scratch / "config").c_str(), 1);
+        if (!Require(RuntimeConfigFile::XdgUserDirectory("PICTURES", "Pictures") == scratch / "home" / "Pictures" &&
+                     RuntimeConfigFile::XdgUserDirectory("VIDEOS", "Videos") == scratch / "home" / "Videos",
+                     "no user-dirs.dirs: Pictures and Videos under home expected")) return 1;
+        const auto writeDirs = [&](const char* text) { std::ofstream(scratch / "config" / "user-dirs.dirs") << text; };
+        writeDirs("# comment
+XDG_DESKTOP_DIR=\"$HOME/Desktop\"
+  XDG_PICTURES_DIR=\"$HOME/Bilder\"
+XDG_VIDEOS_DIR=\"/data/Clips\"
+");
+        if (!Require(RuntimeConfigFile::XdgUserDirectory("PICTURES", "Pictures") == scratch / "home" / "Bilder" &&
+                     RuntimeConfigFile::XdgUserDirectory("VIDEOS", "Videos") == fs::path("/data/Clips"),
+                     "user-dirs.dirs folders not used")) return 1;
+        writeDirs("XDG_PICTURES_DIR=\"Bilder\"
+XDG_VIDEOS_DIR=\"$HOME/unterminated
+");
+        if (!Require(RuntimeConfigFile::XdgUserDirectory("PICTURES", "Pictures") == scratch / "home" / "Pictures" &&
+                     RuntimeConfigFile::XdgUserDirectory("VIDEOS", "Videos") == scratch / "home" / "Videos",
+                     "relative or broken user-dirs.dirs lines must fall back to home")) return 1;
+        fs::remove_all(scratch);
+    }
+#endif
     // Persistence is opt-in and must use a caller-owned portable copy of this CPU test.
     if (argc == 2) {
         const auto executable = RuntimeConfigFile::ExecutableDirectory();
