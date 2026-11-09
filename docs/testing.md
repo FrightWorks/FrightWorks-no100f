@@ -127,6 +127,8 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   later updates can use a delta. The `FRIGHTWORKS_UPDATE_SOURCE` local feed works as on Windows: pack two versions with
   `-Version 1.1.2-test1 -NoDownload -Feed dist	estfeed-linux`, run the first AppImage with the variable pointing at the
   folder (copy the folder somewhere the container or Linux can read). The update log is `/tmp/velopack_FrightWorks.log`.
+  `package-linux-docker.ps1 -Run '<command>'` runs a command in the container's clone instead of packaging (for example
+  building and running `recomp_runtime_config_tests` from `wiicompiled/native-build-linux`).
 - **Patched Dawn** (2x and 8x MSAA): WebGPU allows only 1 and 4 samples, and stock Dawn aborts on 2 and 8 on Vulkan.
   Windows x64 and Linux (x86_64 and aarch64) therefore download the Dawn package FrightWorks builds and hosts: release
   `v20260603.191052-msaa` on `FrightWorks/dawn-build`, URL and SHA-256 in
