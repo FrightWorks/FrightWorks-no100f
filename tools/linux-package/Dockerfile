@@ -30,8 +30,8 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     ln -s /usr/bin/clang-18 /usr/local/bin/clang; ln -s /usr/bin/clang++-18 /usr/local/bin/clang++
 
-# patchelf: the package script points the game at the libraries shipped beside it.
-RUN apt-get update && apt-get install -y --no-install-recommends patchelf && rm -rf /var/lib/apt/lists/*
+# patchelf: the package script points the game at the libraries shipped beside it. zstd: vpk needs it for delta packages.
+RUN apt-get update && apt-get install -y --no-install-recommends patchelf zstd && rm -rf /var/lib/apt/lists/*
 
 # The source is a clone made by the script from a read-only mount of the repository's .git, owned by someone else.
 RUN git config --system safe.directory '*'
