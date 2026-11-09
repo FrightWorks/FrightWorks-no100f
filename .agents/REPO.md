@@ -119,7 +119,7 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 **No telemetry anywhere:** builds, tools, launcher, game, dependencies.
 Check new dependencies for it.
 Avalonia's `Avalonia.BuildServices` posts on every compile, so it's pinned and blocked through the root `Directory.Build.targets` (bumping Avalonia may need that pin bumped).
-Set `DOTNET_CLI_TELEMETRY_OPTOUT=1` when running `dotnet` by hand.
+Set `DOTNET_CLI_TELEMETRY_OPTOUT=1` when running `dotnet` by hand (PowerShell: `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet ...`; bash: `DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet ...`). The build scripts set it themselves, and the docs show it in every hand-run `dotnet` command.
 
 **New downloads:** when adding a download to the build or tools, or changing its source, check what it fetches and from where.
 Pin a version and hash where the source allows it, and say so in the PR.
