@@ -7,7 +7,7 @@ using Avalonia.Threading;
 namespace FrightWorks;
 
 // Bringing the player's files over from an earlier copy of the game: a FrightWorks or Scooby-Doo: Refrightened zip
-// folder (data\UserData, or Play\UserData in old Refrightened ones), or Documents\MarioWiiSaveData (where a FrightWorks
+// folder (data\UserData, or Play\UserData in old Refrightened ones), or a data folder in Documents (where a FrightWorks
 // game without its portable marker kept everything before the installer). Saves go to the saves folder, the disc to
 // this game's disc folder, the rest (settings, controls, mods, other texture packs) to UserData. The old folder is only
 // read, and files this game already has are never overwritten.
@@ -19,7 +19,7 @@ static class DataImport
     // Rebuilt by the game or shipped with it.
     static readonly string[] Skip = { "Logs", "Cache", "button_icons", "Disc", Path.Combine("texture_replacements", "ScoobyHD") };
 
-    sealed record Source(string Name, string UserData, string? Disc);
+    internal sealed record Source(string Name, string UserData, string? Disc);
 
     public static async Task OfferAtStart(DataPaths paths, string title, Window? owner = null)
     {
@@ -47,7 +47,7 @@ static class DataImport
                           $"{(error == null ? "Copied" : "Partly copied")} from {source.Name}{Environment.NewLine}");
     }
 
-    // Extras > Folders: the player picks the old game's folder (or its data, UserData or MarioWiiSaveData folder).
+    // Extras > Folders: the player picks the old game's folder (or its data or UserData folder, or a Documents data folder).
     public static async Task FromFolder(Window owner, DataPaths paths, string title)
     {
         var folder = await ControllerDialogs.PickPath(owner,
@@ -69,8 +69,8 @@ static class DataImport
                                      : "Done.");
     }
 
-    // A folder the player names: the game's own folder, its data\ or Play\, a UserData, or MarioWiiSaveData.
-    static Source? Describe(string dir)
+    // A folder the player names: the game's own folder, its data\ or Play\, a UserData, or a folder with a Config.toml.
+    internal static Source? Describe(string dir)
     {
         foreach (var sub in new[] { "data", "Play" })
         {
@@ -101,7 +101,7 @@ static class DataImport
     }
 
     // The most recently used earlier copy: zip folders beside this one (portable) or in Downloads, Desktop and
-    // Documents (one folder deep), and Documents\MarioWiiSaveData if it holds this game's settings.
+    // Documents (one folder deep), and any folder directly inside Documents that holds this game's settings.
     static Source? FindNewest(DataPaths paths)
     {
         var places = new List<string>();
@@ -142,10 +142,7 @@ static class DataImport
             }
         }
         if (!paths.Portable && OperatingSystem.IsWindows())
-        {
-            var oldData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MarioWiiSaveData");
-            if (IsThisGamesConfig(Path.Combine(oldData, "Config.toml"))) candidates.Add(Make(oldData, oldData));
-        }
+            candidates.AddRange(InDocuments(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)));
         return candidates.Where(c => !SameFolder(c.UserData, paths.UserData))
                          .OrderByDescending(c => LastUsed(c.UserData)).FirstOrDefault();
     }
@@ -155,7 +152,21 @@ static class DataImport
         try { return File.GetLastWriteTimeUtc(Path.Combine(userData, "Config.toml")); } catch (Exception) { return DateTime.MinValue; }
     }
 
-    // MarioWiiSaveData is shared with other WiiCompiled games: only take it when the settings are this game's.
+    // Where a FrightWorks game without its portable marker kept everything before the installer: a data folder
+    // directly inside Documents. No folder name is fixed here (other WiiCompiled games keep theirs in Documents
+    // too, and one folder can be shared), so every folder there is checked for a Config.toml that is this game's.
+    // The folder is only read, never moved or renamed.
+    internal static List<Source> InDocuments(string documents)
+    {
+        var found = new List<Source>();
+        IEnumerable<string> dirs;
+        try { dirs = Directory.EnumerateDirectories(documents).ToList(); } catch (Exception) { return found; }
+        foreach (var d in dirs)
+            if (IsThisGamesConfig(Path.Combine(d, "Config.toml"))) found.Add(Make(d, d));
+        return found;
+    }
+
+    // A Config.toml in a folder other WiiCompiled games may share: only take it when the settings are this game's.
     static bool IsThisGamesConfig(string config)
     {
         try

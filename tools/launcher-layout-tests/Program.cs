@@ -65,6 +65,58 @@ static class LauncherLayoutTests
             "Main (2560x1440, main)", "VS248 (1920x1080, 1)", "VS248 (1920x1080, 2)", "G215HV (1920x1080)");
     }
 
+    // First-start import from Documents: no folder name is known, every folder directly inside Documents is checked
+    // for a Config.toml that is this game's. Other WiiCompiled games' folders are not offered, nothing is moved,
+    // and Extras > Folders (Describe) reads the same folder.
+    static void CheckDocumentsImport(string output)
+    {
+        string documents = Path.Combine(output, "documents-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string Folder(string name, string? config)
+            {
+                var dir = Path.Combine(documents, name);
+                Directory.CreateDirectory(dir);
+                if (config != null) File.WriteAllText(Path.Combine(dir, "Config.toml"), config);
+                return dir;
+            }
+            const string ours = "# FrightWorks: Night of 100 Frights user configuration\n[paths]\ndvd_root = 'Disc/DATA'\n";
+            Check(DataImport.InDocuments(Path.Combine(documents, "missing")).Count == 0, "A Documents folder that is not there found something");
+            Folder("Some Other WiiCompiled Game", "# Another game\n[video]\nmsaa = 4\n");
+            Folder("Empty folder", null);
+            Folder("Config in a subfolder only", null);
+            Folder(Path.Combine("Config in a subfolder only", "inner"), ours);
+            File.WriteAllText(Path.Combine(documents, "Config.toml"), ours);  // a file in Documents itself is not a folder to offer
+            Check(DataImport.InDocuments(documents).Count == 0, "Folders that aren't this game's were offered");
+
+            var disc = Path.Combine(Folder("Old data under any name", ours), "Disc", "DATA", "sys");
+            Directory.CreateDirectory(disc);
+            File.WriteAllText(Path.Combine(disc, "boot.bin"), "x");
+            var found = DataImport.InDocuments(documents);
+            Check(found.Count == 1, $"Expected the one folder with this game's Config.toml, found {found.Count}");
+            var oldData = Path.Combine(documents, "Old data under any name");
+            Check(found[0].UserData == oldData && found[0].Name == oldData, "The found folder isn't the one with the Config.toml");
+            Check(found[0].Disc == Path.GetFullPath(Path.Combine(oldData, "Disc", "DATA")), $"dvd_root wasn't resolved against that folder: {found[0].Disc}");
+
+            // A Config.toml that merely mentions the game is offered too (the offer only asks).
+            Folder("Mentions Scooby", "# my notes about Scooby\n");
+            Check(DataImport.InDocuments(documents).Count == 2, "A Config.toml that mentions Scooby wasn't offered");
+
+            // Nothing was moved, renamed or changed.
+            Check(Directory.Exists(oldData) && File.ReadAllText(Path.Combine(oldData, "Config.toml")) == ours &&
+                  Directory.Exists(Path.Combine(documents, "Some Other WiiCompiled Game")), "A Documents folder was moved or changed");
+
+            // Extras > Folders needs no name either: picking that folder gives the same source.
+            var picked = DataImport.Describe(oldData);
+            Check(picked != null && picked.UserData == oldData && picked.Disc == found[0].Disc, "Extras > Folders didn't read the Documents folder");
+            Check(DataImport.Describe(Path.Combine(documents, "Empty folder")) == null, "Describe accepted a folder with no Config.toml");
+        }
+        finally
+        {
+            try { Directory.Delete(documents, true); } catch (Exception) { }
+        }
+    }
+
     // Frame interpolation is Off and locked at 30 fps, changeable at 60; changing the frame rate saves it as off. Leaves
     // the config as it found it, and pictures of both states in the output folder.
     static void CheckInterpolationLock(MainWindow window, string fixture, string game, string config, string output)
@@ -221,6 +273,7 @@ static class LauncherLayoutTests
     static void Run(string fixture, string game, string config, string initialConfig, string output)
     {
         CheckMonitorLabels();
+        CheckDocumentsImport(output);
 
         var window = new MainWindow(null, new DataPaths(fixture, game), enableServices: false) { Title = "Launcher layout regression checks" };
         window.Show();

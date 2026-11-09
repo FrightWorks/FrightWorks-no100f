@@ -4,6 +4,7 @@
 // DVD completion drain, so it runs from the scheduler like the EXI interrupt would.
 #include "hle_stubs.h"
 #include "memory.h"
+#include "old_save_convert.h"
 #include "runtime_config.h"
 #include "runtime_log.h"
 
@@ -34,24 +35,12 @@ void EnsureCardInit() {
     char game[5] = "GIHE", maker[3] = "78";
     for (int i = 0; i < 4; ++i) if (const char c = char(Memory::Read8(0x80000000u + i)); c >= '0' && c <= 'Z') game[i] = c;
     for (int i = 0; i < 2; ++i) if (const char c = char(Memory::Read8(0x80000004u + i)); c >= '0' && c <= 'Z') maker[i] = c;
-    // Builds before 2026-10-17 filed this game's saves under Scooby-Doo! Unmasked's code (G5DE), where the game could
-    // not find them again: move those over (file name and the game code in the GCI header).
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, ec)) {
-        const std::string name = entry.path().filename().string();
-        const auto at = name.find("-G5DE-ScoobyDoo");
-        if (!entry.is_regular_file() || at == std::string::npos || std::strcmp(game, "G5DE") == 0) continue;
-        std::string fixed = name;
-        fixed.replace(at + 1, 4, game);
-        const auto target = entry.path().parent_path() / fixed;
-        if (std::filesystem::exists(target, ec)) continue;
-        std::filesystem::rename(entry.path(), target, ec);
-        if (ec) continue;
-        if (std::FILE* f = std::fopen(target.string().c_str(), "r+b")) {
-            std::fwrite(game, 1, 4, f);
-            std::fclose(f);
-        }
-        RT_LOGF(RT_TAG_OS, "[card] moved %s -> %s\n", name.c_str(), fixed.c_str());
-    }
+    // Builds before the first release filed this game's saves under another game's code (G5DE), where the game
+    // cannot find them: fix the header code of any such save (rule by header, see old_save_convert.h). Originals go
+    // to Saves\MemoryCard-old, outside the card folders.
+    OldSaveConvert::Hooks hooks;
+    hooks.log = [](const std::string& line) { RT_LOGF(RT_TAG_OS, "%s\n", line.c_str()); };
+    OldSaveConvert::Run(dir, dir.parent_path() / "MemoryCard-old", game, hooks);
     CARDInit(game, maker);
     RT_LOGF(RT_TAG_OS, "[card] memory card folder: %s (game %s%s)\n", path.c_str(), game, maker);
 }
