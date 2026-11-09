@@ -3,6 +3,7 @@
 # The Linux counterpart of tools/build-no100f.ps1. Needs clang, ninja, python3 (Pillow), ImageMagick, curl and bsdtar
 # (or 7z / unrar) on PATH; CMake and the .NET 10 SDK are downloaded into toolchain/ (nothing system-wide).
 #   tools/build-no100f-linux.sh [path/to/game.iso]
+# FRIGHTWORKS_JOBS=<n> limits the parallel jobs (default: all cores).
 # The disc image is only needed the first time (it is extracted to Disc/DATA). The game ends up in "Play/FrightWorks Game",
 # with settings, saves and logs in Play/UserData (Play/portable.txt is the marker).
 set -euo pipefail
@@ -13,7 +14,7 @@ toolchain="$root/toolchain"
 logs="$root/build-logs"
 build="$wc/native-build-linux"
 play="$root/Play"
-jobs="$(nproc)"
+jobs="${FRIGHTWORKS_JOBS:-$(nproc)}"  # FRIGHTWORKS_JOBS caps the parallel jobs (the translator and the compiler)
 mkdir -p "$logs"
 
 status() { printf '%s %s\n' "$(date +%T)" "$*" | tee -a "$logs/status-linux.txt"; }
