@@ -14,7 +14,8 @@ Directly (Linux, or Windows with Python on PATH) the same options work as -Name/
 
   python3 tools/debug/worktree.py new --name installer --branch feat/installer --task "goal"
 
-Worktrees live beside the main checkout, in <its parent>\\FrightWorks-worktrees\\<name> (-Base to change, or set it once with `git config frightworks.worktreesDir ~/worktrees/frightworks`). Each gets:
+Worktrees live beside the main checkout, in <its parent>\\FrightWorks-worktrees\\<name> (-Base to change,
+or set it once with `git config frightworks.worktreesDir ~/worktrees/frightworks`). Each gets:
  - its own copy of everything git tracks, on its own branch (new from -From, default origin/main; or an existing branch);
  - its own build output (Play\\, wiicompiled\\native-build, generated, launcher\\publish, dist) and autotest\\: tests in one
    worktree never touch another's Play\\ or the user's settings in the main checkout's Play\\;

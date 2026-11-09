@@ -50,8 +50,8 @@ Layout (paths in the skills and scripts are written from the repo root):
 | `holiday-shots.ps1` | Screenshot loop for `[game] holiday` dates per hub (needs PR #13) |
 | `patches/` | Diagnostics kept out of PRs; table in `.agents\skills\manual-yn-bisect\strip-before-pr.md` |
 | `patches/pad-script.patch` | Scripted pad 1: hold the stick and press buttons at set times, dev tools on or off (`NO100F_PAD_SCRIPT=<file>`). Format: top of `no100f_pad_script.h`, which the patch adds; usage in the `game-logic-debug` skill. Routes: `game/pad-walk-check.txt`, `audio/issue14-route.txt` |
-worktree.py puts worktrees in `..\FrightWorks-worktrees` unless `-Base` is given or the folder is set once with `git config frightworks.worktreesDir <dir>` (`~` expanded, relative paths from the main checkout).
 
+worktree.py puts worktrees in `..\FrightWorks-worktrees` unless `-Base` is given or the folder is set once with `git config frightworks.worktreesDir <dir>` (`~` expanded, relative paths from the main checkout).
 
 ### F8 progression diagnostics
 
