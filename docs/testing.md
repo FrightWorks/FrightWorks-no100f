@@ -539,6 +539,8 @@ powershell -ExecutionPolicy Bypass -File tools\debug\worktree.ps1 remove -Name i
   tab there running `claude -n <name>` (`-NoOpen` to skip). With `-Task`, the goal goes into the worktree's `TASK.md`
   and the session starts on it. Its first build must be a full one: `toolsuild-no100f.ps1` without
   `-SkipTools`/`-SkipTranslate` (or `new ... -Build`).
+  The folder can be set once with `git config frightworks.worktreesDir ~/worktrees/frightworks` (`-Base`
+  overrides it).
 - `open -Name <name>` starts a closed session again: a new conversation that picks the task up from `TASK.md`
   (`-Continue` to resume the last conversation instead). `new`/`open` start the tab without the Claude Code
   variables of the shell that runs them, so a session started from the coordinator is its own session: listed by

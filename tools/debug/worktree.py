@@ -14,7 +14,8 @@ Directly (Linux, or Windows with Python on PATH) the same options work as -Name/
 
   python3 tools/debug/worktree.py new --name installer --branch feat/installer --task "goal"
 
-Worktrees live beside the main checkout, in <its parent>\\FrightWorks-worktrees\\<name> (-Base to change). Each gets:
+Worktrees live beside the main checkout, in <its parent>\\FrightWorks-worktrees\\<name> (-Base to change,
+or set it once with `git config frightworks.worktreesDir ~/worktrees/frightworks`). Each gets:
  - its own copy of everything git tracks, on its own branch (new from -From, default origin/main; or an existing branch);
  - its own build output (Play\\, wiicompiled\\native-build, generated, launcher\\publish, dist) and autotest\\: tests in one
    worktree never touch another's Play\\ or the user's settings in the main checkout's Play\\;
@@ -297,7 +298,15 @@ class Worktree:
             raise Fail('not inside a git checkout')
         self.common = os.path.abspath(r.stdout.strip().replace('/', os.sep))
         self.main = os.path.dirname(self.common)
-        self.base = args.base or os.path.join(os.path.dirname(self.main), 'FrightWorks-worktrees')
+        self.base = args.base or self.configured_base() or os.path.join(os.path.dirname(self.main), 'FrightWorks-worktrees')
+
+    def configured_base(self):
+        # frightworks.worktreesDir lives in the shared .git/config; relative paths are taken from the main checkout.
+        r = git(self.main, 'config', '--get', 'frightworks.worktreesDir', check=False, capture=True)
+        v = r.stdout.strip() if r.returncode == 0 else ''
+        if not v:
+            return ''
+        return os.path.normpath(os.path.join(self.main, os.path.expanduser(v)))
 
     def git(self, *args, **kw):
         return git(self.main, *args, **kw)
