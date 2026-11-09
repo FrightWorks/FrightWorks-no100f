@@ -80,6 +80,19 @@ for lib in $(patchelf --print-needed "$game"); do
     done
 done
 patchelf --set-rpath '$ORIGIN' "$game"
+
+# libSDL3.so.0 for the launcher's controller detection (launcher/Gamepads.cs loads the one beside the game, else the system's,
+# and most distributions don't have SDL3 yet; the Windows package ships SDL3.dll for the same reason). The game has SDL
+# built in, so this is the same vendored SDL source built as a shared library, with the same compiler.
+sdl_src="$root/wiicompiled/native-build-linux/_deps/sdl-src"
+sdl_build="$root/wiicompiled/native-build-linux/sdl-shared"
+cmake="$root/toolchain/CMake/bin/cmake"
+[[ -d "$sdl_src" ]] || { echo "No $sdl_src: run with --build." >&2; exit 1; }
+"$cmake" -S "$sdl_src" -B "$sdl_build" -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release     -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_INSTALL=OFF >"$work/sdl-configure.log" 2>&1 ||
+    { cat "$work/sdl-configure.log"; exit 1; }
+"$cmake" --build "$sdl_build" --parallel "${FRIGHTWORKS_JOBS:-$(nproc)}" >"$work/sdl-build.log" 2>&1 || { tail -n 40 "$work/sdl-build.log"; exit 1; }
+install -m 755 "$(readlink -f "$sdl_build/libSDL3.so.0")" "$stage/data/libSDL3.so.0"
+echo "Bundled libSDL3.so.0 (SDL built from the vendored source)"
 # The built-in HD texture pack and the button prompt icons: the same files every Play/ build gets, beside the game.
 python3 "$root/tools/stage-assets.py" --game-dir "$stage/data" --required
 
