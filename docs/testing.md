@@ -314,6 +314,25 @@ Options: `--levels h001,c003`, `--include-known`, `--workers N` (7), `--slots N`
 Exit codes: 0 passed (known exceptions skipped), 1 a level failed or is missing, 2 wrong build, 3 nothing failed but a check could not run. Output: `autotest\level-sweep-<time>\` with `REPORT.md` (problems first, then one row per level: outcome, seconds, seconds to playable, fps median and min), `results.json`, `shots\<level>.png` and `logs\<level>-<attempt>.err.log` / `.console.log`.
 Measured on one PC (2026-11-08): `h001`, `i004` and `w020` at once passed in 28 s (playable after 11-17 s, 60 fps median in each), and `i004` with `--fps30` in 19 s (30 fps). The first full run (87 levels, 7 windows, fps60) took 538 s: 83 passed and 4 failed. The four were `f003` (a dialogue box nobody dismissed), `s006` (the ending cutscene, which is not a level) and `o005` and `p002` (a black picture caught during the death fade); after the dialogue presses, the retake and the exception above, `f003`, `o005` and `p002` pass.
 
+## 4c. Asset check
+
+`python tools/check-assets.py` (Python 3.8 or newer, Windows and Linux, standard library, no game needed) fails when a change adds game assets or other things `.agents/REPO.md` says never to commit.
+Run it by hand before opening a PR (section 9); it is not a git hook and nothing runs it for you (no CI).
+It looks at the files staged in the index and at every file the commits in `origin/main..HEAD` bring in (falling back to `upstream/main`, then `main`), including a file a later commit in the range deletes again, because the history would carry it.
+`--base REV` and `--head REV` change the range, `--staged-only` or `--no-staged` limit it, `--max-mib N` changes the size cap.
+Files that only sit in your working tree, untracked or git-ignored, are not looked at: `git add -f` is what it catches.
+A file is refused when:
+- it is under a folder that only holds game data or build output, from the repository root (`Disc/`, `game/`, `texture_pack/`, `Play/` except `portable.txt` and `Run with log.cmd`, `autotest/`, `toolchain/`, `dist/`, `build-logs/`, `wiicompiled/generated/`, `wiicompiled/native-build*`, `wiicompiled/Dependencies/`, `tools/debug/local/`, `.claude/`), or is the bare link a worktree has in place of one of them (git stores a symlink as a file);
+- its extension is a disc image (`.iso`, `.rvz`, ...), a disc file type (`.hip`, `.bik`, `.dol`, `.tpl`, ...), a save (`.gci`, `.sav`, ...), an archive (`.zip`, `.7z`, `.gz`, ...) or a log;
+- it is the root `AGENTS.md` or `CLAUDE.md`;
+- it is over 16 MiB;
+- its first bytes are the magic number of one of those formats, whatever it is called.
+`tools/hd-pack-additions/` (our own Creeper frames) is exempt from the path, type and size rules, not from the header check.
+Case and `\` spellings are normalised, so Windows and Linux give the same answer.
+Exit codes: 0 clean, 1 something refused (it prints each file and why), 2 could not run (not a repository, no base to compare with).
+It cannot catch game data that was renamed and re-encoded, split small, or left in a type it does not list, nor a change that edits its own lists, so it is a safety net: the lists are in the script and the maintainers review changes to them.
+Its tests build throwaway repositories and run with the kit's: `python -m unittest discover -s tools/testkit -p "test_*.py"`.
+
 ## 5. Dev menu (F8)
 
 The dev menu is part of the game, off unless **Extras > Developer tools** is on in the launcher (`[game] dev_tools =
@@ -450,6 +469,7 @@ useful:
 - Fix-only: minimal diff, no diagnostics (revert any patch: `play-patched.ps1 -Remove -Patch <name>` or `git apply -R`),
   no unrelated changes, no heuristics that hide a symptom.
 - Run what the change needs (the table in `.agents/REPO.md`, Testing): the unit tests it affects, and a full build if you touched overrides.
+- Asset check: `python tools/check-assets.py` (section 4c) must pass: no disc, game data, saves, logs or local files in the branch.
 - Smoke test: build first, then `python tools\smoke-test.py` (add `--scenes <scene,...>` for a level you changed; section 4a); before a release, the level sweep (section 4b). Keep it short; nothing runs it automatically (no CI), so the PR says what was run, and what it could not run.
 - Open it as a draft and say plainly what you tested and what you didn't.
 
