@@ -124,6 +124,22 @@ int main(int argc, char** argv) {
         fs::remove_all(scratch);
     }
 #endif
+    {
+        // The F2 / F3 notices name the folder with the platform's own separator: backslashes on Windows, slashes elsewhere.
+        // Only checked where this test isn't run beside a portable marker (then it names the Screenshots and Videos folders).
+        if (!RuntimeConfigFile::PortableRootDirectory()) {
+#ifdef _WIN32
+            const bool labelsRight = RuntimeConfigFile::CaptureDirectoryLabel(false) == "Pictures\\FrightWorks\\" &&
+                                     RuntimeConfigFile::CaptureDirectoryLabel(true) == "Videos\\FrightWorks\\";
+#elif !defined(__APPLE__) && !defined(__ANDROID__)
+            const bool labelsRight = RuntimeConfigFile::CaptureDirectoryLabel(false) == "Pictures/FrightWorks/" &&
+                                     RuntimeConfigFile::CaptureDirectoryLabel(true) == "Videos/FrightWorks/";
+#else
+            const bool labelsRight = true;
+#endif
+            if (!Require(labelsRight, "capture folder labels are wrong for this platform")) return 1;
+        }
+    }
     // Persistence is opt-in and must use a caller-owned portable copy of this CPU test.
     if (argc == 2) {
         const auto executable = RuntimeConfigFile::ExecutableDirectory();

@@ -120,12 +120,14 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   Next to the game the package ships `libSDL3.so.0` (for the launcher's controller detection), `libpng16.so.16` and
   `libz.so.1` (the ones the game was built with). Everything else comes from the system: glibc 2.34 or newer, libstdc++
   (GLIBCXX 3.4.30, GCC 12) and the Vulkan loader and driver (`libvulkan.so.1`, dlopen'd); the launcher also needs
-  fontconfig and FreeType (Skia). The AppImage itself needs FUSE 2 (`libfuse2`); without it run it with
+  fontconfig and FreeType (Skia). The beta keeps the configuration the source build has been tested with: the game's SDL
+  has the X11 video driver only (Wayland desktops run it through XWayland) and the ALSA audio driver only (PipeWire
+  needs `pipewire-alsa`, PulseAudio its ALSA plugin). The AppImage itself needs FUSE 2 (`libfuse2`); without it run it with
   `APPIMAGE_EXTRACT_AND_RUN=1` or `--appimage-extract-and-run`.
   An installed AppImage updates itself through Velopack: it needs `releases.linux.json` in a published release, and
   downloads the full package (about 650 MB) the first time; the downloaded package is kept in `/var/tmp/velopack`, so
   later updates can use a delta. The `FRIGHTWORKS_UPDATE_SOURCE` local feed works as on Windows: pack two versions with
-  `-Version 1.1.2-test1 -NoDownload -Feed dist	estfeed-linux`, run the first AppImage with the variable pointing at the
+  `-Version 1.1.2-test1 -NoDownload -Feed dist\testfeed-linux`, run the first AppImage with the variable pointing at the
   folder (copy the folder somewhere the container or Linux can read). The update log is `/tmp/velopack_FrightWorks.log`.
   `package-linux-docker.ps1 -Run '<command>'` runs a command in the container's clone instead of packaging (for example
   building and running `recomp_runtime_config_tests` from `wiicompiled/native-build-linux`).

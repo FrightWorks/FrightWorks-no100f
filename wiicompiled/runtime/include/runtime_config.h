@@ -1434,7 +1434,7 @@ inline std::filesystem::path XdgUserDirectory(const char* name, const char* fall
         const std::string prefix = key + "=\"";
         std::string line;
         while (std::getline(in, line)) {
-            const size_t start = line.find_first_not_of(" 	");
+            const size_t start = line.find_first_not_of(" \t");
             if (start == std::string::npos || line.compare(start, prefix.size(), prefix) != 0) {
                 continue;
             }
@@ -1485,7 +1485,7 @@ inline std::string CaptureDirectoryLabel(bool videos) {
         return videos ? "Videos\\" : "Screenshots\\";
     }
 #ifdef _WIN32
-    return videos ? "Videos\FrightWorks\\" : "Pictures\FrightWorks\\";
+    return videos ? "Videos\\FrightWorks\\" : "Pictures\\FrightWorks\\";
 #else
     return videos ? "Videos/FrightWorks/" : "Pictures/FrightWorks/";
 #endif
