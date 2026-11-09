@@ -337,8 +337,9 @@ Never name a session `main`.
   Line width follows the picture's height, and lines fade out from 35 to 80 units.
   Tuning is at the top of `scene_stage.cpp`.
   `ink LEVEL` in `devmenu.txt` sets it for one run without changing the setting.
-- MSAA: on Linux (x86_64 and aarch64) the Vulkan 2x and 8x modes need the patched Dawn package that the build downloads from FrightWorks/dawn-build (release `v20260603.191052-msaa`).
-  Other platforms, Windows included, use the stock package.
+- MSAA: on Windows x64 and Linux (x86_64 and aarch64) the Vulkan 2x and 8x modes need the patched Dawn package that the build downloads from FrightWorks/dawn-build (release `v20260603.191052-msaa`).
+  Other platforms (Windows ARM64, macOS) use the stock package and play 2x and 8x as 4x on Vulkan, with a log line.
+  A new Dawn version quietly goes back to stock (2x and 8x then play as 4x on Vulkan) until the pins are updated (`docs/testing.md`).
   Pipelines cached for another MSAA setting are skipped, not failed.
 - A launcher Display setting mirrors F10 Video (#91): a new F10 video setting with a lasting effect belongs in both.
 - HDR output (`[video] hdr`, `hdr_paper_white_nits`, `hdr_peak_nits`) is chosen once at startup: a float16 scRGB swapchain that only the final copy writes.

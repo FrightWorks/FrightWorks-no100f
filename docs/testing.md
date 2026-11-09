@@ -91,15 +91,20 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   draft release as the zip: `gh release upload v<ver> dist\installer\FrightWorks-win-Setup.exe ...`. Installed games
   look for `releases.win.json` in the published (non-pre-release) releases, so every release from now on carries
   these files; a release without them isn't offered as an update. The zip's launcher reads the latest release's tag.
-- **Dawn on Linux** (2x and 8x MSAA): WebGPU allows only 1 and 4 samples, and stock Dawn aborts on 2 and 8 on Vulkan.
-  Linux (x86_64 and aarch64) therefore downloads the Dawn package FrightWorks builds and hosts: release
+- **Patched Dawn** (2x and 8x MSAA): WebGPU allows only 1 and 4 samples, and stock Dawn aborts on 2 and 8 on Vulkan.
+  Windows x64 and Linux (x86_64 and aarch64) therefore download the Dawn package FrightWorks builds and hosts: release
   `v20260603.191052-msaa` on `FrightWorks/dawn-build`, URL and SHA-256 in
   `wiicompiled/aurora-main/cmake/AuroraDawnProvider.cmake`. It is the same Dawn commit as the stock package plus a
   patch (`FrightWorks/dawn`, branch `frightworks/v20260603.191052`, commit `dd7b19d`) that maps 2 and 8 to themselves
   when the GPU's Vulkan limits support them and to 4 otherwise. The workflow that builds it is on `FrightWorks/dawn-build`,
-  branch `frightworks/build`. Other platforms, Windows included, use the stock package. When `AURORA_DAWN_VERSION`
+  branch `frightworks/build` (Windows x64: `frightworks/windows-build`). Windows ARM64, macOS and iOS still use the
+  stock package; there the game plays 2x and 8x as 4x on Vulkan and logs a line saying so. The Windows build checks
+  `webgpu_dawn.dll` in `wiicompiled/Dependencies/dawn_prebuilt` against a pinned SHA-256 (the build runs
+  `Prepare-Dependencies` every time and replaces a stock copy left by an older checkout; CMake refuses a wrong one).
+  When `AURORA_DAWN_VERSION`
   changes: rebase the patch onto the new Dawn commit, build and publish a new package on our release, then update
-  the URL and hashes in the provider; until then Linux gets the stock package and 2x/8x abort again on Vulkan.
+  the URL and hashes in the provider and in `wiicompiled/buildtools/Prepare-Dependencies.py`; until then those
+  platforms get the stock package (and the 4x fallback above covers 2x/8x).
   The package builds on Ubuntu 22.04, which is also the oldest Linux it runs on (20.04 fails to link). Windows picks Direct3D 12 first, so a Windows ARM64 Dawn build isn't needed.
 
 ## 3. Unit tests

@@ -1103,6 +1103,15 @@ bool initialize(AuroraBackend auroraBackend) {
   Log.info("Using surface format {}, present mode {}", magic_enum::enum_name(surfaceFormat),
            magic_enum::enum_name(presentMode));
   const auto size = window::get_window_size();
+  uint32_t msaaSamples = g_config.msaa;
+#ifndef AURORA_DAWN_MSAA_PATCHED
+  // Stock Dawn aborts on a 2x or 8x multisampled texture on Vulkan (WebGPU allows 1 and 4 only). The patched Dawn
+  // package takes them (see cmake/AuroraDawnProvider.cmake), so only builds on the stock package need this.
+  if (g_backendType == wgpu::BackendType::Vulkan && (msaaSamples == 2 || msaaSamples == 8)) {
+    Log.warn("This Dawn build can't do {}x MSAA on Vulkan; using 4x", msaaSamples);
+    msaaSamples = 4;
+  }
+#endif
   g_graphicsConfig = GraphicsConfig{
       .surfaceConfiguration =
           wgpu::SurfaceConfiguration{
@@ -1113,7 +1122,7 @@ bool initialize(AuroraBackend auroraBackend) {
               .presentMode = presentMode,
           },
       .depthFormat = wgpu::TextureFormat::Depth32Float,
-      .msaaSamples = g_config.msaa,
+      .msaaSamples = msaaSamples,
       .textureAnisotropy = g_config.maxTextureAnisotropy,
       .maxTextureDimension2D = maxTextureDimension2D,
   };

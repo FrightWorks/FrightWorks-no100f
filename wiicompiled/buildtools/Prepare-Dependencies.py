@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Populates buildtools/artifacts/dependencies (or --destination): the pinned, unpatched upstream source trees (plus the
-prebuilt Dawn package and generated C++/WinRT headers) that the native build uses with FETCHCONTENT_FULLY_DISCONNECTED=ON.
+prebuilt, patched Dawn package and generated C++/WinRT headers) that the native build uses with FETCHCONTENT_FULLY_DISCONNECTED=ON.
 Every pin is the one aurora-main's own CMake declares; the "pins" below are asserted against those files so the two
 cannot drift apart silently.
 
@@ -13,6 +13,7 @@ program: on other systems both are skipped (with a note). Python 3.8+, standard 
 "ERROR: <text>" and exit 1.
 """
 import argparse
+import hashlib
 import os
 import shutil
 import stat
@@ -35,6 +36,9 @@ SDL = os.path.join(REPO, "aurora-main", "cmake", "AuroraSDL3Provider.cmake")
 # name = directory under the destination; FetchContent maps it back through FETCHCONTENT_SOURCE_DIR_<UPPERCASE NAME>
 # (NativeBuildFlags.ps1), so the names are the declared FetchContent names, not the upstream project names.
 # pins = (file, text that file must still contain).
+# sha256 = digest of the downloaded file (checked on every use, so a mutable release asset or a stale cache can't slip
+# through); runtime = (path in the tree, digest) of a file that proves the extracted tree is the right one, so an older
+# Dependencies folder holding another build of the package is replaced.
 PACKAGES = [
     dict(name="SDL", file="SDL3-3.4.4.tar.gz",
          uris=["https://github.com/libsdl-org/SDL/releases/download/release-3.4.4/SDL3-3.4.4.tar.gz"],
@@ -43,11 +47,15 @@ PACKAGES = [
     dict(name="abseil-cpp", file="abseil-cpp-20240722.0.tar.gz",
          uris=["https://github.com/abseil/abseil-cpp/archive/refs/tags/20240722.0.tar.gz"],
          pins=[(EXTERN, "https://github.com/abseil/abseil-cpp/archive/refs/tags/20240722.0.tar.gz")]),
-    dict(name="dawn_prebuilt", file="dawn-v20260603.191052-windows-amd64.tar.gz", windows_only=True,
-         uris=["https://github.com/theofficialgman/dawn-build/releases/download/v20260603.191052/"
+    dict(name="dawn_prebuilt", file="dawn-v20260603.191052-msaa-windows-amd64.tar.gz", windows_only=True,
+         sha256="67c507f218736f750be8d61c7f7a444bedafcfd6b184bc55a07961bfd001151e",
+         runtime=("bin/webgpu_dawn.dll", "84caa209a4dd34656bdc24dc97affc3e1484e20a00e371ff5fddeb266d9ffb64"),
+         uris=["https://github.com/FrightWorks/dawn-build/releases/download/v20260603.191052-msaa/"
                "dawn-windows-amd64.tar.gz"],
          pins=[(CMAKE, 'set(AURORA_DAWN_VERSION "v20260603.191052"'),
-               (DAWN, "SHA256=13be9cff8b9b179c42dcd16aeabb6effcc8f0dfdcc14463eda2a5caeda225142")]),
+               (DAWN, "SHA256=67c507f218736f750be8d61c7f7a444bedafcfd6b184bc55a07961bfd001151e"),
+               (DAWN, '"84caa209a4dd34656bdc24dc97affc3e1484e20a00e371ff5fddeb266d9ffb64"'),
+               (DAWN, "FrightWorks/dawn-build/releases/download/v20260603.191052-msaa/")]),
     dict(name="fmt", file="fmt-11.1.4.tar.gz",
          uris=["https://github.com/fmtlib/fmt/archive/refs/tags/11.1.4.tar.gz"],
          pins=[(EXTERN, "https://github.com/fmtlib/fmt/archive/refs/tags/11.1.4.tar.gz")]),
@@ -124,9 +132,32 @@ def download(url, path):
         shutil.copyfileobj(response, out, 1 << 20)
 
 
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for block in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def check_digest(package, path):
+    expected = package.get("sha256")
+    if expected and file_sha256(path) != expected:
+        raise Failure("%s does not match the pinned SHA-256 %s: %s" % (package["name"], expected, path))
+
+
+def tree_is_current(package, target):
+    runtime = package.get("runtime")
+    if not runtime:
+        return True
+    path = os.path.join(target, *runtime[0].split("/"))
+    return os.path.isfile(path) and file_sha256(path) == runtime[1]
+
+
 def get_archive(package, downloads):
     archive = os.path.join(downloads, package["file"])
     if os.path.isfile(archive):
+        check_digest(package, archive)
         return archive
     temporary = archive + ".partial"
     failures = []
@@ -139,6 +170,11 @@ def get_archive(package, downloads):
         except Exception as error:      # network, HTTP status, disk: try the next mirror
             failures.append("%s (%s)" % (uri, error))
             continue
+        try:
+            check_digest(package, temporary)
+        except Failure:
+            os.remove(temporary)
+            raise
         os.replace(temporary, archive)
         return archive
     if os.path.lexists(temporary):
@@ -204,11 +240,13 @@ def prepare(destination, cppwinrt_input):
     for package in PACKAGES:
         assert_pinned(package)
         target = os.path.join(destination, package["name"])
-        if os.path.isdir(target):
-            continue
         if package.get("windows_only") and not WINDOWS:
             say("Skipped %s: it's the Windows amd64 build" % package["name"])
             continue
+        if os.path.isdir(target):
+            if tree_is_current(package, target):
+                continue
+            say("Replacing %s: it is not the pinned build" % package["name"])
         expand_package(get_archive(package, downloads), target)
         say("Prepared " + package["name"])
 
