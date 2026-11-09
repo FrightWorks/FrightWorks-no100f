@@ -1100,9 +1100,6 @@ bool initialize(AuroraBackend auroraBackend) {
   }
   auto surfaceFormat = best_surface_format();
   auto presentMode = best_present_mode();
-  Log.info("Using surface format {}, present mode {}", magic_enum::enum_name(surfaceFormat),
-           magic_enum::enum_name(presentMode));
-  const auto size = window::get_window_size();
   uint32_t msaaSamples = g_config.msaa;
 #ifndef AURORA_DAWN_MSAA_PATCHED
   // Stock Dawn aborts on a 2x or 8x multisampled texture on Vulkan (WebGPU allows 1 and 4 only). The patched Dawn
@@ -1112,6 +1109,9 @@ bool initialize(AuroraBackend auroraBackend) {
     msaaSamples = 4;
   }
 #endif
+  Log.info("Using surface format {}, present mode {}, MSAA {}x", magic_enum::enum_name(surfaceFormat),
+           magic_enum::enum_name(presentMode), msaaSamples);
+  const auto size = window::get_window_size();
   g_graphicsConfig = GraphicsConfig{
       .surfaceConfiguration =
           wgpu::SurfaceConfiguration{
