@@ -60,6 +60,10 @@ pad script (`tools\debug\patches\pad-script.patch`, usage in `game-logic-debug`)
   `SNDI` asset: u32 count, then per entry **[0x60-byte DSP header][u32 asset id]** — the id comes *after* its header
   (reading it as id-then-header gives the neighbour's coefs). `h002` music = `9974599F` "action loop 06-L".
 - Level `SNDS` assets in level HIPs are voice lines, not music.
+- The AX partial-versus-full address update is handled in `hle/audio/ax_address_sync.cpp`; the old clock cap is gone (`audio_poll_clock.h`).
+- Volume sliders (F10) add a per-category offset in a native override of `MIXAdjustFader` (`0x800DD2A0`, the engine's only per-voice volume call, every frame; `music_attenuation.cpp`).
+  The game only knows music (record flag `0x400`) versus SFX; ours: Music = `0x400` from the boot/mnu4 banks, Voices = `0x400` from a level bank (NPC dialog, `cin_XX_m`), Menus = the mnu4.HIP bank, SFX = the rest.
+  Limits: resident dialog (Scooby barks, `holly_51a`) counts as SFX, Bink movie audio is master only, and the `w028` dock ambience loops count as Voices.
 - `h002` = Mystic Playground (the reported crackle level).
 
 ## Traps
