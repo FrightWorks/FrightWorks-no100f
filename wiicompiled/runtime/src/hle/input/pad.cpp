@@ -218,6 +218,12 @@ extern "C" uint32_t PAD__Read_HLE(uint32_t statusPtr)
     if (statusPtr == 0) {
         return 0;
     }
+    // Aurora's PADInit switches the keyboard on for port 1 (its default bindings). PAD__Init_HLE above is parked (the
+    // game's own PADInit, 0x8010CCD0, stays translated for its SI and reset setup), so without this call the keyboard
+    // only counted as connected once keyboard_bindings.dat existed: a fresh install with no controller paused with
+    // "controller removed". Only the first call does anything, and a saved keyboard_bindings.dat (loaded by the first
+    // PADRead below) still overrides it, so a player who switched the keyboard off keeps it off.
+    PADInit();
 
     PADStatus statuses[PAD_CHANMAX]{};
     // Keep looking for a Bluetooth Wii Remote that dropped out (or was turned on late).
