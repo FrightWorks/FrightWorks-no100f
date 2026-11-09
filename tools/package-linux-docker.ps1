@@ -54,12 +54,12 @@ $Feed = (Resolve-Path $Feed).Path
 if ($LASTEXITCODE -ne 0) { throw 'docker build failed' }
 if ($Clean) { & docker volume rm -f $Volume | Out-Null }
 
-$run = @('run', '--rm', '-i', '-v', "${Volume}:/work", '-v', "${gitDir}:/host-git:ro",
+$dockerArgs = @('run', '--rm', '-i', '-v', "${Volume}:/work", '-v', "${gitDir}:/host-git:ro",
          '-v', "${disc}:/ro/Disc:ro", '-v', "${pack}:/ro/texture_pack:ro", '-v', "${game}:/ro/game:ro",
          '-v', "${Feed}:/out", '-e', "HOST_SHA=$sha", '-e', "HOST_BRANCH=$branch")
-if ($Jobs -gt 0) { $run += @('-e', "FRIGHTWORKS_JOBS=$Jobs") }
-if ($Shell) { $run = $run + @('-t') }
-$run += $image
+if ($Jobs -gt 0) { $dockerArgs += @('-e', "FRIGHTWORKS_JOBS=$Jobs") }
+if ($Shell) { $dockerArgs += '-t' }
+$dockerArgs += $image
 $args2 = @()
 if ($Shell) { $args2 += '--shell' }
 elseif ($Run) { $args2 += @('--run', $Run) }
@@ -67,7 +67,7 @@ else {
     if ($Version) { $args2 += @('--version', $Version) }
     if ($NoDownload) { $args2 += '--no-download' }
 }
-& docker @run @args2
+& docker @dockerArgs @args2
 if ($LASTEXITCODE -ne 0) { throw "the container build failed (exit $LASTEXITCODE)" }
 if (-not $Shell -and -not $Run) {
     Write-Host "DONE: $Feed"
