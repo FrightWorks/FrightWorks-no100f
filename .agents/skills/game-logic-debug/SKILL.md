@@ -213,6 +213,14 @@ Every 20 main-loop frames it runs the lines in `Play/postool.txt`, then deletes 
     fixed by PR #14. `fn_800C5C0C` "emit with overrides", 89 entity-code callers — `fix/particles-fps60-path2` (`fog-pr14.md`).
   - Emit sets particle velocity = asset velocity x dt; MOVE adds it every frame (no dt). So dt passed to emit must be the
     real frame time: a summed or fixed 1/30 dt doubles particle speed at 60 fps. `births` prints `speed` to check this.
+- **Particles at fps60** (`no100f_particles_update.cpp`): the target is the game at 30 fps including its rounding.
+  With fps60 off the native code must match the game's code byte for byte on live data.
+  Each PARS command's run rate and time come from one table, `CommandTimeFps60` (`no100f_particles_update.h`).
+  Fast-math would erase the rounding in `PPC_Fmadds`, so a port that needs it goes in `RECOMP_PPC_SEMANTIC_RUNTIME_SOURCES` (`wiicompiled/runtime/CMakeLists.txt`).
+  Command 6, 20 and 27 timing has no numbers from the game, only the runtime's maths.
+- **Fireworks**: the holiday code is `fn_800AED5C`, burst emission `fn_800ADAC0`; launch sites are a fixed table of 5 plus drift, not the player's position.
+  `[game] holiday = "confetti"` gives each new FIREWORKS1/2 particle the next of 8 colours; they go pale during the game's bright sky flash.
+  Sparks over the mansion are correct geometry (same on `01-01`).
 - **HIP assets** (`audio/hip.py` lists, `game/mkhip.py` has an `assets()` walker): xEntAsset pos at +0x1C; PLYR yaw at +0x10.
   PARE +9 type, +0xA count, +0xB variance, +0xC interval, +0x30 PARS ID. PARS +0xC parent, +0x16 maxPar.
 - Scooby's model matrix (xMat4x3: right, up, at, pos) at `[0x802453C8]`; yaw = `atan2(at.x, at.z)`.

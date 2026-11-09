@@ -56,7 +56,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   `wiicompiled/aurora-main`). **Do a full build** (no `-SkipTranslate`) when you add or remove a native override
   (`PPC_NATIVE_OVERRIDE`), switch to a branch that does, or after any build with a debug patch that adds overrides
   (the dev menu does). Otherwise the game stops at boot with "Fatal Error" and PC=0.
-- Settings, saves and mods are in `Play\UserData\` (`Config.toml`; in game **F10**, **F11** fullscreen):
+- Settings, saves and mods are in `Play\UserData\` (`Config.toml`; in game **F10**, **F11** fullscreen; `[video] msaa` takes 1, 2, 4 or 8 only, 1 = off, and `frame_interpolation_fps` 0, 120 or 180):
   `Play\portable.txt` makes the dev tree portable, like the zip. Without that marker the game uses the installed
   layout: `%LOCALAPPDATA%\FrightWorks-Data` (settings, logs, cache, disc, mods), `Saved Games\FrightWorks`,
   `Pictures\FrightWorks` / `Videos\FrightWorks` for F2 / F3. `[paths] saves_dir` in Config.toml moves the saves in
@@ -73,6 +73,8 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   `dist\.vpk`. The installer puts the game in `%LOCALAPPDATA%\FrightWorks` (`current\` = the program, replaced on
   every update; the whole folder goes on uninstall) with Start menu and desktop shortcuts; the game's own data goes to
   the installed layout above.
+  The launcher asks to update on start (Update now / Not now / Skip this version; **Extras** has the `[launcher] check_updates` toggle); the zip's launcher only links to the release page.
+  The update log of an installed copy is `%LOCALAPPDATA%\velopack\velopack_FrightWorks.log`.
 - **Testing an update without GitHub** (a local feed): pack two versions into one folder, install the first, point the
   launcher at the folder.
   ```powershell
@@ -98,6 +100,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   branch `frightworks/build`. Other platforms, Windows included, use the stock package. When `AURORA_DAWN_VERSION`
   changes: rebase the patch onto the new Dawn commit, build and publish a new package on our release, then update
   the URL and hashes in the provider; until then Linux gets the stock package and 2x/8x abort again on Vulkan.
+  The package builds on Ubuntu 22.04, which is also the oldest Linux it runs on (20.04 fails to link). Windows picks Direct3D 12 first, so a Windows ARM64 Dawn build isn't needed.
 
 ## 3. Unit tests
 
@@ -291,7 +294,8 @@ Every job first checks that the game was built from the code under test: the bui
 test and doc files changed since (`tools/testkit/`, `tools/smoke-test.py`, `docs/`, any `*.md`, `autotest/`). Any other change since the build says "rebuild".
 All jobs fail on a crash, a fault in the log or a black picture. Only a timeout is retried, once from a fresh launch, and reported as "passed on retry" (`h001`
 has a known intermittent intro hang). A check that cannot run (no numpy, no screenshot tool on Linux) is "not run", never a pass: exit code 3.
-Exit codes: 0 passed, 1 failed, 2 wrong build, 3 only checks not run. The report is `autotest\smoke-<time>\REPORT.md` (with `results.json`, shots and logs).
+Exit codes: 0 passed, 1 failed, 2 wrong build, 3 only checks not run. The report is `autotest\smoke-<time>\REPORT.md` (with `results.json`, shots and logs; about 250 MB per run with the HD copies, so clear old runs out of a worktree).
+For scripted runs the readiness `mode` is 11 = in play, 6 = save menu, 2 = title. On `g001` a save is `tp` to the save point, then `a`, `a`; loading from the title is `start`, `down`, `a`, `a`, `a`. On `i004` a jump is `a 30`.
 Options: `--jobs`, `--scenes`, `--slots N`, `--timeout S` (playable limit per job, 150), `--keep` (keep the `Play` copies), `--exclusive` (the machine to yourself) with `--sequential` (one job after another: solo timings), `--activate-when-shown 0|1` (sets `SDL_WINDOW_ACTIVATE_WHEN_SHOWN`), `--skip-build-check` (manual override, said in the report).
 
 Measured on one PC (Ryzen 9 7900X, RTX 3090, 2026-11-07, 1280x720 windows): the three jobs at once take about 47 s after the build (h001 27 s, i004 20 s, g001 47 s, each playable after 8-14 s); one after another 85 s (11.5 + 6 + 12 s to playable). Every window held 60 fps (p95 frame time under 17 ms) whether it was in front of the others or behind, with or without `--activate-when-shown 0`: nothing in the game or runtime sets `pauseOnFocusLost` (it is off), and background windows did not stall.
@@ -377,7 +381,7 @@ powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1 -HdTexture
 
 In game, **F8**: current level and Scooby's position, go to any level (Levels tab), save spots and go back to them, god mode,
 monsters off (all or one by one), power-ups on/off (all at once or one by one), a Textures tab (find a texture, mark it), an Effects tab and a free camera. Spots are
-saved in `Play\UserData\devmenu_spots.txt`. Travel is one transfer at a time: asked for while paused or in a
+saved in `Play\UserData\devmenu_spots.txt`. `tp X Y Z YAW` turns Scooby, not the camera. The power-ups page lists gadgets in the order the game gives them; Flower Pot and Diving Helmet sit under --UNUSED-- and Unlock all leaves them alone; Map is the game's map-received flag (`0x80270FD8`), not a gadget bit. Travel is one transfer at a time: asked for while paused or in a
 cutscene, it waits for normal play (**Cancel travel** drops it). **Skip** presses the game's own skip button for a
 recorded cutscene (A) or the title intro / attract demo (Start). More commands (scripted through `Play\devmenu.txt`) are in the
 `game-logic-debug` skill.
@@ -462,9 +466,18 @@ useful:
 - **Audio capture**: `$env:AUDIO_RAW_DUMP = 'C:\temp\out.raw'` writes the mixed output; analysis tools in
   `tools\debug\audio\`.
 - Remove test variables afterwards: `Remove-Item Env:NO100F_*, Env:AX_*, Env:AUDIO_*, Env:BUTTON_ICONS -ErrorAction SilentlyContinue`.
+- **Kit script traps.** `Start-Process powershell` from PowerShell 7 hands on PowerShell 7's `PSModulePath`, and a build three levels down fails: first reduce it to the `WindowsPowerShell` entries (`$env:PSModulePath = (($env:PSModulePath -split ';') | ? { $_ -match 'WindowsPowerShell' }) -join ';'`). Scripts must parse in PowerShell 5.1: no `??` or ternary, `-Encoding utf8` writes a BOM, and `New-Item -ItemType SymbolicLink` needs admin there (use `mklink`).
+  A fresh clone's dotnet build server locks `toolchain\dotnet`: `dotnet build-server shutdown` before deleting it.
+  Dolphin's Direct3D window is black under PrintWindow: capture with ddagrab.
+  Don't pipe `manual-session start` into `Select-Object -First`: it kills the session. `texhunt\look.ps1 -Hd` refuses once `Play\` already has the HD pack; use `manual-session start -HdTextures`.
+  `manual-session stop` kills anything started from `autotest\`.
+  `NO100F_PASS_LOG=1` prints which staging buffer forced a frame split (bytes used of each), for the first splits.
 - **Launcher screenshots** without opening it: `& "launcher\publish\FrightWorks.exe" --shots <dir>` (Linux:
   `launcher/publish/FrightWorks --shots <dir>`) draws every page to `<dir>\<Page>.png`. The window takes the size the
-  window manager gives it; for fixed sizes use the layout regression below.
+  window manager gives it (a minimized window gives one 160x28 picture); for fixed sizes use the layout regression below.
+  With no game exe in `Play\` (a fresh worktree) it falls back to the real installed config: build the game first, or point it at a fake release folder (the launcher exe, `data\FrightWorks Game.exe` as any stub file, and `data\portable.txt`).
+  `docs/launcher.png` is `Main.png` at 100% scaling, cropped to 1180x830 from x=8, y=31.
+  A connected Xbox pad opens a modal layout question in the launcher unless `[controller] layout` is set. `vpk` keeps one Portable zip per output folder.
 - **Patch mods** (`docs/mod-patches.md`): `dotnet run --project tools\hip-patch-tests` builds levels from made-up data and
   tries bad recipes, wrong discs, clashes, killed builds and hostile zips. Needs only dotnet; the disc modes are in that page.
 - **Isolated launcher layout regression** (Windows or Linux, .NET 10 SDK or newer):
@@ -488,7 +501,7 @@ useful:
   `name <addr>` (needs `capstone`).
 - `python tools\debug\overrides.py` lists the native overrides (functions the port replaces).
 - `tools\debug\game\addrrefs.py LO HI` finds code that builds an address in a range.
-- `tools\debug\audio\hip.py` lists the assets in a level file (`Disc\DATA\files\*.HIP`).
+- `tools\debug\audio\hip.py` lists the assets in a level file (`Disc\DATA\files\*.HIP`); the music and sound effects are in `boot.HIP`.
 - Dolphin is useful as a reference for what the game intends; compare against it rather than copying it.
 
 ## 9. Before you open a PR

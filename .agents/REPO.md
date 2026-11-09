@@ -66,11 +66,13 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
   Rulesets have no bypass, even for admins.
   Never push to `main`.
   Never force-push.
-  `archive*` branches and tags are read only and can't be moved or deleted once created.
+  `archive*` branches and tags are read only and can't be moved or deleted once created (`archive/pre-linux` is `main` before the Linux PRs).
+  GitHub deletes a PR's branch when it merges.
 - After a rebase or any history rewrite, check that the branch's diff against `origin/main` contains only your own changes.
   Resetting onto a `main` that moved, while your files still match the old one, silently undoes the new commits.
 - Fix-only PRs branch off `main` with minimal diffs and no heuristics that hide symptoms.
   Diagnostics never go in a fix PR (patches live in `tools/debug/patches/`).
+  The one exception is the F8 dev menu: it ships in the game, off unless Developer tools is on.
   The debug kit changes in its own PRs.
 - Before opening a PR, run `python tools/check-assets.py` (`docs/testing.md`, section 4c): it fails if the branch or the staged files add anything under "Never commit" below.
   It is run by hand, not a hook.
@@ -264,6 +266,8 @@ Never name a session `main`.
   `powershell -File x.ps1 -List a,b` passes one string, so split it in the script.
   A bad `BOOT=` crashes the game.
   New cross-platform scripts are Python 3.8+.
+  Staying PowerShell for now: `capture-window`, `shot-pid`, `capture\record` (Wayland blocks the equivalent). Windows-only build steps sit behind a platform check.
+- A build needs the extracted `Disc\DATA`, not the ISO. `game/main.dol` must match the SHA in `wiicompiled/projects/no100f/recomp.yml`.
 - Build ID (`runtime/cmake/build_info.cmake`): `<Version> branch@commit[+hash of uncommitted diff]`, shown in `console.log`, F10 About, the DEV mark and the launcher footer.
 
 **Dev tools and input**
@@ -275,7 +279,14 @@ Never name a session `main`.
 - F10 reads the physical pad, not `[controller]`, so a bad remap can't lock anyone out.
 - Game state for UI: `no100f_game_state.h` (mode 2 state 0 = title/main menu; mode 2 state 1 = attract demo, which plays Bink movies).
 - Pad update override `0x8000F5E8`: `hle/input/no100f_pad_update.cpp` (mapping in `hle/no100f_pad_actions.h`).
-- Native overrides needing guest interrupts off: `OS__DisableInterrupts_801a65ac` / `OS__RestoreInterrupts_801a65d4`.
+- Native overrides needing guest interrupts off: `OS__DisableInterrupts_801a65ac` / `OS__RestoreInterrupts_801a65d4` (the game's own are `0x80105BD4` / `0x80105BFC`).
+- Posted Enter doesn't open the pause menu even with focus; posted F2 works without it, and F10/F11 key messages reach the game, but posted mouse clicks don't reach F10 (ImGui).
+  F2 with dev tools off is the bare game frame at render size, with no DEV stamp.
+- A Bink movie is open while the handle at `0x80271050` is set; the credits pill shows when the last opened movie is `Credits*.bik`.
+- F10 with a pad has two levels (`settings_overlay.cpp`, `aurora-main/lib/imgui_sdl_owner.cpp`): the tab column (D-pad or left stick moves, A enters, B closes; Resume above the pages, Quit Game below), then inside a page (D-pad moves, B goes back, left stick scrolls); LB/RB change page at either level.
+  Rebind capture takes every button, and game input stays blocked until the closing button is released.
+- SDL's window and events run on the native main thread and the guest on a worker (`aurora-main/lib/window_owner.cpp`), so dragging or resizing the window doesn't stall the game or audio.
+  F10 Quit is a deferred flag; the event queue holds 2048.
 
 **Levels and saves**
 - Scene IDs and which scenes suit which tests: `tools/debug/game/levels.md`; `python tools/debug/game/levels.py i004` gives level, part and area.
@@ -286,18 +297,25 @@ Never name a session `main`.
 - The save object is the spinning Mystery Machine (pickup `SAVEPOINT`).
   In `g001` it's at -25.618 1.186 -1.515.
   Loading a save puts Scooby at -27 0.121 0 in `g001`.
+  `tp` onto the save object in `devmenu.txt` opens the Save Game screen.
 
 **Rendering**
 - The EFB isn't cleared at frame start (#78).
   The game's display copies never clear, because the game clears with its own drawn quad.
   The copy-clear colour stays at GXInit's white, so a draw-less frame shows white (#78).
-  Suspect a clear for any "white frame" bug.
+  Suspect a clear for any "white frame" bug (the movie player's draw-less frames around each Bink movie showed white).
 - Some meshes are skinned on the CPU (the manor curtains): the game rewrites their vertex arrays into a buffer pool every frame, so addresses say nothing about identity.
 - Frame interpolation (#92) pairs draws across frames by an exact identity (it hashes the POS array contents, not addresses), then a stable identity, then nearest distance (`frame_interpolation.cpp`, `command_processor.cpp`).
   A pair moving more than 0.5 units in one frame with the camera still is a wrong pair.
   F3 recordings don't show interpolated frames.
 - Frame interpolation only runs at 60 fps: with `[video] fps60` off the game treats `frame_interpolation_fps` as 0 whatever the file says (`RuntimeConfigFile::FrameInterpolationFps`), and the launcher and F10 show the row as Off and locked.
   `vi.cpp` would count every frame's 2-retrace wait as late, so it would do nothing. Motion blur doesn't depend on it. Changing the launcher's Frame rate saves it as 0.
+- A frame split by a full staging buffer can't be replayed, so interpolation shows no motion for it.
+  The storage staging buffer is 32 MB because each indexed draw re-uploads its arrays from index 0 (the hubs need over 16 MB a frame).
+  `NO100F_PASS_LOG=1` logs what forced a split.
+- Motion vectors (`frame_interpolation.cpp`): `pair_motion_draw` leaves camera motion out and takes the nearer of the exact match and the nearest copy.
+  `matchGroups` has a distance limit (60 units/s times the frame's real step) and sorts on the smaller of the two moves: keep them together, the limit alone made slow turns about 6x worse.
+  Motion blur on CPU-animated meshes gives in-between images their share of vertex motion, with vertex history from the nearest copy.
 - Cut-outs: `[video] cutout_mode`, default two passes.
   Fringes are deferred and flushed before non-depth-writing and z-ALWAYS draws (#46).
 - The scene stage (`gfx/scene_stage.cpp`) is where effects on the solid scene go (ambient occlusion, lighting), before the see-through world draws and the HUD; effects on the final picture go at present, like motion blur.
@@ -332,6 +350,9 @@ Never name a session `main`.
   `gx_readback_tests` runs the HDR present shader on the real device.
 - On Windows the launcher fills missing HDR keys once, at start after the data import, from the game's display (Windows HDR state, SDR white level, display peak).
   Saved values are never overwritten; a failed query saves HDR off with 200 and 1000 nits.
+- The fullscreen monitor is `[video] fullscreen_display`: "auto" or missing, or `<model>/<instance>` from the monitor device path (`QueryDisplayConfig`; `#` becomes `/` because the launcher's `GameConfig` reads `#` as a comment).
+  A match is the exact ID, else the only connected monitor of that model, else the main one; the saved choice survives an unplug.
+  Starting fullscreen creates the hidden window on the chosen monitor; leaving it returns to `window_x`/`window_y`.
 - Monitor labels are duplicated in `aurora-main/lib/monitor_labels.hpp` and `launcher/Monitors.cs`: change both (#95).
 - Aurora's standalone tests aren't built by the game build and nothing runs them, so they fall behind the code: build and run them when changing the renderer.
 
@@ -339,14 +360,28 @@ Never name a session `main`.
 - GC audio runs on the game thread.
 - Volume sliders work through a native override of MIXAdjustFader (#86, `music_attenuation.cpp`).
   Known limits: resident dialog counts as SFX, Bink audio is master only.
+- Volume categories, the AX address fix and the stuck-music cause are in the `audio-debug` skill.
 - Stream voices' DVD read callback is a native override that also fixes the game's end-of-track check (`hle/no100f_stream_read.h`, issue 14).
 - Timing-sensitive bugs: dev menu `scene` warps skip what a player does before the warp, so a clean run from them doesn't clear a bug reported from normal play. Reproduce it with the reporter's route, using timed presses rather than mashing: menus drop presses that arrive too early.
+
+**Gameplay**
+- Particles at fps60 (`no100f_particles_update.cpp`) and the holiday fireworks (`no100f_holidays.cpp`) are in the `game-logic-debug` skill, "Game facts".
 
 **Paths**
 - Portable (`data\portable.txt`): everything in `data\UserData`, disc in `data\Disc\DATA`.
 - Installed: settings, logs, cache, disc and mods in `%LOCALAPPDATA%\FrightWorks-Data`, saves in `Saved Games\FrightWorks`.
   The installer's program folder is deleted on uninstall.
 - `[paths] saves_dir` overrides the saves folder.
+- The shipped HD pack and `button_icons` sit in `data\` beside the exe in both modes: Aurora's second texture root, after the user's own.
+- The first installed start offers to import from a folder directly inside Documents whose `Config.toml` is this game's, or from old zip folders (also Extras > import; `launcher/DataImport.cs`, `DataPaths.cs`, `runtime_config.h`).
+- Old saves are converted by `old_save_convert.h`, called from `card_gc.cpp` before `CARDInit`, with a backup at `Saves\MemoryCard-old\<same path>.bak` (CTest `recomp_old_save_convert_tests`).
+- F2 also copies the shot to the clipboard; clicking an F2/F3 popup that names a file opens Explorer on it.
+
+**Launcher**
+- A lower `Avalonia.BuildServices` pin fails restore with NU1605.
+- `Fault` in `launcher/App.cs` is the Continue/Quit dialog; put `.Watch()` on a fire-and-forget `_ = Task()`.
+- Display mirrors F10 Video: the same 12 `resolution_multiplier` values (compared as numbers), and 120/180 fps caps resolution at 4x.
+  Missing keys fall back as the game does: resolution 2.25, aspect Fill unless `widescreen=false` or `force_16_9`.
 
 **Patch mods** (format and error handling: `docs/mod-patches.md`)
 - A mod's `patch.json` adds models and objects to a level with no game data in the mod: the launcher (`launcher/ModPatches/`) builds the level from the player's own disc into `UserData/mods/!patched`, and the game reads that like any other mod.
@@ -363,7 +398,7 @@ Never name a session `main`.
 ## Known non-bugs and parked work
 
 - Not bugs (checked): the single fog puff in `i004` after the fan; the lighthouse beam coming and going (same as Dolphin).
-- Parked, only when a maintainer asks: glow discs on level BSP (`e005` greenhouse); Shaggy statues flashing with Scooby on damage.
+- Parked, only when a maintainer asks: glow discs on level BSP (`e005` greenhouse: opaque CMPR/RGB565 copies of `gc_light_glow(_bl)` send the glow into the solid pass, so the likely fix is data, through a HIP rewriter); Shaggy statues flashing with Scooby on damage.
 
 ## Releases
 
@@ -371,7 +406,7 @@ Versions continue from upstream v1.0.2.
 A maintainer runs releases:
 
 1. Version PR: `<Version>` in `launcher/FrightWorks.Launcher.csproj` and the version line in `tools/package-README.txt`.
-2. After the merge, on a clean `main`: local tag `v<ver>`, then `tools/package-scooby.ps1 -Build`, then `-Zip` as a second call (`-Build` resets PATH), then `-Installer`.
+2. After the merge, on a clean `main`: local tag `v<ver>` (the build ID is then just `<ver>`), then `tools/package-scooby.ps1 -Build`, then `-Zip` as a second call (`-Build` resets PATH), then `-Installer`.
 3. Smoke test: the zip has no game data, saves or settings; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
 4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `FrightWorks-<ver>.zip`, every `dist\installer\*` file and the notes.
    A maintainer publishes.
