@@ -7,8 +7,9 @@ namespace FrightWorks;
 // - Installed (Velopack, %LOCALAPPDATA%\FrightWorks, replaced on update and deleted on uninstall): settings, logs,
 //   caches, the disc and mods in %LOCALAPPDATA%\FrightWorks-Data, saves in Saved Games\FrightWorks, F2 / F3 in
 //   Pictures\FrightWorks and Videos\FrightWorks.
-// - On Linux (source builds and portable folders so far) the game without the marker keeps everything in
-//   $XDG_DATA_HOME/WiiCompiled (~/.local/share/WiiCompiled), saves in its Saves, F2 / F3 beside the game.
+// - On Linux the game without the marker (the AppImage, whose own folder is read only) keeps everything in
+//   $XDG_DATA_HOME/WiiCompiled (~/.local/share/WiiCompiled), saves in its Saves, F2 / F3 in Pictures/FrightWorks and
+//   Videos/FrightWorks (the XDG Pictures and Videos folders). Source builds have the marker: F2 / F3 beside the game.
 // In both, [paths] saves_dir in Config.toml moves the saves.
 sealed class DataPaths
 {
@@ -126,10 +127,14 @@ sealed class DataPaths
 
     string Capture(bool videos)
     {
-        if (!Portable && OperatingSystem.IsWindows())
-            return Path.Combine(Environment.GetFolderPath(videos ? Environment.SpecialFolder.MyVideos : Environment.SpecialFolder.MyPictures), UserFolderName);
-        // Beside the launcher: the folder above data/ in a release, Play/ itself in the dev tree (on Linux the game puts
-        // them there with or without the marker).
+        if (!Portable)
+        {
+            // Windows: Pictures\FrightWorks. Linux: the XDG Pictures folder (xdg-user-dirs, else ~/Pictures), the same
+            // folder the game finds; empty when there is no home folder, where the game falls back to beside the launcher.
+            var folder = Environment.GetFolderPath(videos ? Environment.SpecialFolder.MyVideos : Environment.SpecialFolder.MyPictures);
+            if (folder.Length > 0) return Path.Combine(folder, UserFolderName);
+        }
+        // Beside the launcher: the folder above data/ in a release, Play/ itself in the dev tree.
         return Path.Combine(DevTree ? Game : Root, videos ? "Videos" : "Screenshots");
     }
 }

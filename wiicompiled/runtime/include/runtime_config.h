@@ -1406,13 +1406,67 @@ inline std::filesystem::path SavesDirectory() {
     return ApplicationDataDirectory() / "Saves";
 }
 
-// F2 screenshots and F3 videos. Installed: Pictures\FrightWorks and Videos\FrightWorks. Portable: Screenshots\ and
-// Videos\ beside the launcher (the folder above data\ in a release, the game's own folder in a source build).
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
+// The XDG user folder (Pictures, Videos) of the person running the game: the line XDG_<NAME>_DIR="$HOME/..." in
+// $XDG_CONFIG_HOME/user-dirs.dirs (xdg-user-dirs), else $HOME/<fallback>; empty when there is no home folder either.
+// Environment.SpecialFolder.MyPictures / MyVideos in launcher/DataPaths.cs finds the same folders.
+inline std::filesystem::path XdgUserDirectory(const char* name, const char* fallback) {
+    const char* home = std::getenv("HOME");
+    const std::string key = std::string("XDG_") + name + "_DIR";
+    const auto expand = [&](std::string value) -> std::filesystem::path {
+        constexpr std::string_view kHome = "$HOME";
+        if (value.compare(0, kHome.size(), kHome) == 0) {
+            if (!home || !*home) {
+                return {};
+            }
+            value = std::string(home) + value.substr(kHome.size());
+        }
+        return std::filesystem::path(value).is_absolute() ? std::filesystem::path(value) : std::filesystem::path{};
+    };
+    std::filesystem::path config;
+    if (const char* xdgConfigHome = std::getenv("XDG_CONFIG_HOME"); xdgConfigHome && *xdgConfigHome) {
+        config = xdgConfigHome;
+    } else if (home && *home) {
+        config = std::filesystem::path(home) / ".config";
+    }
+    if (!config.empty()) {
+        std::ifstream in(config / "user-dirs.dirs");
+        const std::string prefix = key + "=\"";
+        std::string line;
+        while (std::getline(in, line)) {
+            const size_t start = line.find_first_not_of(" 	");
+            if (start == std::string::npos || line.compare(start, prefix.size(), prefix) != 0) {
+                continue;
+            }
+            const size_t end = line.find('"', start + prefix.size());
+            if (end == std::string::npos) {
+                continue;
+            }
+            if (auto path = expand(line.substr(start + prefix.size(), end - start - prefix.size())); !path.empty()) {
+                return path;
+            }
+        }
+    }
+    return home && *home ? std::filesystem::path(home) / fallback : std::filesystem::path{};
+}
+#endif
+
+// F2 screenshots and F3 videos. Installed on Windows: Pictures\FrightWorks and Videos\FrightWorks. Without the portable
+// marker on Linux (the AppImage, whose own folder is read only): the same names under the XDG Pictures and Videos
+// folders (~/Pictures/FrightWorks when xdg-user-dirs isn't set up). Portable: Screenshots\ and Videos\ beside the
+// launcher (the folder above data\ in a release, the game's own folder in a source build).
 inline std::filesystem::path CaptureDirectory(bool videos) {
 #ifdef _WIN32
     if (!PortableRootDirectory()) {
         if (const auto folder = KnownFolder(videos ? FOLDERID_Videos : FOLDERID_Pictures)) {
             return *folder / kInstalledUserFolderName;
+        }
+    }
+#elif !defined(__APPLE__) && !defined(__ANDROID__)
+    if (!PortableRootDirectory()) {
+        const auto folder = videos ? XdgUserDirectory("VIDEOS", "Videos") : XdgUserDirectory("PICTURES", "Pictures");
+        if (!folder.empty()) {
+            return folder / "FrightWorks";
         }
     }
 #endif
@@ -1424,12 +1478,17 @@ inline std::filesystem::path CaptureDirectory(bool videos) {
     return root / (videos ? "Videos" : "Screenshots");
 }
 
-// CaptureDirectory as the game's notices name it, ending in a backslash (Videos\, Pictures\FrightWorks\, ...).
+// CaptureDirectory as the game's notices name it, ending in a separator (Videos\, Pictures\FrightWorks\, ...; forward
+// slashes on Linux).
 inline std::string CaptureDirectoryLabel(bool videos) {
     if (PortableRootDirectory()) {
         return videos ? "Videos\\" : "Screenshots\\";
     }
-    return videos ? "Videos\\FrightWorks\\" : "Pictures\\FrightWorks\\";
+#ifdef _WIN32
+    return videos ? "Videos\FrightWorks\\" : "Pictures\FrightWorks\\";
+#else
+    return videos ? "Videos/FrightWorks/" : "Pictures/FrightWorks/";
+#endif
 }
 
 // A game folder for this run only, not saved (a "game" folder beside the program, so each

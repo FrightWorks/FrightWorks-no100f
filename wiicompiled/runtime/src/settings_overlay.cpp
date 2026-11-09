@@ -1785,7 +1785,8 @@ void DrawExitPrompt() {
 }
 
 // F1 opens the project page. F2 saves the next game frame (without the overlay) as a PNG in
-// RuntimeConfigFile::CaptureDirectory: Pictures\FrightWorks when installed, else Screenshots\ beside the launcher.
+// RuntimeConfigFile::CaptureDirectory: Pictures\FrightWorks (Linux: ~/Pictures/FrightWorks) when installed, else
+// Screenshots\ beside the launcher.
 constexpr const char* kProjectUrl = "https://github.com/FrightWorks/FrightWorks-no100f";
 std::string g_noticeText;
 Clock::time_point g_noticeUntil{};
@@ -1899,11 +1900,19 @@ void DrawAboutPage() {
         ImGui::TextColored(Vec(Colour::Lime), "Developer tools are on: F8 opens the dev menu, F3 records a video.");
     }
     SectionTitle("Keys");
+    // Pictures\FrightWorks (Windows) or Pictures/FrightWorks (Linux) when installed.
+    static const std::string screenshotHint = [] {
+        if (RuntimeConfigFile::PortableRootDirectory()) {
+            return std::string("Screenshot (Screenshots folder beside the launcher)");
+        }
+        std::string folder = RuntimeConfigFile::CaptureDirectoryLabel(false);
+        folder.pop_back();  // the label ends in a separator
+        return "Screenshot (" + folder + ")";
+    }();
     const std::array<std::pair<const char*, const char*>, 8> keys = {{
         {"F10 / Esc / Back", "Settings (this board) / back to the game (Back = the controller's Back / Select)"},
         {"F11", "Fullscreen or window"},
-        {"F2", RuntimeConfigFile::PortableRootDirectory() ? "Screenshot (Screenshots folder beside the launcher)"
-                                                           : "Screenshot (Pictures\\FrightWorks)"},
+        {"F2", screenshotHint.c_str()},
         {"F1", "Project page in your browser"},
         {"F8", "Dev menu (with developer tools on in the launcher)"},
         {"F3", "Start / stop a video (with developer tools on; Videos folder, needs ffmpeg)"},
