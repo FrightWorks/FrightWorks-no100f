@@ -1,7 +1,7 @@
 FRIGHTWORKS: NIGHT OF 100 FRIGHTS - a PC port of Scooby-Doo! Night of 100 Frights by Loneranger419,
 based on Scooby-Doo: Refrightened by JosiahG.
 
-Version 1.1.1. Version numbers continue from Refrightened: its last release, 1.0.2, is where FrightWorks split off.
+Version 1.1.2. Version numbers continue from Refrightened: its last release, 1.0.2, is where FrightWorks split off.
 
 Needs your own GameCube disc image: USA v1.01 (GIHE78, revision 1), .iso/.gcm/.ciso. No game data is included.
 

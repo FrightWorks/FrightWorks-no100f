@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>FrightWorks</AssemblyName>
     <RootNamespace>FrightWorks</RootNamespace>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <Product>FrightWorks: Night of 100 Frights</Product>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
