@@ -30,14 +30,15 @@ echo "Tags on it: $(git tag --points-at HEAD | tr '\n' ' ')"
 # The user's disc and the game's main.dol come from the main checkout, mounted read only. The HD pack is copied: the build
 # adds the Creeper frames (tools/hd-pack-additions) to texture_pack/ScoobyHD, which must not touch the original.
 # The folders the build writes (toolchain, Play, wiicompiled/generated and native-build-linux, dist) are this volume's own.
-for d in Disc texture_pack game; do
-    [[ -e "/ro/$d" ]] || { echo "/ro/$d is not mounted." >&2; exit 2; }
-done
+# Without a texture_pack mount the build downloads the pack into the volume; without a game mount main.dol is taken from the
+# disc.
+[[ -e /ro/Disc/DATA/sys/boot.bin ]] || { echo "/ro/Disc/DATA is not mounted." >&2; exit 2; }
 ln -sfn /ro/Disc "$src/Disc"
-ln -sfn /ro/game "$src/game"
+[[ -L "$src/game" ]] && rm "$src/game"
+if [[ -e /ro/game ]]; then ln -sfn /ro/game "$src/game"; else mkdir -p "$src/game"; fi
 [[ -L "$src/texture_pack" ]] && rm "$src/texture_pack"
 mkdir -p "$src/texture_pack"
-rsync -a /ro/texture_pack/ "$src/texture_pack/"
+if [[ -e /ro/texture_pack ]]; then rsync -a /ro/texture_pack/ "$src/texture_pack/"; fi
 
 if [[ -z "${FRIGHTWORKS_JOBS:-}" ]]; then
     # About 1.5 GB of RAM per job for the compiler, at most one per core, at most 16.

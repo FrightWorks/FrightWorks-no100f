@@ -37,14 +37,22 @@ if ($branch -eq 'HEAD') { $branch = '' }
 $gitDir = (git -C $root rev-parse --path-format=absolute --git-common-dir).Trim()
 $mainRoot = Split-Path -Parent $gitDir
 
-# Disc, texture_pack and game are links to the main checkout in a worktree: mount what they point at.
+# Disc, texture_pack and game: a plain clone has them as ordinary folders, a git worktree as links to the main checkout's
+# (mount what the link points at; the main checkout is found from git, not from a fixed path). A missing texture_pack or
+# game is fine: the container's build downloads the HD pack and takes main.dol from the disc. The disc is required.
 function Resolve-Mount([string]$name) {
-    $item = Get-Item -LiteralPath (Join-Path $root $name) -Force -ErrorAction SilentlyContinue
-    if (-not $item) { $item = Get-Item -LiteralPath (Join-Path $mainRoot $name) -ErrorAction Stop }
-    elseif ($item.LinkType -and $item.Target) { $item = Get-Item -LiteralPath ([string]($item.Target | Select-Object -First 1)) }
-    $item.FullName
+    foreach ($base in $root, $mainRoot) {
+        $item = Get-Item -LiteralPath (Join-Path $base $name) -Force -ErrorAction SilentlyContinue
+        if (-not $item) { continue }
+        if ($item.LinkType -and $item.Target) { $item = Get-Item -LiteralPath ([string]($item.Target | Select-Object -First 1)) }
+        return $item.FullName
+    }
+    return $null
 }
 $disc = Resolve-Mount 'Disc'; $pack = Resolve-Mount 'texture_pack'; $game = Resolve-Mount 'game'
+if (-not $disc -or -not (Test-Path -LiteralPath (Join-Path $disc 'DATA\sys\boot.bin'))) {
+    throw 'No extracted disc in Disc\DATA. Extract your disc first (README: Building), like the Windows build needs.'
+}
 
 if (-not $Feed) { $Feed = Join-Path $root 'dist\installer-linux' }
 New-Item -ItemType Directory -Force $Feed | Out-Null
@@ -54,9 +62,10 @@ $Feed = (Resolve-Path $Feed).Path
 if ($LASTEXITCODE -ne 0) { throw 'docker build failed' }
 if ($Clean) { & docker volume rm -f $Volume | Out-Null }
 
-$dockerArgs = @('run', '--rm', '-i', '-v', "${Volume}:/work", '-v', "${gitDir}:/host-git:ro",
-         '-v', "${disc}:/ro/Disc:ro", '-v', "${pack}:/ro/texture_pack:ro", '-v', "${game}:/ro/game:ro",
-         '-v', "${Feed}:/out", '-e', "HOST_SHA=$sha", '-e', "HOST_BRANCH=$branch")
+$dockerArgs = @('run', '--rm', '-i', '-v', "${Volume}:/work", '-v', "${gitDir}:/host-git:ro", '-v', "${disc}:/ro/Disc:ro")
+if ($pack) { $dockerArgs += @('-v', "${pack}:/ro/texture_pack:ro") }
+if ($game) { $dockerArgs += @('-v', "${game}:/ro/game:ro") }
+$dockerArgs += @('-v', "${Feed}:/out", '-e', "HOST_SHA=$sha", '-e', "HOST_BRANCH=$branch")
 if ($Jobs -gt 0) { $dockerArgs += @('-e', "FRIGHTWORKS_JOBS=$Jobs") }
 if ($Shell) { $dockerArgs += '-t' }
 $dockerArgs += $image
