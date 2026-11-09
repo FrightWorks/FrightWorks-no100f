@@ -154,6 +154,8 @@ ctest --test-dir wiicompiled\native-build --output-on-failure
 
 One test: `cmake --build wiicompiled\native-build --target <name>`, then run `wiicompiled\native-build\<name>.exe`.
 New pure logic (no SDL, no guest memory) belongs in a header with a test next to the existing ones.
+`recomp_old_save_convert_tests` covers the memory card conversion of saves filed under a wrong game code (`old_save_convert.h`): it makes its own scratch folder and `.gci` files, kills or fails the conversion after each of its four steps and runs it again, and uses a path the ANSI code page can't hold.
+It never needs a disc or a real save.
 
 **Aurora tests (Windows and Linux; the Linux side has not been run).** They are Aurora's own build, configured from `wiicompiled/aurora-main` (not its `tests/` folder), and the game build doesn't make them.
 `tools/aurora-tests.py` (Python 3.8+, no packages) does all of this: it finds a built `Play` folder (or takes `--play DIR`), checks that SDL3 and the other libraries the test loads are there before running anything, configures only when the build folder isn't configured yet, builds the two targets, runs CTest with `Play` on `PATH` (Windows) or `LD_LIBRARY_PATH` (Linux) for that run only, and prints a summary.

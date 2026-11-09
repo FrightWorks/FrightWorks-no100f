@@ -431,6 +431,11 @@ target_include_directories(recomp_nand_save_tests PRIVATE "${CMAKE_CURRENT_LIST_
 target_compile_features(recomp_nand_save_tests PRIVATE cxx_std_17)
 add_test(NAME recomp_nand_save_tests COMMAND recomp_nand_save_tests)
 
+add_executable(recomp_old_save_convert_tests "${CMAKE_CURRENT_LIST_DIR}/tests/old_save_convert_tests.cpp")
+target_include_directories(recomp_old_save_convert_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
+target_compile_features(recomp_old_save_convert_tests PRIVATE cxx_std_20)
+add_test(NAME recomp_old_save_convert_tests COMMAND recomp_old_save_convert_tests)
+
 add_executable(recomp_audio_poll_clock_tests "${CMAKE_CURRENT_LIST_DIR}/tests/audio_poll_clock_tests.cpp")
 target_compile_features(recomp_audio_poll_clock_tests PRIVATE cxx_std_17)
 add_test(NAME recomp_audio_poll_clock_tests COMMAND recomp_audio_poll_clock_tests)
