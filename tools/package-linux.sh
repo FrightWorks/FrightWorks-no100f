@@ -55,8 +55,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 # Program files only, as for the Windows installer: no portable.txt (the game then keeps the player's files in
-# $XDG_DATA_HOME/WiiCompiled), no UserData, no zip README. The AppImage has no .so beside the game: SDL3 and Dawn are linked
-# statically (checked below).
+# $XDG_DATA_HOME/WiiCompiled), no UserData, no zip README.
 stage="$work/FrightWorks"
 mkdir -p "$stage/data"
 install -m 755 "$launcher" "$stage/FrightWorks"
@@ -64,14 +63,28 @@ install -m 755 "$play/FrightWorks Game" "$stage/data/"
 for f in dsp_coef.bin cacert.pem initial_pipeline_cache.db; do
     [[ -f "$play/$f" ]] && install -m 644 "$play/$f" "$stage/data/"
 done
-shopt -s nullglob
-for f in "$play"/*.so "$play"/*.so.*; do install -m 755 "$f" "$stage/data/"; done
-shopt -u nullglob
+# The game's own libraries: the build links libpng and zlib as shared libraries from its build folder (a RUNPATH there, so a
+# source build runs from Play/). A player's system may not have them or may have another version, so the ones the game was
+# built with go beside it and the game and they look there first ($ORIGIN). SDL3 and Dawn are linked statically.
+game="$stage/data/FrightWorks Game"
+runpath="$(patchelf --print-rpath "$game")"
+for lib in $(patchelf --print-needed "$game"); do
+    IFS=: read -r -a dirs <<<"$runpath"
+    for dir in "${dirs[@]}"; do
+        if [[ -n "$dir" && -e "$dir/$lib" ]]; then
+            install -m 755 "$(readlink -f "$dir/$lib")" "$stage/data/$lib"
+            patchelf --set-rpath '$ORIGIN' "$stage/data/$lib"
+            echo "Bundled $lib (from the build folder)"
+            break
+        fi
+    done
+done
+patchelf --set-rpath '$ORIGIN' "$game"
 # The built-in HD texture pack and the button prompt icons: the same files every Play/ build gets, beside the game.
 python3 "$root/tools/stage-assets.py" --game-dir "$stage/data" --required
 
-# What the game and the launcher load at run time must be on the system: list anything ldd can't find (the GPU stack,
-# libvulkan and the drivers, is dlopen'd and never listed).
+# What the game and the launcher load at run time must be on the system or beside the game: list anything ldd can't find (the
+# GPU stack, libvulkan and the drivers, is dlopen'd and never listed). Also say what glibc they need.
 missing=0
 for exe in "$stage/data/FrightWorks Game" "$stage/FrightWorks"; do
     if ldd "$exe" 2>&1 | grep -q 'not found'; then
@@ -79,6 +92,9 @@ for exe in "$stage/data/FrightWorks Game" "$stage/FrightWorks"; do
     fi
 done
 [[ $missing -eq 0 ]] || { echo "The package needs libraries that are not on this machine." >&2; exit 1; }
+for f in "$stage/data/FrightWorks Game" "$stage/data/"*.so* "$stage/FrightWorks"; do
+    [[ -f "$f" ]] && echo "glibc needed by $(basename "$f"): $(objdump -T "$f" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
+done
 
 # The icon: vpk wants a PNG on Linux; the launcher's .ico holds several sizes, the largest becomes the icon.
 python3 - "$root/launcher/frightworks.ico" "$work/frightworks.png" <<'PY'
