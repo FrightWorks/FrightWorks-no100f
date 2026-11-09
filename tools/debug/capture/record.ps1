@@ -10,7 +10,7 @@ param([Parameter(Mandatory)][string]$Out, [int]$Seconds = 5, [ValidateSet('ddagr
       [switch]$Toggle)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
-. (Join-Path $PSScriptRoot '..\kit-common.ps1')
+. (Join-Path $PSScriptRoot '..\game-run.ps1')
 $ffBin = & (Join-Path $PSScriptRoot 'get-ffmpeg.ps1')   # PATH, else tools\debug\local\ffmpeg (downloaded once)
 Add-Type @'
 using System; using System.Runtime.InteropServices;

@@ -100,91 +100,240 @@ class SlotsTest(unittest.TestCase):
         pool.acquire("another", timeout=1, log=QUIET).release()
         shared.release()
 
-    # ---- the old PowerShell lock ------------------------------------------------------------------------------------
-    def legacy(self):
-        return json.loads((self.state / "game-run.lock").read_text())
-
-    def test_holding_a_slot_writes_a_slot_owned_legacy_lock_that_is_not_a_checkout(self):
+    def test_holder_for_finds_the_slot_by_checkout_and_holders_lists_live_ones(self):
         pool = self.pool(3)
-        a = pool.acquire("a", log=QUIET)
-        lock = self.legacy()
-        self.assertTrue(lock["slots"])
-        self.assertEqual(Path(lock["root"]), self.state / "slots")  # exists, and no checkout's root equals it
-        self.assertTrue(Path(lock["root"]).is_dir())
-        b = pool.acquire("b", log=QUIET)
+        a = pool.acquire("a", root=self.checkout, log=QUIET)
+        b = pool.acquire("b", root=str(self.checkout) + "-other", log=QUIET)
+        with pool._mutex():
+            found = pool.holder_for(str(self.checkout) + os.sep)  # a trailing separator is the same folder
+        self.assertEqual(found[0], a.index)
+        self.assertEqual(sorted(h["why"] for h in slots.holders(self.state)), ["a", "b"])
         a.release()
-        self.assertTrue((self.state / "game-run.lock").exists())  # b still holds
         b.release()
+        self.assertEqual(slots.holders(self.state), [])
+
+    def test_holders_ignores_a_dead_holders_file_and_leaves_it(self):
+        dead = {"pid": 2 ** 22 + 777, "why": "crashed", "kind": "shared", "slot": 0, "since": old_time(1), "root": "x"}
+        (self.state / "slots").mkdir(exist_ok=True)
+        (self.state / "slots" / "slot-0.json").write_text(json.dumps(dead))
+        self.assertEqual(slots.holders(self.state), [])
+        self.assertTrue((self.state / "slots" / "slot-0.json").exists())  # looking never removes anything
+
+    def test_no_game_run_lock_is_written_any_more(self):
+        pool = self.pool(3)
+        lease = pool.acquire("a", log=QUIET)
         self.assertFalse((self.state / "game-run.lock").exists())
-
-    def test_powershell_owned_lock_blocks_until_removed(self):
-        pool = self.pool(3)
-        (self.state / "game-run.lock").write_text(json.dumps(
-            {"root": str(self.checkout), "why": "manual-session start", "since": slots._now_iso()}))
-        with self.assertRaises(TimeoutError):
-            pool.acquire("smoke", timeout=0.3, log=QUIET)
-        (self.state / "game-run.lock").unlink()
-        pool.acquire("smoke", timeout=2, log=QUIET).release()
-
-    def test_stale_powershell_lock_is_taken_over(self):
-        pool = self.pool(3)
-        (self.state / "game-run.lock").write_text(json.dumps(
-            {"root": str(self.tmp.name + "/gone"), "why": "died", "since": old_time(30)}))
-        lease = pool.acquire("smoke", timeout=3, log=QUIET)
-        self.assertTrue(self.legacy()["slots"])
         lease.release()
 
-    def test_parses_the_seven_digit_timestamps_powershell_writes(self):
-        parsed = slots._parse_iso("2026-11-07T17:01:54.1234567+01:00")
-        self.assertIsNotNone(parsed)
-        self.assertEqual(parsed.microsecond, 123456)
 
-    def test_heartbeat_puts_back_a_deleted_legacy_lock_and_refreshes_since(self):
-        pool = self.pool(3)
-        lease = pool.acquire("a", log=QUIET)
-        first = self.legacy()["since"]
-        (self.state / "game-run.lock").unlink()  # an old script's Exit-GameLock, or a person
-        pool._heartbeat(lease)
-        self.assertTrue(self.legacy()["slots"])
-        time.sleep(0.02)
-        pool._heartbeat(lease)
-        self.assertGreater(self.legacy()["since"], first)
-        lease.release()
+class HoldCommandTest(unittest.TestCase):
+    """slots.py hold / release, the entry point of the PowerShell scripts: real child processes, no game."""
 
-    def test_heartbeat_does_not_overwrite_a_lock_somebody_else_took(self):
-        pool = self.pool(3)
-        lease = pool.acquire("a", log=QUIET)
-        other = {"root": str(self.checkout), "why": "play-patched", "since": slots._now_iso()}
-        (self.state / "game-run.lock").write_text(json.dumps(other))
-        pool._heartbeat(lease)
-        self.assertEqual(self.legacy(), other)
-        lease.release()
-        self.assertEqual(self.legacy(), other)  # and the release does not delete a lock that is not ours
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.state = Path(self.tmp.name) / "kit"
+        self.root_a = str(Path(self.tmp.name) / "checkout-a")
+        self.root_b = str(Path(self.tmp.name) / "checkout-b")
+        self.env = dict(os.environ, FRIGHTWORKS_KIT_DIR=str(self.state))
+        self.procs = []
+        self.addCleanup(self.kill_all)
 
-    @unittest.skipUnless(os.name == "nt", "kit-common.ps1 is PowerShell on Windows")
-    def test_real_powershell_scripts_and_slots_exclude_each_other(self):
-        """The real Enter-GameLock / Exit-GameLock of kit-common.ps1, against the slot-owned lock and the other way."""
-        env = dict(os.environ, LOCALAPPDATA=self.tmp.name)  # kit-common keeps its lock in $env:LOCALAPPDATA\FrightWorks-kit
-        kit = slots.KIT_COMMON
+    def kill_all(self):
+        for p in self.procs:
+            if p.poll() is None:
+                p.kill()
+            p.wait()
+            for f in (p.stdin, p.stdout):
+                if f:
+                    f.close()
 
-        def ps(command):
-            return subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-                                   f". '{kit}'; {command}"], capture_output=True, text=True, env=env, timeout=120)
+    def run_slots(self, *args, timeout=60):
+        return subprocess.run([sys.executable, str(Path(slots.__file__)), *args], capture_output=True, text=True,
+                              env=self.env, timeout=timeout)
 
-        pool = self.pool(3)
-        lease = pool.acquire("smoke", log=QUIET)
-        # a script from any checkout, this one's included, waits (WaitMinutes 0 = give up at once)
-        r = ps(f"Enter-GameLock '{self.checkout}' 'manual-session' 0")
+    def hold(self, root, *args):
+        """An attached hold: the child process keeps the slot while its stdin is open. Returns (process, first line)."""
+        p = subprocess.Popen([sys.executable, str(Path(slots.__file__)), "hold", "--why", "test " + Path(root).name,
+                              "--root", root, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=self.env)
+        self.procs.append(p)
+        return p, p.stdout.readline().strip()
+
+    def live(self):
+        return slots.holders(self.state)
+
+    def wait_for(self, condition, seconds=10):
+        end = time.time() + seconds
+        while time.time() < end:
+            if condition():
+                return True
+            time.sleep(0.05)
+        return condition()
+
+    def test_hold_keeps_the_slot_until_stdin_closes(self):
+        p, line = self.hold(self.root_a)
+        self.assertTrue(line.startswith("HELD"), line)
+        self.assertEqual([h["kind"] for h in self.live()], ["exclusive"])
+        self.assertEqual(self.live()[0]["root"], self.root_a)
+        p.stdin.close()  # what happens when the script that started it ends or dies
+        self.assertEqual(p.wait(30), 0)
+        self.assertEqual(self.live(), [])
+
+    def test_hold_releases_on_a_release_line(self):
+        p, line = self.hold(self.root_a, "--shared")
+        self.assertTrue(line.startswith("HELD"), line)
+        self.assertEqual([h["kind"] for h in self.live()], ["shared"])
+        p.stdin.write("release\n")
+        p.stdin.flush()
+        self.assertEqual(p.wait(30), 0)
+        self.assertEqual(self.live(), [])
+
+    def test_a_killed_holder_frees_the_slot_for_the_next(self):
+        p, line = self.hold(self.root_a)
+        self.assertTrue(line.startswith("HELD"), line)
+        p.kill()  # no chance to clean up
+        p.wait()
+        q, line = self.hold(self.root_b, "--wait-minutes", "0.2")
+        self.assertTrue(line.startswith("HELD"), line)
+
+    def test_a_second_checkout_waits_for_an_exclusive_one_and_gives_up(self):
+        p, line = self.hold(self.root_a)
+        self.assertTrue(line.startswith("HELD"), line)
+        q, first = self.hold(self.root_b, "--wait-minutes", "0.03")
+        self.assertIn("waiting", first)
+        self.assertTrue(q.stdout.readline().startswith("FAILED"))
+        self.assertEqual(q.wait(30), 3)
+        self.assertEqual([h["root"] for h in self.live()], [self.root_a])
+
+    def test_nested_take_in_the_same_checkout_reuses_the_slot_and_gives_nothing_back(self):
+        """iterate -Capture: the parent holds, the capture-window child asks for the same checkout again."""
+        p, line = self.hold(self.root_a)
+        self.assertTrue(line.startswith("HELD"), line)
+        for extra in ((), ("--shared",)):  # exclusive covers both
+            child, line = self.hold(self.root_a, *extra)
+            self.assertEqual(line, "REUSED")
+            self.assertEqual(child.wait(30), 0)
+            self.assertEqual(len(self.live()), 1)  # the child ending did not give back the parent's slot
+        p.stdin.close()
+        p.wait(30)
+        self.assertEqual(self.live(), [])
+
+    def test_nested_exclusive_under_a_shared_slot_fails_instead_of_waiting_for_itself(self):
+        p, line = self.hold(self.root_a, "--shared")
+        self.assertTrue(line.startswith("HELD"), line)
+        child, line = self.hold(self.root_a)
+        self.assertTrue(line.startswith("FAILED"), line)
+        self.assertEqual(child.wait(30), 4)
+        self.assertEqual(len(self.live()), 1)
+        again, line = self.hold(self.root_a, "--shared")
+        self.assertEqual(line, "REUSED")  # shared under shared is fine
+
+    def test_shared_holds_of_different_checkouts_run_side_by_side(self):
+        p, line = self.hold(self.root_a, "--shared")
+        q, line2 = self.hold(self.root_b, "--shared")
+        self.assertTrue(line.startswith("HELD") and line2.startswith("HELD"), (line, line2))
+        self.assertEqual(len(self.live()), 2)
+
+    def test_detached_hold_survives_its_caller_and_release_gives_it_back(self):
+        r = self.run_slots("hold", "--detach", "--why", "manual-session prepare", "--root", self.root_a)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "HELD 0 exclusive"), r.stderr)
+        self.assertEqual(len(self.live()), 1)  # the caller is gone, the background process holds it
+        again = self.run_slots("hold", "--detach", "--why", "manual-session start", "--root", self.root_a)
+        self.assertEqual(again.stdout.strip(), "REUSED")  # a later prepare/start in the same checkout takes it back
+        self.assertEqual(self.run_slots("release", "--root", self.root_a).returncode, 0)
+        self.assertEqual(self.live(), [])
+        self.assertFalse((self.state / "exclusive.lock").exists())
+        self.assertEqual(self.run_slots("release", "--root", self.root_a).returncode, 0)  # nothing held: still fine
+
+    def test_detached_hold_ends_by_itself_at_its_deadline(self):
+        r = self.run_slots("hold", "--detach", "--why", "forgotten", "--root", self.root_a, "--max-minutes", "0.03")
+        self.assertTrue(r.stdout.startswith("HELD"), r.stdout + r.stderr)
+        self.assertTrue(self.wait_for(lambda: not self.live(), 30), "the background holder outlived its deadline")
+        r = self.run_slots("hold", "--detach", "--why", "next", "--root", self.root_b, "--wait-minutes", "0.1")
+        self.assertTrue(r.stdout.startswith("HELD"), r.stdout)
+
+    def test_reuse_pushes_a_detached_deadline_back(self):
+        r = self.run_slots("hold", "--detach", "--why", "prepare", "--root", self.root_a, "--max-minutes", "0.05")
+        self.assertTrue(r.stdout.startswith("HELD"), r.stdout)
+        time.sleep(1.0)
+        again = self.run_slots("hold", "--detach", "--why", "start", "--root", self.root_a, "--max-minutes", "5")
+        self.assertEqual(again.stdout.strip(), "REUSED")
+        time.sleep(3.0)  # past the first deadline (3 s)
+        self.assertEqual(len(self.live()), 1)
+        self.run_slots("release", "--root", self.root_a)
+        self.assertEqual(self.live(), [])
+
+    def test_detached_hold_waiting_too_long_fails(self):
+        p, line = self.hold(self.root_a)
+        self.assertTrue(line.startswith("HELD"), line)
+        r = self.run_slots("hold", "--detach", "--why", "second", "--root", self.root_b, "--wait-minutes", "0.03")
+        self.assertEqual(r.returncode, 3, r.stdout)
+        self.assertIn("FAILED", r.stdout)
+
+
+@unittest.skipUnless(os.name == "nt", "game-run.ps1 is for Windows PowerShell")
+class PowerShellWrapperTest(unittest.TestCase):
+    """The real Enter-GameSlot / Exit-GameSlot of tools/debug/game-run.ps1 (Windows PowerShell 5.1), in a stand-in state folder."""
+
+    GAME_RUN = Path(slots.__file__).resolve().parent.parent / "debug" / "game-run.ps1"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.state = Path(self.tmp.name) / "kit"
+        self.checkout = Path(self.tmp.name) / "check out"  # a space: the argument quoting matters
+        self.checkout.mkdir()
+        self.env = dict(os.environ, FRIGHTWORKS_KIT_DIR=str(self.state))
+
+    def ps(self, script, timeout=120):
+        return subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                               f". '{self.GAME_RUN}'; $root = '{self.checkout}'; {script}"],
+                              capture_output=True, text=True, env=self.env, timeout=timeout)
+
+    def wait_for_free(self, seconds=20):
+        end = time.time() + seconds
+        while time.time() < end:
+            if not slots.holders(self.state):
+                return True
+            time.sleep(0.1)
+        return not slots.holders(self.state)
+
+    def test_enter_nested_enter_and_exit(self):
+        probe = "(python '%s' status | Select-String 'slots:').Line" % Path(slots.__file__)
+        r = self.ps(f"Enter-GameSlot $root 'outer'; {probe}; Enter-GameSlot $root 'inner'; Exit-GameSlot $root; {probe}; "
+                    f"Exit-GameSlot $root; {probe}")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(r.stdout.split(), ["slots:", "1", "of", "3", "in", "use"] * 2 + ["slots:", "0", "of", "3", "in", "use"])
+
+    def test_nested_exclusive_under_a_shared_slot_throws(self):
+        r = self.ps("Enter-GameSlot $root 'outer' -Shared; Enter-GameSlot $root 'inner'")
         self.assertNotEqual(r.returncode, 0, r.stdout)
-        self.assertIn("still held by", r.stdout + r.stderr)
-        lease.release()
-        r = ps(f"Enter-GameLock '{self.checkout}' 'manual-session' 0")
+        self.assertIn("cannot be made exclusive", r.stdout + r.stderr)
+        self.assertTrue(self.wait_for_free())  # and the script's end still gave the shared slot back
+
+    def test_a_script_that_ends_without_exit_gives_the_slot_back(self):
+        r = self.ps("Enter-GameSlot $root 'forgot to exit'")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        with self.assertRaises(TimeoutError):  # and now the slots wait for the script
-            pool.acquire("smoke", timeout=0.5, log=QUIET)
-        r = ps(f"Exit-GameLock '{self.checkout}'")
+        self.assertTrue(self.wait_for_free(), "the slot outlived the script")
+
+    def test_a_killed_script_gives_the_slot_back(self):
+        p = subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                              f". '{self.GAME_RUN}'; Enter-GameSlot '{self.checkout}' 'to be killed'; 'ready'; Start-Sleep 120"],
+                             stdout=subprocess.PIPE, text=True, env=self.env)
+        self.addCleanup(p.wait)
+        self.addCleanup(p.stdout.close)
+        self.assertEqual(p.stdout.readline().strip(), "ready")
+        self.assertEqual(len(slots.holders(self.state)), 1)
+        p.kill()
+        self.assertTrue(self.wait_for_free(), "a killed script left its slot held")
+
+    def test_persist_then_exit_from_a_later_script_run(self):
+        r = self.ps("Enter-GameSlot $root 'manual-session prepare' -Persist")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        pool.acquire("smoke", timeout=3, log=QUIET).release()
+        self.assertEqual([h["why"] for h in slots.holders(self.state)], ["manual-session prepare"])
+        r = self.ps("Exit-GameSlot $root -Persisted")  # manual-session stop, a new process
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(self.wait_for_free())
 
 
 class ConcurrencyTest(unittest.TestCase):

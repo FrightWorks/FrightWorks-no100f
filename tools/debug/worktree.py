@@ -23,7 +23,7 @@ Worktrees live beside the main checkout, in <its parent>\\FrightWorks-worktrees\
    never user-setup;
  - .claude\\skills: a link to its own .agents\\skills (tools\\setup-agents.py, run by new and open; Claude Code looks there);
  - AGENTS.md: a link to the main checkout's (one set of rules); CLAUDE.md loads it and TASK.md, this task's own notes.
-Builds can run side by side. Game runs take turns (kit-common.ps1, game-run lock).
+Builds can run side by side. Game runs share the test kit's run slots (tools/testkit/slots.py).
 
 Sessions: new opens a Windows Terminal tab in the worktree running `claude -n <name>` (-NoOpen: don't). With -Task,
 the goal goes into TASK.md and the session starts on it right away. open starts the session again later: a new
@@ -140,22 +140,16 @@ def write_text(path, text):
         f.write(text)
 
 
-def lock_path():
-    base = os.environ.get('LOCALAPPDATA')
-    return os.path.join(base, 'FrightWorks-kit', 'game-run.lock') if base else None
-
-
-def get_game_lock():
-    """Same file and format as kit-common.ps1's Get-GameLock (JSON with root, why, since), or None."""
-    p = lock_path()
-    if not p:
-        return None
+def game_holders():
+    """Live game-run slots (tools/testkit/slots.py): dicts with root, why, kind, since. Empty if the kit can't be read."""
     try:
-        with open(p, encoding='utf-8-sig') as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else None
-    except (OSError, ValueError):
-        return None
+        tools = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        from testkit import slots
+        return slots.holders()
+    except Exception:
+        return []
 
 
 def is_link(path):
@@ -426,15 +420,16 @@ class Worktree:
 
     # -- list
     def cmd_list(self):
-        lock = get_game_lock()
+        holders = game_holders()
         for w in self.worktrees():
             dirty = len(self.status(w['path'])[1])
             is_main = same_path(w['path'], self.main)
             tag = 'main checkout' if is_main else os.path.basename(w['path'].rstrip('\\/'))
             state = '%d changed/untracked' % dirty if dirty else 'clean'
             game = ''
-            if lock and lock.get('root') and norm(str(lock['root'])) == norm(w['path']):
-                game = '  [game lock: %s]' % lock.get('why')
+            for h in holders:
+                if h.get('root') and norm(str(h['root'])) == norm(w['path']):
+                    game = '  [game slot, %s: %s]' % (h.get('kind'), h.get('why'))
             say('{0:<18} {1:<34} {2}  {3}{4}'.format(tag, w['branch'], w['head'], state, game))
             if not is_main:
                 say('                   ' + w['path'])
@@ -507,7 +502,7 @@ class Worktree:
             'Worktree of %s on branch `%s` (from %s at `%s`, %s).' % (self.main, a.branch, a.from_, head, today),
             'Notes for this task go here, not in AGENTS.md (AGENTS.md is shared by every worktree: general rules only).',
             'This worktree has its own Play\\ and autotest\\; Disc\\, texture_pack\\, toolchain\\ and tools\\debug\\local\\* are links to',
-            'the main checkout\'s (read only: never delete or rewrite them from here). Game runs take turns (game-run lock).',
+            'the main checkout\'s (read only: never delete or rewrite them from here). Game runs share the test kit\'s run slots.',
             '',
             'This session is named `%s`. The main checkout\'s session (named `%s`) creates and removes worktrees and' % (a.name, COORDINATOR),
             'may message you (SendMessage). Don\'t ask the human in this tab: send `%s` every question, decision or' % COORDINATOR,

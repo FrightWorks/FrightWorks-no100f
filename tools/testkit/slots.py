@@ -10,14 +10,6 @@ waits or holds, nobody else gets one. Builds never take a slot.
     with pool.acquire("fps measurement", exclusive=True):
         ...the machine to yourself...
 
-The old one-at-a-time lock of tools/debug/kit-common.ps1 (Enter-/Exit-GameLock, game-run.lock in the same folder) is
-respected both ways, with no change to the PowerShell scripts:
-  * While any slot is held there is a game-run.lock in the kit's format, owned by the slot system (its `root` is the slot
-    folder, which no checkout is, and `slots` is true). Its `since` is refreshed by the holders' heartbeat, so the
-    PowerShell staleness rule (older than 3 minutes with no game running from `root`) never fires while a holder lives.
-    A PowerShell script that wants the lock therefore waits until the last slot is given back.
-  * A game-run.lock owned by a PowerShell script makes `acquire` wait, until that script gives it back or it is stale by
-    the same rule as Test-GameLockStale (checked by that very function when it is older than 3 minutes).
 A holder that dies leaves a slot file that nobody refreshes: it is taken over once its process is gone or its heartbeat is
 older than STALE_SECONDS. All changes of the state folder happen under a short-lived mutex (an atomic mkdir).
 
@@ -31,8 +23,6 @@ import contextlib
 import datetime
 import json
 import os
-import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -44,10 +34,7 @@ DEFAULT_SLOTS = 3
 SLOTS_ENV = "FRIGHTWORKS_TEST_SLOTS"
 HEARTBEAT_SECONDS = 15
 STALE_SECONDS = 90          # a slot file nobody has refreshed for this long is abandoned
-LEGACY_STALE_MINUTES = 3    # kit-common.ps1 Test-GameLockStale
 MUTEX_STALE_SECONDS = 10
-
-KIT_COMMON = Path(__file__).resolve().parent.parent / "debug" / "kit-common.ps1"
 
 
 def state_dir() -> Path:
@@ -125,6 +112,22 @@ def _write_json(path: Path, data: dict) -> None:
     os.replace(str(tmp), str(path))
 
 
+def _same_path(a, b) -> bool:
+    return os.path.normcase(os.path.normpath(str(a))) == os.path.normcase(os.path.normpath(str(b)))
+
+
+def holders(state=None):
+    """Live slot records ({slot, kind, pid, why, root, since, ...}), read without the mutex and without removing
+    anything: for tools that only look (worktree.py list). A file being written this moment may be missed."""
+    slot_dir = (Path(state) if state else state_dir()) / "slots"
+    out = []
+    for p in sorted(slot_dir.glob("slot-*.json")):
+        data = _read_json(p)
+        if data is not None and pid_alive(data.get("pid")) and _age(p) <= STALE_SECONDS:
+            out.append(data)
+    return out
+
+
 def _age(path: Path) -> float:
     try:
         return time.time() - path.stat().st_mtime
@@ -136,22 +139,12 @@ def _now_iso() -> str:
     return datetime.datetime.now().astimezone().isoformat()
 
 
-def _parse_iso(text):
-    """kit-common.ps1 writes (Get-Date).ToString('o'): 7 fractional digits, which fromisoformat (3.8) rejects."""
-    try:
-        text = re.sub(r"(\.\d{6})\d+", r"\1", str(text))
-        return datetime.datetime.fromisoformat(text)
-    except ValueError:
-        return None
-
-
 class Lease:
     """A held slot (or the whole machine, when exclusive). Use as a context manager or call release()."""
 
     def __init__(self, pool, index, exclusive, why):
         self.pool, self.index, self.exclusive, self.why = pool, index, exclusive, why
         self.waited = 0.0
-        self.warned_legacy = False
         self._stop = threading.Event()
         self._released = False
         self._thread = threading.Thread(target=self._beat, name="slot-heartbeat", daemon=True)
@@ -189,7 +182,6 @@ class SlotPool:
         self.dir = Path(state) if state else state_dir()
         self.slot_dir = self.dir / "slots"
         self.poll = poll
-        self.legacy_path = self.dir / "game-run.lock"
         self.exclusive_path = self.dir / "exclusive.lock"
         self.slot_dir.mkdir(parents=True, exist_ok=True)
 
@@ -248,55 +240,11 @@ class SlotPool:
                 self.exclusive_path.unlink()
         return data
 
-    def _legacy_blocker(self):
-        """Description of a PowerShell-owned game-run.lock that is still live, else None."""
-        lock = _read_json(self.legacy_path)
-        if lock is None:
-            return None
-        if lock.get("slots"):
-            return None
-        root = lock.get("root")
-        since = _parse_iso(lock.get("since"))
-        if not root or not Path(str(root)).exists() or since is None:
-            return None  # stale by the PowerShell rule
-        age_min = (datetime.datetime.now().astimezone() - since.astimezone()).total_seconds() / 60
-        if age_min <= LEGACY_STALE_MINUTES:
-            return f"{root} ({lock.get('why')})"
-        if os.name == "nt" and KIT_COMMON.exists():
-            # exactly the PowerShell rule: no game running from the lock's checkout and older than 3 minutes
-            cmd = f". '{KIT_COMMON}'; Test-GameLockStale (Get-GameLock)"
-            try:
-                out = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd],
-                                     capture_output=True, text=True, timeout=60).stdout.strip()
-            except (OSError, subprocess.SubprocessError):
-                out = ""
-            if out.lower() == "true":
-                return None
-            return f"{root} ({lock.get('why')})"
-        return None
-
-    def _ensure_legacy(self, why):
-        """Under the mutex, while holding a slot: keep a slot-owned game-run.lock so PowerShell scripts wait."""
-        data = self._legacy_record(why)
-        if self.legacy_path.exists():
-            lock = _read_json(self.legacy_path)
-            if lock and lock.get("slots"):
-                return
-            with contextlib.suppress(OSError):
-                self.legacy_path.unlink()  # a stale PowerShell lock (the blocker check passed)
-        _create_json(self.legacy_path, data)
-
-    def _drop_legacy_if_unused(self):
-        if self._live_slots():
-            return
-        lock = _read_json(self.legacy_path)
-        if lock and lock.get("slots"):
-            with contextlib.suppress(OSError):
-                self.legacy_path.unlink()
-
     # ---- acquire / release -------------------------------------------------------------------------------------
-    def acquire(self, why, exclusive=False, timeout=None, log=print) -> Lease:
-        """Wait for a slot (the whole machine when exclusive) and take it. TimeoutError after `timeout` seconds."""
+    def acquire(self, why, exclusive=False, timeout=None, log=print, root=None, extra=None) -> Lease:
+        """Wait for a slot (the whole machine when exclusive) and take it. TimeoutError after `timeout` seconds.
+        `root`: the checkout the run is for (worktree.py list shows it; default: the working folder). `extra`: more
+        fields for the slot file."""
         start = time.time()
         told = None
         mine_marker = False
@@ -308,25 +256,22 @@ class SlotPool:
                     live = self._live_slots()
                     marker = self._exclusive_holder()
                     mine = exclusive and bool(marker) and marker.get("token") == token
-                    legacy = self._legacy_blocker()
                     if marker and not mine:
                         blocker = f"exclusive run by {marker.get('why')}"
-                    elif legacy:
-                        blocker = f"old game-run.lock held by {legacy}"
                     elif exclusive:
                         if not marker:
-                            if _create_json(self.exclusive_path, self._record(why, "exclusive", None, token)):
+                            if _create_json(self.exclusive_path, self._record(why, "exclusive", None, token, root)):
                                 mine_marker = True
                         elif mine:
                             mine_marker = True
                         if mine_marker and not live:
-                            return self._take(0, why, True, start)
+                            return self._take(0, why, True, start, root, extra)
                         blocker = f"{len(live)} run(s) in progress, waiting for them to finish ({self._describe(live)})"
                     elif len(live) >= self.slots:
                         blocker = f"all {self.slots} slots busy ({self._describe(live)})"
                     else:
                         index = next(i for i in range(len(live) + 1) if i not in live)
-                        return self._take(index, why, False, start)
+                        return self._take(index, why, False, start, root, extra)
                 if timeout is not None and time.time() - start > timeout:
                     raise TimeoutError(f"slots: waited {timeout:.0f} s for {why}: {blocker}")
                 if blocker != told:
@@ -342,20 +287,21 @@ class SlotPool:
                             self.exclusive_path.unlink()
             raise
 
-    def _record(self, why, kind, index, token=None):
-        return {"pid": os.getpid(), "why": why, "kind": kind, "slot": index, "since": _now_iso(), "root": os.getcwd(),
-                "token": token}
+    def _record(self, why, kind, index, token=None, root=None):
+        return {"pid": os.getpid(), "why": why, "kind": kind, "slot": index, "since": _now_iso(),
+                "root": str(root) if root else os.getcwd(), "token": token}
 
     @staticmethod
     def _describe(live):
         return ", ".join(sorted(str(d.get("why", "?")) for d in live.values())) or "none"
 
-    def _take(self, index, why, exclusive, start):
-        """Under the mutex: write the slot file and the legacy lock, return the Lease."""
+    def _take(self, index, why, exclusive, start, root=None, extra=None):
+        """Under the mutex: write the slot file, return the Lease."""
         path = self.slot_dir / f"slot-{index}.json"
-        if not _create_json(path, self._record(why, "exclusive" if exclusive else "shared", index)):
+        record = self._record(why, "exclusive" if exclusive else "shared", index, None, root)
+        record.update(extra or {})
+        if not _create_json(path, record):
             raise RuntimeError(f"slots: {path} appeared under the mutex")
-        self._ensure_legacy(why)
         lease = Lease(self, index, exclusive, why)
         lease.waited = time.time() - start
         return lease
@@ -365,21 +311,6 @@ class SlotPool:
         for p in (self.slot_dir / f"slot-{lease.index}.json", self.exclusive_path if lease.exclusive else None):
             if p is not None and p.exists():
                 os.utime(str(p), (now, now))
-        lock = _read_json(self.legacy_path)
-        if lock and lock.get("slots"):
-            lock["since"] = _now_iso()
-            _write_json(self.legacy_path, lock)
-        elif lock is None:
-            # somebody (an old script's Exit-GameLock, a person) deleted it under us: put it back
-            if _create_json(self.legacy_path, self._legacy_record(lease.why)):
-                print(f"slots: game-run.lock was removed while {lease.why} held a slot; put back", file=sys.stderr)
-        elif not lease.warned_legacy:
-            lease.warned_legacy = True
-            print(f"slots: game-run.lock is now owned by {lock.get('root')} ({lock.get('why')}) while {lease.why} "
-                  "holds a slot: old scripts may overlap", file=sys.stderr)
-
-    def _legacy_record(self, why):
-        return {"root": str(self.slot_dir), "why": f"test slots: {why}", "since": _now_iso(), "slots": True}
 
     def _release(self, lease):
         with self._mutex():
@@ -390,30 +321,170 @@ class SlotPool:
                 if marker and marker.get("pid") == os.getpid():
                     with contextlib.suppress(OSError):
                         self.exclusive_path.unlink()
-            self._drop_legacy_if_unused()
+
+    # ---- holders by checkout (hold / release) ------------------------------------------------------------------
+    def holder_for(self, root):
+        """(index, record) of the live slot held for this checkout, else None (call under the mutex)."""
+        for index, data in sorted(self._live_slots().items()):
+            if data.get("root") and _same_path(data["root"], root):
+                return index, data
+        return None
+
+    def update_holder(self, index, **fields):
+        """Under the mutex: change fields of a slot file (pushes back a detached holder's deadline)."""
+        path = self.slot_dir / f"slot-{index}.json"
+        data = _read_json(path)
+        if data is not None:
+            data.update(fields)
+            _write_json(path, data)
 
     # ---- inspection --------------------------------------------------------------------------------------------
     def status(self):
         with self._mutex():
             live = self._live_slots()
             marker = self._exclusive_holder()
-        legacy = _read_json(self.legacy_path)
-        return {"slots": self.slots, "live": live, "exclusive": marker, "legacy_lock": legacy}
+        return {"slots": self.slots, "live": live, "exclusive": marker}
+
+
+DETACHED_MINUTES = 240   # hold --detach: the longest a background holder lives if release never comes
+
+
+def _say(text):
+    print(text, flush=True)
+
+
+def _hold_foreground(pool, args):
+    """hold: wait for the slot, print HELD, keep it until stdin closes or says `release` (--keep: until the release
+    marker or the deadline), then give it back."""
+    root = args.root or os.getcwd()
+    keep = args.keep  # the background process: stdin is nothing, the end is `release` or the deadline
+    with pool._mutex():
+        found = pool.holder_for(root)
+        if found:
+            index, data = found
+            if data.get("kind") == "exclusive" or args.shared:
+                if data.get("detached"):  # a later prepare in the same root takes it back: the deadline starts again
+                    pool.update_holder(index, until=time.time() + args.max_minutes * 60)
+                _say("REUSED")
+                return 0
+            _say(f"FAILED {root} already holds a shared slot ({data.get('why')}); it cannot be made exclusive")
+            return 4
+    extra = {"detached": True, "until": time.time() + args.max_minutes * 60} if keep else None
+    try:
+        lease = pool.acquire(args.why, exclusive=not args.shared, root=root, extra=extra, log=_say,
+                             timeout=args.wait_minutes * 60 if args.wait_minutes else None)
+    except TimeoutError as e:
+        _say(f"FAILED {e}")
+        return 3
+    _say(f"HELD {lease.index} {'shared' if args.shared else 'exclusive'}")
+    done = threading.Event()
+    if not keep:
+        def watch_stdin():
+            for line in sys.stdin:  # ends at EOF: the script that started us has gone
+                if line.strip() == "release":
+                    break
+            done.set()
+        threading.Thread(target=watch_stdin, daemon=True).start()
+    slot_file = pool.slot_dir / f"slot-{lease.index}.json"
+    marker = pool.slot_dir / f"slot-{lease.index}.release"
+    try:
+        while not done.wait(1.0):
+            data = _read_json(slot_file)
+            if data is None or data.get("pid") != os.getpid():
+                break  # taken over as abandoned (the machine slept for minutes): nothing left to hold
+            if keep and (marker.exists() or time.time() > data.get("until", 0)):
+                break
+    finally:
+        lease.release()
+        with contextlib.suppress(OSError):
+            marker.unlink()
+    return 0
+
+
+def _hold_detached(args):
+    """hold --detach: start the background holder, return once it has the slot (or failed)."""
+    cmd = [sys.executable, "-I", "-X", "utf8", str(Path(__file__).resolve()), "hold", "--keep", "--why", args.why,
+           "--max-minutes", str(args.max_minutes), "--wait-minutes", str(args.wait_minutes)]
+    for flag, value in (("--root", args.root), ("--slots", args.slots)):
+        if value is not None:
+            cmd += [flag, str(value)]
+    if args.shared:
+        cmd.append("--shared")
+    kwargs = {}
+    if os.name == "nt":
+        kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True
+    child = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             universal_newlines=True, encoding="utf-8", **kwargs)
+    for line in child.stdout:
+        line = line.rstrip("\r\n")
+        _say(line)
+        if line.startswith(("HELD", "REUSED")):
+            return 0
+        if line.startswith("FAILED"):
+            child.wait()
+            return child.returncode or 3
+    _say("FAILED the background holder ended before it had the slot")
+    return 3
+
+
+def _release_root(pool, args):
+    """release: give back what `hold --detach` holds for this checkout (nothing held: fine)."""
+    root = args.root or os.getcwd()
+    with pool._mutex():
+        found = pool.holder_for(root)
+        if not found or not found[1].get("detached"):
+            return 0  # nothing of that kind; an attached holder ends with its script
+        index, data = found
+        marker = pool.slot_dir / f"slot-{index}.release"
+        marker.write_text("release", encoding="utf-8")
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        if not (pool.slot_dir / f"slot-{index}.json").exists():
+            return 0
+        time.sleep(0.1)
+    print(f"slots: the holder for {root} (pid {data.get('pid')}) did not let go; removing its slot", file=sys.stderr)
+    with pool._mutex():
+        for p in (pool.slot_dir / f"slot-{index}.json", pool.exclusive_path, marker):
+            with contextlib.suppress(OSError):
+                p.unlink()
+    return 0
 
 
 def main(argv):
-    if argv[1:] == ["status"]:
+    import argparse
+    ap = argparse.ArgumentParser(prog="slots.py", description="Shared game-run slots (see the module docstring).")
+    sub = ap.add_subparsers(dest="command")
+    sub.add_parser("status", help="who holds what")
+    hold = sub.add_parser("hold", help="take a slot and keep it (exclusive unless --shared)")
+    hold.add_argument("--why", required=True)
+    hold.add_argument("--root", help="the checkout this run is for (default: the working folder)")
+    hold.add_argument("--shared", action="store_true", help="a shared slot (default: exclusive, the whole machine)")
+    hold.add_argument("--slots", type=int, default=None)
+    hold.add_argument("--wait-minutes", type=float, default=60, help="give up waiting after this (0: wait forever)")
+    hold.add_argument("--detach", action="store_true", help="keep the slot in a background process until `release`")
+    hold.add_argument("--keep", action="store_true", help=argparse.SUPPRESS)  # the background process itself
+    hold.add_argument("--max-minutes", type=float, default=DETACHED_MINUTES, help="detached: the longest it holds")
+    rel = sub.add_parser("release", help="give back what `hold --detach` holds for a checkout")
+    rel.add_argument("--root")
+    args = ap.parse_args(argv[1:])
+    if args.command == "status":
         pool = SlotPool()
         st = pool.status()
         print(f"state folder: {pool.dir}")
         print(f"slots: {len(st['live'])} of {st['slots']} in use")
         for index, d in sorted(st["live"].items()):
-            print(f"  slot {index}: {d.get('kind')} pid {d.get('pid')} since {d.get('since')}: {d.get('why')}")
+            print(f"  slot {index}: {d.get('kind')} pid {d.get('pid')} since {d.get('since')}: {d.get('why')} ({d.get('root')})")
         if st["exclusive"]:
             print(f"exclusive: pid {st['exclusive'].get('pid')}: {st['exclusive'].get('why')}")
-        if st["legacy_lock"]:
-            print(f"game-run.lock: {st['legacy_lock']}")
         return 0
+    if args.command == "hold":
+        if args.detach:
+            return _hold_detached(args)
+        return _hold_foreground(SlotPool(slots=args.slots), args)
+    if args.command == "release":
+        return _release_root(SlotPool(), args)
     print(__doc__)
     return 2
 

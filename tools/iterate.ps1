@@ -1,10 +1,11 @@
 # One porting iteration: (optionally) rebuild, boot the game for -Seconds, and print what stopped it.
 #   powershell -ExecutionPolicy Bypass -File tools\iterate.ps1 [-NoBuild] [-SkipTranslate] [-Seconds 25] [-Capture]
 # Also refreshes the AGENTS.md heartbeat so a scheduled resume knows a session is active.
-# Takes the game-run lock for the run. Rumble is off and sound muted for the run; Play\UserData\Config.toml comes back byte for byte.
+# Takes a game-run slot for the run: shared, or exclusive with -Capture (the screen). Rumble is off and sound muted for the run; Play\UserData\Config.toml comes back byte for byte.
 param([switch]$NoBuild, [switch]$SkipTranslate, [int]$Seconds = 25, [switch]$Capture)
 $root = Split-Path -Parent $PSScriptRoot
-. (Join-Path $PSScriptRoot 'debug\kit-common.ps1')  # game-run lock, rumble off, muted
+. (Join-Path $PSScriptRoot 'debug\game-run.ps1')     # game-run slot
+. (Join-Path $PSScriptRoot 'debug\config-lines.ps1')  # rumble off, muted
 $agents = Join-Path $root 'AGENTS.md'
 (Get-Content $agents -Raw) -replace 'Heartbeat: .*', ("Heartbeat: {0:yyyy-MM-dd HH:mm} (main session active)" -f (Get-Date)) | Set-Content $agents -NoNewline
 if (-not $NoBuild) {
@@ -22,7 +23,7 @@ $cfg = Join-Path $play 'UserData\Config.toml'
 $userCfg = $null; $haveCfg = $false
 $p = $null
 try {
-    Enter-GameLock $root 'iterate'
+    Enter-GameSlot $root 'iterate' -Shared:(-not $Capture)  # -Capture runs capture-window.ps1, which reuses this slot
     $userCfg = Set-RumbleOffForRun $cfg; $haveCfg = $true
     Set-ConfigLine $cfg 'audio' 'muted' 'muted = true' | Out-Null
     $p = Start-Process (Join-Path $play 'FrightWorks Game.exe') -WorkingDirectory $play -RedirectStandardError $log -RedirectStandardOutput "$log.out" -PassThru
@@ -32,7 +33,7 @@ try {
 } finally {
     if ($p) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Start-Sleep 1 }
     if ($haveCfg) { Restore-ConfigBytes $cfg $userCfg }
-    Exit-GameLock $root
+    Exit-GameSlot $root
 }
 "alive after $Seconds s: $alive"
 $lines = Get-Content $log, "$log.out" -ErrorAction SilentlyContinue
