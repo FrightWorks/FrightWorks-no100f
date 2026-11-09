@@ -59,8 +59,10 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
 - Settings, saves and mods are in `Play\UserData\` (`Config.toml`; in game **F10**, **F11** fullscreen; `[video] msaa` takes 1, 2, 4 or 8 only, 1 = off, and `frame_interpolation_fps` 0, 120 or 180):
   `Play\portable.txt` makes the dev tree portable, like the zip. Without that marker the game uses the installed
   layout: `%LOCALAPPDATA%\FrightWorks-Data` (settings, logs, cache, disc, mods), `Saved Games\FrightWorks`,
-  `Pictures\FrightWorks` / `Videos\FrightWorks` for F2 / F3. `[paths] saves_dir` in Config.toml moves the saves in
-  either layout (the launcher's **Extras > Folders** sets it). To test the installed layout without an installer,
+  `Pictures\FrightWorks` / `Videos\FrightWorks` for F2 / F3. On Linux the same layout is `$XDG_DATA_HOME/WiiCompiled`
+  (`~/.local/share/WiiCompiled`) with the saves in its `Saves`, and F2 / F3 in `Pictures/FrightWorks` / `Videos/FrightWorks`
+  (the XDG Pictures and Videos folders, `~/Pictures` and `~/Videos` when xdg-user-dirs isn't set up). `[paths] saves_dir`
+  in Config.toml moves the saves in either layout (the launcher's **Extras > Folders** sets it). To test the installed layout without an installer,
   copy `Play\`'s exe, DLLs, `dsp_coef.bin`, `button_icons` and `texture_replacements` into a folder named `data`
   (no `portable.txt`), with `FrightWorks.exe` beside it.
 - Packaging a release zip: `tools\package-scooby.ps1 -Build -Zip` → `dist\`. It also needs ImageMagick (`magick`) on
@@ -91,6 +93,44 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   draft release as the zip: `gh release upload v<ver> dist\installer\FrightWorks-win-Setup.exe ...`. Installed games
   look for `releases.win.json` in the published (non-pre-release) releases, so every release from now on carries
   these files; a release without them isn't offered as an update. The zip's launcher reads the latest release's tag.
+  The Linux files from `dist\installer-linux\` (the AppImage, the `-linux-full.nupkg` and `-delta.nupkg`, `releases.linux.json`,
+  `assets.linux.json`) go on the same draft with `gh release upload`, built from the same tagged commit (tag first, then
+  `package-linux-docker.ps1`, then upload both sets). Linux is beta: the release notes say so.
+- **Linux package** (beta): an AppImage made with Velopack (the same vpk version as the installer), built in an Ubuntu
+  22.04 container so the package needs no newer glibc than 2.35. It holds the same program files as the installer
+  (the launcher on top, the game and its runtime files in `data/`; no portable marker, no disc, saves or settings) and
+  keeps the player's files outside itself, in the installed layout above.
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File tools\package-linux-docker.ps1 [-Version <v>] [-Feed <dir>] [-NoDownload] [-Jobs <n>] [-Clean]
+  ```
+  Docker must be running (the script doesn't start it) and `Disc\DATA` extracted, like the Windows packaging. The container
+  clones the repository's `.git` and builds the **committed** state of the current branch, never the working copy:
+  commit first, and for a release tag first (a clean checkout at `v<version>` gives the plain version as the build ID).
+  The clone, the Linux toolchain (CMake, .NET SDK, vpk) and the build folders live in the Docker volume
+  `frightworks-linux-build` (`-Volume` renames it), so a second run only recompiles what changed; `-Clean` starts from
+  nothing, and `docker volume rm frightworks-linux-build` frees the space. `Disc`, `texture_pack` and `game` are mounted
+  read only (the HD pack is copied: the build adds files to it). The result is in `dist\installer-linux\` (`-Feed`):
+  `FrightWorks.AppImage`, `FrightWorks-<ver>-linux-full.nupkg`, a `-delta.nupkg` against the previous Linux release once
+  there is one, and `releases.linux.json`, `assets.linux.json` and `RELEASES-linux`. They sit beside the Windows files in the same GitHub release (the Windows
+  feed is `releases.win.json`), and old files in the feed folder are kept for the delta, so clear test builds out first.
+  The first build in a fresh volume takes a few minutes on a many-core PC (the translator and the compiler run in
+  parallel, at most 16 jobs; `-Jobs` lowers that), the Docker image about as long once. On a Linux machine with the
+  packages from the README (plus `squashfs-tools`, `zstd` and `patchelf`) run `tools/package-linux.sh --build` directly;
+  the container's recipe is `tools/linux-package/Dockerfile`, with the base image pinned by digest.
+  Next to the game the package ships `libSDL3.so.0` (for the launcher's controller detection), `libpng16.so.16` and
+  `libz.so.1` (the ones the game was built with). Everything else comes from the system: glibc 2.34 or newer, libstdc++
+  (GLIBCXX 3.4.30, GCC 12) and the Vulkan loader and driver (`libvulkan.so.1`, dlopen'd); the launcher also needs
+  fontconfig and FreeType (Skia). The beta keeps the configuration the source build has been tested with: the game's SDL
+  has the X11 video driver only (Wayland desktops run it through XWayland) and the ALSA audio driver only (PipeWire
+  needs `pipewire-alsa`, PulseAudio its ALSA plugin). The AppImage itself needs FUSE 2 (`libfuse2`); without it run it with
+  `APPIMAGE_EXTRACT_AND_RUN=1` or `--appimage-extract-and-run`.
+  An installed AppImage updates itself through Velopack: it needs `releases.linux.json` in a published release, and
+  downloads the full package (about 650 MB) the first time; the downloaded package is kept in `/var/tmp/velopack`, so
+  later updates can use a delta. The `FRIGHTWORKS_UPDATE_SOURCE` local feed works as on Windows: pack two versions with
+  `-Version 1.1.2-test1 -NoDownload -Feed dist\testfeed-linux`, run the first AppImage with the variable pointing at the
+  folder (copy the folder somewhere the container or Linux can read). The update log is `/tmp/velopack_FrightWorks.log`.
+  `package-linux-docker.ps1 -Run '<command>'` runs a command in the container's clone instead of packaging (for example
+  building and running `recomp_runtime_config_tests` from `wiicompiled/native-build-linux`).
 - **Patched Dawn** (2x and 8x MSAA): WebGPU allows only 1 and 4 samples, and stock Dawn aborts on 2 and 8 on Vulkan.
   Windows x64 and Linux (x86_64 and aarch64) therefore download the Dawn package FrightWorks builds and hosts: release
   `v20260603.191052-msaa` on `FrightWorks/dawn-build`, URL and SHA-256 in
