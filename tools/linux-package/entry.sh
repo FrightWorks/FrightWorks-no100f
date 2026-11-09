@@ -16,6 +16,7 @@ if [[ ! -d "$src/.git" ]]; then
     git clone --quiet --no-checkout --no-hardlinks /host-git "$src"
 fi
 cd "$src"
+git tag -l | xargs -r git tag -d >/dev/null  # tags come from the host only (a test tag there must not outlive it here)
 git fetch --quiet --force --no-tags /host-git '+refs/heads/*:refs/remotes/host/*' '+refs/tags/*:refs/tags/*'
 if [[ -n "${HOST_BRANCH:-}" ]]; then
     git checkout --quiet --force -B "$HOST_BRANCH" "$HOST_SHA"

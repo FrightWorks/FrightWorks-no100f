@@ -57,6 +57,13 @@ Requires Windows 10/11 (64-bit) and **Night of 100 Frights, GameCube USA v1.01 (
 
 Windows may warn that the setup is from an unknown publisher (it isn't code-signed): **More info** > **Run anyway**.
 
+**Linux (beta).** The release also has `FrightWorks.AppImage` (x86_64, built to run on any Linux with glibc 2.34 or
+newer: Ubuntu 22.04 and newer, Debian 12, Fedora, Arch, SteamOS). Make it executable (`chmod +x FrightWorks.AppImage`) and run it; it asks
+for your disc image like the Windows version and updates itself from the releases the same way. It needs a Vulkan driver
+for your GPU, and FUSE 2 (`libfuse2`) to start; without FUSE run `./FrightWorks.AppImage --appimage-extract-and-run`.
+Your saves, settings and game files are in `~/.local/share/WiiCompiled`, screenshots (**F2**) in `~/Pictures/FrightWorks`.
+It is a beta: [tell us what happens](https://github.com/FrightWorks/FrightWorks-no100f/issues) on your setup.
+
 **Updates.** The installed game looks for a new version when the launcher starts and asks before updating (**Extras >
 Updates** turns that off, or checks right away). Updating keeps your saves and settings. The zip can't update itself:
 its launcher tells you when a new release is out; unzip it over the old folder.
@@ -67,7 +74,7 @@ its launcher tells you when a new release is out; unzip it over the old folder.
 | --- | --- | --- |
 | Saves | `Saved Games\FrightWorks` | `data\UserData\Saves` |
 | Settings, mods, logs, game files from your disc | `%LOCALAPPDATA%\FrightWorks-Data` | `data\UserData`, `data\Disc` |
-| Screenshots (**F2**) / videos (**F3**) | `Pictures\FrightWorks` / `Videos\FrightWorks` | `Screenshots` / `Videos` beside the launcher |
+| Screenshots (**F2**) / videos (**F3**) | `Pictures\FrightWorks` / `Videos\FrightWorks` (Linux AppImage: the same names in your Pictures and Videos folders) | `Screenshots` / `Videos` beside the launcher |
 
 **Extras > Folders** opens these, can put the saves in another folder (say, one that's backed up), and copies saves and
 settings over from an earlier FrightWorks or Refrightened folder. Uninstalling (Windows Settings > Apps) removes the
@@ -151,7 +158,7 @@ The game builds to `Play\`; the package goes to `dist\`. The first build downloa
 into `texture_pack\ScoobyHD` (not in git) and adds the HD Creeper frames from `tools\hd-pack-additions`. Every build
 copies the pack and the button prompt icons into `Play\` beside the game; the icons need Python and ImageMagick.
 
-**Linux** (x86_64, a native build; no release package yet). Needs a recent clang (18 builds it, 14 does not; 15 to 17
+**Linux** (x86_64, a native build from source; the release has an AppImage, see Playing). Needs a recent clang (18 builds it, 14 does not; 15 to 17
 untried), Ninja, Python 3 with Pillow, ImageMagick (7's `magick`, or the ImageMagick 6 that Ubuntu packages, with
 `librsvg2-bin`), curl with CA certificates, rsync and bsdtar (or 7z / unrar), plus the headers SDL3 is built from (X11;
 ALSA for sound); SDL3 for controller detection in the launcher. CMake and the .NET 10 SDK are downloaded into

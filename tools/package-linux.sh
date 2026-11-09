@@ -131,18 +131,10 @@ fi
 
 mkdir -p "$feed"
 if [[ $download -eq 1 ]]; then
-    # The latest release's Linux package, for the delta. Before the first Linux release there is none: vpk says so and
-    # that is fine; any other failure (no network) stops here so a release is never made without its delta by accident.
-    if ! "$vpk" download github --repoUrl "$repo_url" --channel linux --outputDir "$feed" >"$work/download.log" 2>&1; then
-        cat "$work/download.log"
-        if grep -qiE "no (releases|assets)|not found|no .*found" "$work/download.log"; then
-            echo "No earlier Linux release to make a delta from: the package will be full only."
-        else
-            echo "vpk download github failed" >&2; exit 1
-        fi
-    else
-        cat "$work/download.log"
-    fi
+    # The latest release's Linux package, for the delta. Before the first Linux release vpk finds none and says so (exit 0):
+    # the package is then full only. A real failure (no network) stops here, so a release is never made without its delta
+    # by accident.
+    "$vpk" download github --repoUrl "$repo_url" --channel linux --outputDir "$feed"
 fi
 
 "$vpk" pack --packId FrightWorks --packVersion "$version" --packDir "$stage" --mainExe FrightWorks --runtime linux-x64 \

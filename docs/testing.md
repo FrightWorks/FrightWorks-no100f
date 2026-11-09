@@ -109,16 +109,24 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   The clone, the Linux toolchain (CMake, .NET SDK, vpk) and the build folders live in the Docker volume
   `frightworks-linux-build` (`-Volume` renames it), so a second run only recompiles what changed; `-Clean` starts from
   nothing, and `docker volume rm frightworks-linux-build` frees the space. `Disc`, `texture_pack` and `game` are mounted
-  read only. The result is in `dist\installer-linux\` (`-Feed`): `FrightWorks-linux.AppImage`,
-  `FrightWorks-<ver>-linux-full.nupkg`, a `-delta.nupkg` against the previous Linux release once there is one, and
-  `releases.linux.json` / `assets.linux.json`. They sit beside the Windows files in the same GitHub release (the Windows
+  read only (the HD pack is copied: the build adds files to it). The result is in `dist\installer-linux\` (`-Feed`):
+  `FrightWorks.AppImage`, `FrightWorks-<ver>-linux-full.nupkg`, a `-delta.nupkg` against the previous Linux release once
+  there is one, and `releases.linux.json`, `assets.linux.json` and `RELEASES-linux`. They sit beside the Windows files in the same GitHub release (the Windows
   feed is `releases.win.json`), and old files in the feed folder are kept for the delta, so clear test builds out first.
-  The first build takes about an hour on a many-core PC. On a Linux machine with the packages from the README (plus
-  `squashfs-tools`) run `tools/package-linux.sh --build` directly; the container's recipe is `tools/linux-package/Dockerfile`.
-  An installed AppImage updates itself through Velopack: it needs `releases.linux.json` in a published release. The
-  `FRIGHTWORKS_UPDATE_SOURCE` local feed works as on Windows (pack two versions with `-Feed dist	estfeed-linux -NoDownload`);
-  run the AppImage with `APPIMAGE_EXTRACT_AND_RUN=1` where FUSE 2 isn't installed. The update log is
-  `/tmp/velopack_FrightWorks.log`.
+  The first build in a fresh volume takes a few minutes on a many-core PC (the translator and the compiler run in
+  parallel, at most 16 jobs; `-Jobs` lowers that), the Docker image about as long once. On a Linux machine with the
+  packages from the README (plus `squashfs-tools`, `zstd` and `patchelf`) run `tools/package-linux.sh --build` directly;
+  the container's recipe is `tools/linux-package/Dockerfile`, with the base image pinned by digest.
+  Next to the game the package ships `libSDL3.so.0` (for the launcher's controller detection), `libpng16.so.16` and
+  `libz.so.1` (the ones the game was built with). Everything else comes from the system: glibc 2.34 or newer, libstdc++
+  (GLIBCXX 3.4.30, GCC 12) and the Vulkan loader and driver (`libvulkan.so.1`, dlopen'd); the launcher also needs
+  fontconfig and FreeType (Skia). The AppImage itself needs FUSE 2 (`libfuse2`); without it run it with
+  `APPIMAGE_EXTRACT_AND_RUN=1` or `--appimage-extract-and-run`.
+  An installed AppImage updates itself through Velopack: it needs `releases.linux.json` in a published release, and
+  downloads the full package (about 650 MB) the first time; the downloaded package is kept in `/var/tmp/velopack`, so
+  later updates can use a delta. The `FRIGHTWORKS_UPDATE_SOURCE` local feed works as on Windows: pack two versions with
+  `-Version 1.1.2-test1 -NoDownload -Feed dist	estfeed-linux`, run the first AppImage with the variable pointing at the
+  folder (copy the folder somewhere the container or Linux can read). The update log is `/tmp/velopack_FrightWorks.log`.
 - **Patched Dawn** (2x and 8x MSAA): WebGPU allows only 1 and 4 samples, and stock Dawn aborts on 2 and 8 on Vulkan.
   Windows x64 and Linux (x86_64 and aarch64) therefore download the Dawn package FrightWorks builds and hosts: release
   `v20260603.191052-msaa` on `FrightWorks/dawn-build`, URL and SHA-256 in

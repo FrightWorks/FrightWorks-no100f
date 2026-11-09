@@ -205,6 +205,8 @@ powershell -ExecutionPolicy Bypass -File tools\build-launcher.ps1
 # Linux
 tools/build-no100f-linux.sh [path/to/game.iso]                          # full: CMake + .NET 10, translate, configure, compile, stage Play/
 tools/build-launcher.sh                                                 # launcher/publish/FrightWorks
+# Linux release package (AppImage via Velopack, built in an Ubuntu 22.04 container; details in docs/testing.md)
+powershell -ExecutionPolicy Bypass -File tools\package-linux-docker.ps1   # from the committed state of the branch -> dist\installer-linux
 # Linux, after native-only changes
 toolchain/CMake/bin/cmake --build wiicompiled/native-build-linux --target WiiCompiled --parallel "$(nproc)"
 ```
