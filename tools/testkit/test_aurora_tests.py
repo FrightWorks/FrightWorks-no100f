@@ -236,7 +236,7 @@ class MainTest(Tmp):
 
     @unittest.skipUnless(at.is_windows(), "uses the Windows library list")
     def test_configured_folder_skips_configure(self):
-        touch(self.build, "CMakeCache.txt")
+        touch(self.build, "build.ninja")
         rc, out, _ = self.go([])
         self.assertEqual(rc, 0)
         self.assertEqual([c[0] for c in self.calls], ["run", "ctest"])

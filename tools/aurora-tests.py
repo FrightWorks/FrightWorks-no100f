@@ -13,7 +13,7 @@ The test needs a built Play folder for its runtime libraries (SDL3 and the rest)
 "SDL3.dll not found" dialog on the desktop instead of failing, so the libraries are checked before anything runs.
 PATH (Windows) or LD_LIBRARY_PATH (Linux) is changed for the test run only, never for this shell.
 
-The tests open a small window. A build folder that already has a CMakeCache.txt is not configured again (--reconfigure).
+The tests open a small window. A build folder that already has a build.ninja (a finished configure; a failed one leaves only CMakeCache.txt) is not configured again (--reconfigure).
 CTest's `*_NOT_BUILT` placeholders (tests whose target was not built) are reported as not run: neither pass nor failure.
 Exit code: 0 when at least one test ran and none failed, 1 otherwise (2 for a setup problem such as no usable Play).
 """
@@ -192,8 +192,9 @@ def summary(results, ok, reason, play, build_dir):
     lines = [f"Aurora tests: {'PASS' if ok else 'FAIL'} ({reason})",
              f"  passed {len(results['passed'])}, failed {len(results['failed'])}, not run {len(results['not_run'])}",
              f"  Play: {play}", f"  build folder: {build_dir}"]
-    for n in results["passed"]:
-        lines.append(f"  passed:  {n}")
+    gpu = [n for n in results["passed"] if n.startswith("gx_readback")]
+    if gpu:
+        lines.append(f"  GPU test passed: {', '.join(gpu)}")
     for n, why in results["failed"]:
         lines.append(f"  FAILED:  {n} ({why})")
     for n in results["not_run"]:
@@ -244,7 +245,7 @@ def main(argv=None, base_env=None, run=subprocess.run, popen=subprocess.Popen, w
 
     build_dir = Path(args.build_dir) if args.build_dir else ROOT / "autotest" / "aurora-tests-build"
     tool_env = build_tool_env(base_env, ROOT)
-    if args.reconfigure or not (build_dir / "CMakeCache.txt").is_file():
+    if args.reconfigure or not (build_dir / "build.ninja").is_file():
         if run_step(configure_cmd(cmake, ROOT, build_dir), tool_env, "configure", run):
             print("error: configure failed", file=sys.stderr)
             return 1
