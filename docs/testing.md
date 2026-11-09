@@ -109,8 +109,8 @@ portable data. Windows and Linux use the same managed test projects; no disc/gam
 .NET 10 SDK and an owned scratch directory:
 
 ```powershell
-dotnet run --project tools\launcher-controller-tests\LauncherControllerTests.csproj -c Release -- autotest\launcher-controller
-dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-controller-tests\LauncherControllerTests.csproj -c Release -- autotest\launcher-controller
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout
 ```
 
 Test windows must pass their owned `DataPaths` and `enableServices: false`. That skips SDL/controller polling, game
@@ -130,10 +130,12 @@ foreground loss/return, disconnect/reconnect, scheme matching/manual persistence
 Repeat on Windows and Linux (including X11/Wayland and native storage portals as applicable); Windows headless results
 do not establish Linux hardware, SDL availability, native portal or compositor behavior.
 
+On Linux (bash) put `DOTNET_CLI_TELEMETRY_OPTOUT=1` in front of `dotnet` instead. The project has a no-telemetry rule, and the build scripts set it themselves, but a hand-run `dotnet` does not.
+
 The HDR launcher checks run with an existing .NET 10 SDK and an owned scratch directory:
 
 ```powershell
-dotnet run --project tools\launcher-hdr-tests\LauncherHdrTests.csproj -c Release -- autotest\launcher-hdr
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-hdr-tests\LauncherHdrTests.csproj -c Release -- autotest\launcher-hdr
 ```
 
 They use services-disabled portable fixtures and CPU-rendered Avalonia windows, not SDL/game/GPU input. Windows display
@@ -478,10 +480,11 @@ useful:
   With no game exe in `Play\` (a fresh worktree) it falls back to the real installed config: build the game first, or point it at a fake release folder (the launcher exe, `data\FrightWorks Game.exe` as any stub file, and `data\portable.txt`).
   `docs/launcher.png` is `Main.png` at 100% scaling, cropped to 1180x830 from x=8, y=31.
   A connected Xbox pad opens a modal layout question in the launcher unless `[controller] layout` is set. `vpk` keeps one Portable zip per output folder.
-- **Patch mods** (`docs/mod-patches.md`): `dotnet run --project tools\hip-patch-tests` builds levels from made-up data and
+- **Patch mods** (`docs/mod-patches.md`): `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\hip-patch-tests` builds levels from made-up data and
   tries bad recipes, wrong discs, clashes, killed builds and hostile zips. Needs only dotnet; the disc modes are in that page.
 - **Isolated launcher layout regression** (Windows or Linux, .NET 10 SDK or newer):
-  `dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout`.
+  `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout`
+  (Linux: `DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet run --project tools/launcher-layout-tests/LauncherLayoutTests.csproj -c Release -- autotest/launcher-layout`).
   It runs the launcher's real window on Avalonia's headless platform (no screen needed, drawn with Skia like on
   screen) and checks Settings/Display, Controls, Mods and Extras at 1180x830, the 960x680 minimum, 820x600 and 500x547
   (what a tiling window manager can force): nothing wider than its page, no horizontal scrolling, usable drop-downs,

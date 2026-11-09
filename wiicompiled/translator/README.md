@@ -42,7 +42,7 @@ See `projects/examples/generic-dol.yml` for a minimal manifest driven by `RECOMP
 Build the CLI once and invoke the assembly directly:
 
 ```powershell
-dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet build translator/src/Translator.Cli/Translator.Cli.csproj -c Release
 $translator = 'translator/src/Translator.Cli/bin/Release/net10.0/Translator.Cli.dll'
 ```
 
@@ -73,5 +73,5 @@ Any command prints its own option list with `--help`.
 ## Test
 
 ```powershell
-dotnet test translator/Translator.sln -c Release
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet test translator/Translator.sln -c Release
 ```
