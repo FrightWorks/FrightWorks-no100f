@@ -5,7 +5,7 @@ param([string[]]$Levels = @('i004', 'i001', 'h001', 'e001', 'h002'), [int]$Secon
 $Levels = $Levels | ForEach-Object { $_ -split ',' } | Where-Object { $_ -match '^[a-z]\d{3}$' }
 if (-not $Levels) { throw 'no valid level names (expected like i004)' }
 $root = (Resolve-Path "$PSScriptRoot\..\..\..").Path
-. (Join-Path $PSScriptRoot '..\kit-common.ps1')  # Stop-CheckoutGames: only this checkout's game
+. (Join-Path $PSScriptRoot '..\game-run.ps1')  # Stop-CheckoutGames: only this checkout's game
 Set-Location $root
 $out = Join-Path $root 'autotest\manual\births'
 New-Item -ItemType Directory -Force $out | Out-Null

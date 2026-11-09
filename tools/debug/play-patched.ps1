@@ -30,7 +30,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $env:NO100F_DEV_TOOLS = '1'  # dev menu (F8) on for this session's game (built-in dev menu; older builds use the patch)
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path  # this file is tools\debug\play-patched.ps1
-. (Join-Path $PSScriptRoot 'kit-common.ps1')  # game-run lock while the game is open
+. (Join-Path $PSScriptRoot 'game-run.ps1')     # exclusive game-run slot while the game is open (a person is playing)
+. (Join-Path $PSScriptRoot 'config-lines.ps1')  # Set-ConfigLine
 $patchDir = Join-Path $PSScriptRoot 'patches'
 $exe = Join-Path $root 'Play\FrightWorks Game.exe'
 # powershell -File passes "-Patch a,b" as one string
@@ -115,13 +116,13 @@ try {
         Build -Translate:(-not $SkipTranslate)
         "playing   $(Split-Path -Leaf $exe) (patches come out when it closes)"
     }
-    Enter-GameLock $root "play-patched $($names -join ',')"
+    Enter-GameSlot $root "play-patched $($names -join ',')"
     $locked = $true
     $game = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
     $game.WaitForExit()
     "closed    exit code $($game.ExitCode)"
 } finally {
-    if ($locked) { Exit-GameLock $root }
+    if ($locked) { Exit-GameSlot $root }
     if ($rumbleSet) {
         Set-ConfigLine $config 'controller' 'rumble' $rumbleOld | Out-Null
         "rumble    setting put back"

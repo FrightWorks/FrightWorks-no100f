@@ -11,7 +11,7 @@ description: >-
 # Parallel work: worktrees and sessions
 
 `tools\debug\worktree.ps1` makes one worktree per task (its own branch, `Play\`, `autotest\`, session) and opens a
-Windows Terminal tab running `claude -n <name>` there. What a worktree contains, the shared links and the game-run lock
+Windows Terminal tab running `claude -n <name>` there. What a worktree contains, the shared links and the game-run slots
 are described at the top of that script and in `docs/testing.md` section 10. This skill is the coordinator's side.
 
 ## Roles
@@ -57,8 +57,8 @@ same either way.
 
 ## Check on, message, reopen
 
-- `worktree.ps1 list`: every worktree with its branch, changed files and who holds the game-run lock. Game runs of the PowerShell scripts take turns;
-  the Python test kit (`tools/testkit/`, `tools/smoke-test.py`) uses shared run slots and respects that lock. Not built yet: the full sweep before a release (`.agents/REPO.md`, Testing).
+- `worktree.ps1 list`: every worktree with its branch, changed files and who holds a game-run slot. Game runs of the PowerShell scripts and of the Python test kit
+  (`tools/testkit/`, `tools/smoke-test.py`) share the same run slots. Not built yet: the full sweep before a release (`.agents/REPO.md`, Testing).
 - ListAgents: which sessions are running. SendMessage to `<name>` to ask for a status or pass on a decision from the
   human; the answer arrives as a message. Don't report a worker's state you haven't heard back.
 - A closed tab: `worktree.ps1 open -Name <name>` starts a new session that picks the task up from `TASK.md` (so keep

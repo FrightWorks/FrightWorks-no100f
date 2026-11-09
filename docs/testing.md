@@ -249,10 +249,19 @@ powershell -ExecutionPolicy Bypass -File tools\debug\manual-session.ps1 stop    
 - Controller rumble is off in every test run (`[controller] rumble = false`), with no switch to turn it on. The game's
   default is on, so a script that starts the game has to set it: `manual-session` writes it, `level-sweep.py` and the smoke test
   write it in their own copies' configs (test kit, section 4a), and `play-patched`, `iterate` and `capture-window` set it for the run and put your
-  `Config.toml` back afterwards. Sound is muted the same way in `iterate` and `capture-window` (no switch) and in the Python kit; those two wait for the
-  game-run lock and give it back when the run ends. The helpers are in `tools\debug\kit-common.ps1`.
-  The PowerShell scripts take turns through that lock, one at a time. The Python test kit (section 4a) uses shared run slots
-  instead and respects the same lock both ways, so old and new scripts never overlap.
+  `Config.toml` back afterwards. Sound is muted the same way in `iterate` and `capture-window` (no switch) and in the Python kit; those two wait for a
+  game-run slot and give it back when the run ends. The config helpers are in `tools\debug\config-lines.ps1`.
+  The PowerShell scripts take the same run slots as the Python test kit (section 4a), through `Enter-GameSlot` / `Exit-GameSlot` in
+  `tools\debug\game-run.ps1`, which call `python tools/testkit/slots.py hold` / `release`. Who takes what:
+  **exclusive** (the whole machine, nothing else runs while it holds): `manual-session prepare/start` (the human check; held until
+  `stop`/`restore`, or 4 hours), `play-patched.ps1` (a person is playing), `capture-window.ps1` (window captures) and `iterate.ps1 -Capture`;
+  **shared** (one of the slots, side by side with other runs): `iterate.ps1` without `-Capture` (a boot check that reads the log,
+  needs neither the screen nor exact timing). The other scripts in `tools\debug` (`texhunt\*`, `audio\loop-capture`, `game\births-run`,
+  `capture\record`) take no slot themselves; the ones that start the game through `manual-session` hold its exclusive slot.
+  A script that runs while its own checkout already holds a slot (`iterate -Capture` calling `capture-window.ps1`, `texhunt\look.ps1`
+  calling `manual-session`) reuses that slot and gives nothing back; asking for an exclusive slot under a shared one of the same
+  checkout fails at once. A script that dies gives its slot back (the holder notices the closed pipe); `manual-session`'s background
+  holder gives up after 4 hours, and a later `prepare`/`start` in the same checkout takes it back. `python tools/testkit/slots.py status` shows who holds what.
   Scene IDs, level names and which scenes suit which tests: [`tools/debug/game/levels.md`](../tools/debug/game/levels.md),
   or `python tools\debug\game\levels.py i004`. Common ones: `h001` (hub, smoke test), `i001`, `i004` (boot it directly),
   `e001`.
@@ -286,7 +295,7 @@ Options: `--jobs`, `--scenes`, `--slots N`, `--timeout S` (playable limit per jo
 Measured on one PC (Ryzen 9 7900X, RTX 3090, 2026-11-07, 1280x720 windows): the three jobs at once take about 47 s after the build (h001 27 s, i004 20 s, g001 47 s, each playable after 8-14 s); one after another 85 s (11.5 + 6 + 12 s to playable). Every window held 60 fps (p95 frame time under 17 ms) whether it was in front of the others or behind, with or without `--activate-when-shown 0`: nothing in the game or runtime sets `pauseOnFocusLost` (it is off), and background windows did not stall.
 A fresh `Play` copy starts with an empty shader and pipeline cache (`UserData\Cache`), which costs about 3.4 s (h001 playable in 13.4 s cold, 10.0 s warm); each game also reads about 1 GiB of disc files into its read cache and starts 22 pipeline compile threads, so more than 3 at once will slow each one down.
 
-The pieces are in `tools/testkit/` and are meant for every automated game run (the smoke test and the level sweep use them; the PowerShell scripts have not been moved onto them yet):
+The pieces are in `tools/testkit/` and are meant for every automated game run (the smoke test, the level sweep and the PowerShell scripts that start the game use them):
 - `launch.py`: the one launch helper. Its own copy of `Play\` in a folder you give it (the HD pack and button icons are linked, never copied; deleting never follows a link),
   its own `Config.toml` (windowed, rumble off, muted), the environment scrubbed of leftover `NO100F_*`, `AX_*`, `AUDIO_*` switches and of
   `SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS` (never set it: SDL then refuses the game's own hint call and the game treats that as an error).
@@ -295,8 +304,10 @@ The pieces are in `tools/testkit/` and are meant for every automated game run (t
   (tried once with a person pressing a real pad throughout a full smoke run: all three jobs passed as without; the game logs no controller connects, so there is no log line to check).
 - `slots.py`: shared run slots, 3 by default (`--slots`, or `FRIGHTWORKS_TEST_SLOTS`). `acquire(why, exclusive=True)` is for the human check and performance
   checks: it waits for every slot and blocks new ones. Files live in `%LOCALAPPDATA%\FrightWorks-kit\slots` (Linux `$XDG_STATE_HOME/FrightWorks-kit`), with a heartbeat so a
-  crashed run's slot is taken over after 90 s. While any slot is held a `game-run.lock` exists in the old format (its `root` is the slots folder, so no checkout's old script takes it over), and a lock held by an old PowerShell script makes
-  the kit wait: `python tools/testkit/slots.py status` shows who holds what.
+  crashed run's slot is taken over after 90 s. `python tools/testkit/slots.py status` shows who holds what. Scripts that are not Python use
+  `slots.py hold --why <text> --root <checkout> [--shared]` (prints `HELD`, keeps the slot until its stdin closes or says `release`) and
+  `hold --detach` + `release --root <checkout>` (a background holder across several script runs, 4 hour cap); see the module docstring.
+  The old `game-run.lock` of `kit-common.ps1` is gone: nothing writes or reads it.
 - `devmenu.py` and `waitplay.py`: the dev menu's `devmenu.txt` / `devmenu_press.txt` as a client, and the one wait-until-playable routine (from `texhunt\look.ps1`): uses `cutscene`
   (`cutscene yes|no control yes|no`): skip (A) every 2 s while a cutscene plays; with no control and no cutscene it waits 4 s (a camera pan ends by itself), then presses A every 2 s, at most 12 times, for a dialogue box ("PRESS A TO CONTINUE"), logging each press; ready the moment the player has control; a time limit fails with the last state and a screenshot.
 - `checks.py`: black-picture test (PNG, no Pillow), audio peak and loop check, the HD-drawn probe, the frame rate from the game's own `fps` log lines.
@@ -526,8 +537,8 @@ powershell -ExecutionPolicy Bypass -File tools\debug\worktree.ps1 remove -Name i
 - To try a worktree's build, run its `Play\FrightWorks Game.exe`, or build its launcher there
   (`toolsuild-launcher.ps1`) and run its `launcher\publish\FrightWorks.exe`: it starts that worktree's game, with its
   own settings.
-- Builds can run side by side. Game runs take turns in the PowerShell scripts: `manual-session prepare/start` and `play-patched.ps1` wait while
-  another checkout's test has the game open. Scripts only close the game they started from their own checkout; your
+- Builds can run side by side. Game runs share the test kit's run slots: `manual-session prepare/start`, `play-patched.ps1`, `capture-window.ps1` and `iterate.ps1` wait for a slot
+  (exclusive ones for the whole machine) while other runs, from any checkout, have the game open. Scripts only close the game they started from their own checkout; your
   own game (launcher or `Play\` in the main checkout) is never closed by a test.
 - Never delete a worktree folder by hand: `Disc`, `texture_pack`, `toolchain` there are links, and some delete tools
   follow links into the main checkout. `remove` unlinks them first; it refuses while the worktree has uncommitted work

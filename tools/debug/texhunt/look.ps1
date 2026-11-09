@@ -11,7 +11,7 @@ if ($Extra) { $Extra = (Resolve-Path $Extra).Path }
 $ErrorActionPreference = 'Stop'
 $env:NO100F_DEV_TOOLS = '1'  # dev menu (F8) on for this session's game (built-in dev menu; older builds use the patch)
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path   # repo root
-. (Join-Path $PSScriptRoot '..\kit-common.ps1')  # Get-CheckoutGames: only this checkout's game
+. (Join-Path $PSScriptRoot '..\game-run.ps1')  # Get-CheckoutGames: only this checkout's game
 Set-Location $root
 $play = Join-Path $root 'Play'
 $exe = Join-Path $play 'FrightWorks Game.exe'

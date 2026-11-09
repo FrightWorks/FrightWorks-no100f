@@ -1,9 +1,10 @@
 # Starts Play\FrightWorks Game.exe, waits, saves a PNG of the game window only (PrintWindow, no desktop input), stops it.
 # Usage: capture-window.ps1 [-Seconds 20] [-Out <png>] [-Every N]   (-Every: a shot every N s as <out>-<s>s.png)
-# Takes the game-run lock for the run. Rumble is off and sound muted for the run; Play\UserData\Config.toml comes back byte for byte.
+# Takes an exclusive game-run slot for the run (the screen; a slot the caller's checkout already holds is reused). Rumble is off and sound muted for the run; Play\UserData\Config.toml comes back byte for byte.
 param([int]$Seconds = 20, [string]$Out = '', [int]$Every = 0)
 $root = Split-Path -Parent $PSScriptRoot
-. (Join-Path $PSScriptRoot 'debug\kit-common.ps1')  # game-run lock, rumble off, muted
+. (Join-Path $PSScriptRoot 'debug\game-run.ps1')     # game-run slot
+. (Join-Path $PSScriptRoot 'debug\config-lines.ps1')  # rumble off, muted
 if (-not $Out) { $Out = Join-Path $root 'autotest\window.png' }
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -46,7 +47,7 @@ $cfg = Join-Path $root 'Play\UserData\Config.toml'
 $userCfg = $null; $haveCfg = $false
 $p = $null
 try {
-    Enter-GameLock $root 'capture-window'
+    Enter-GameSlot $root 'capture-window'
     $userCfg = Set-RumbleOffForRun $cfg; $haveCfg = $true
     Set-ConfigLine $cfg 'audio' 'muted' 'muted = true' | Out-Null
     $p = Start-Process (Join-Path $root 'Play\FrightWorks Game.exe') -WorkingDirectory (Join-Path $root 'Play') -PassThru `
@@ -63,5 +64,5 @@ try {
 } finally {
     if ($p -and -not $p.HasExited) { $p.Kill(); $p.WaitForExit(5000) | Out-Null }
     if ($haveCfg) { Restore-ConfigBytes $cfg $userCfg }
-    Exit-GameLock $root
+    Exit-GameSlot $root
 }
