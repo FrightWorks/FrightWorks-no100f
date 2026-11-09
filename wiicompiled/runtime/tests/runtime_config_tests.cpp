@@ -113,17 +113,11 @@ int main(int argc, char** argv) {
                      RuntimeConfigFile::XdgUserDirectory("VIDEOS", "Videos") == scratch / "home" / "Videos",
                      "no user-dirs.dirs: Pictures and Videos under home expected")) return 1;
         const auto writeDirs = [&](const char* text) { std::ofstream(scratch / "config" / "user-dirs.dirs") << text; };
-        writeDirs("# comment
-XDG_DESKTOP_DIR=\"$HOME/Desktop\"
-  XDG_PICTURES_DIR=\"$HOME/Bilder\"
-XDG_VIDEOS_DIR=\"/data/Clips\"
-");
+        writeDirs("# comment\nXDG_DESKTOP_DIR=\"$HOME/Desktop\"\n  XDG_PICTURES_DIR=\"$HOME/Bilder\"\nXDG_VIDEOS_DIR=\"/data/Clips\"\n");
         if (!Require(RuntimeConfigFile::XdgUserDirectory("PICTURES", "Pictures") == scratch / "home" / "Bilder" &&
                      RuntimeConfigFile::XdgUserDirectory("VIDEOS", "Videos") == fs::path("/data/Clips"),
                      "user-dirs.dirs folders not used")) return 1;
-        writeDirs("XDG_PICTURES_DIR=\"Bilder\"
-XDG_VIDEOS_DIR=\"$HOME/unterminated
-");
+        writeDirs("XDG_PICTURES_DIR=\"Bilder\"\nXDG_VIDEOS_DIR=\"$HOME/unterminated\n");
         if (!Require(RuntimeConfigFile::XdgUserDirectory("PICTURES", "Pictures") == scratch / "home" / "Pictures" &&
                      RuntimeConfigFile::XdgUserDirectory("VIDEOS", "Videos") == scratch / "home" / "Videos",
                      "relative or broken user-dirs.dirs lines must fall back to home")) return 1;
