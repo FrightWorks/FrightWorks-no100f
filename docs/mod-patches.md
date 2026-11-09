@@ -115,7 +115,7 @@ oversized contents, or a recipe or asset that fails the checks above.
 
 ## Tests
 
-`dotnet run --project tools/hip-patch-tests` needs only dotnet. On a real disc, with results kept in a git-ignored folder:
+`dotnet run --project tools/hip-patch-tests` needs only dotnet. Set `DOTNET_CLI_TELEMETRY_OPTOUT=1` first (PowerShell: `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'`; bash: `export DOTNET_CLI_TELEMETRY_OPTOUT=1`): the project has a no-telemetry rule. On a real disc, with results kept in a git-ignored folder:
 
     dotnet run --project tools/hip-patch-tests -- --disc DISC
     dotnet run --project tools/hip-patch-tests -- --export DISC WORK
