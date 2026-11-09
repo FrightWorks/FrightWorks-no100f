@@ -60,7 +60,8 @@ Windows may warn that the setup is from an unknown publisher (it isn't code-sign
 **Linux (beta).** The release also has `FrightWorks.AppImage` (x86_64, built to run on any Linux with glibc 2.34 or
 newer: Ubuntu 22.04 and newer, Debian 12, Fedora, Arch, SteamOS). Make it executable (`chmod +x FrightWorks.AppImage`) and run it; it asks
 for your disc image like the Windows version and updates itself from the releases the same way. It needs a Vulkan driver
-for your GPU, and FUSE 2 (`libfuse2`) to start; without FUSE run `./FrightWorks.AppImage --appimage-extract-and-run`.
+for your GPU, and FUSE to start (`fusermount` or `fusermount3`, from the fuse or fuse3 package, which desktops usually
+have; `libfuse2` isn't needed); without FUSE run `./FrightWorks.AppImage --appimage-extract-and-run`.
 Your saves, settings and game files are in `~/.local/share/WiiCompiled`, screenshots (**F2**) in `~/Pictures/FrightWorks`.
 It is a beta: [tell us what happens](https://github.com/FrightWorks/FrightWorks-no100f/issues) on your setup.
 
