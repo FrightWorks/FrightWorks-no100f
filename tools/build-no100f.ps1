@@ -66,11 +66,11 @@ if (-not $SkipTools) {
         & (Join-Path $wc 'buildtools\Prepare-PortableTools.ps1') -Destination $toolchain *>&1 |
             ForEach-Object { "$_" } | Out-File -LiteralPath (Join-Path $logs 'tools.log') -Encoding utf8
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $wc 'Dependencies\dawn_prebuilt\bin\webgpu_dawn.dll'))) {
-        Set-Status 'dependencies: downloading the pinned source trees and Dawn'
-        & (Join-Path $wc 'buildtools\Prepare-Dependencies.ps1') -Destination (Join-Path $wc 'Dependencies') *>&1 |
-            ForEach-Object { "$_" } | Out-File -LiteralPath (Join-Path $logs 'dependencies.log') -Encoding utf8
-    }
+    # Always run: it skips what is already there and replaces a dawn_prebuilt that isn't the pinned Dawn package
+    # (an older Dependencies folder holds the stock one).
+    Set-Status 'dependencies: checking the pinned source trees and Dawn'
+    & (Join-Path $wc 'buildtools\Prepare-Dependencies.ps1') -Destination (Join-Path $wc 'Dependencies') *>&1 |
+        ForEach-Object { "$_" } | Out-File -LiteralPath (Join-Path $logs 'dependencies.log') -Encoding utf8
     foreach ($tool in @('llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe', 'CMake\bin\cmake.exe', 'Ninja\ninja.exe')) {
         if (-not (Test-Path -LiteralPath (Join-Path $toolchain $tool))) { throw "Toolchain file missing after setup: $tool (see build-logs\tools.log)" }
     }

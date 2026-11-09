@@ -7,6 +7,8 @@ include_guard(GLOBAL)
 #   - dawn::dawncpp_headers target is available (for tests)
 #   - DAWN_ENABLE_* backend variables are set for the target platform
 #   - AURORA_DAWN_IS_SHARED is set to TRUE/FALSE
+#   - AURORA_DAWN_MSAA_PATCHED (cache, internal) is ON only when this is the FrightWorks-patched Dawn package, which
+#     takes 2x and 8x MSAA on Vulkan; aurora_core.cmake turns it into a compile definition for lib/webgpu/gpu.cpp
 
 # When using a non-vendored Dawn, we don't get DAWN_ENABLE_* from its build.
 # Infer from the target platform instead.
@@ -67,6 +69,9 @@ if (_aurora_dawn_provider STREQUAL "auto")
   set(AURORA_DAWN_PROVIDER "${_aurora_dawn_provider}" CACHE STRING "" FORCE)
   message(STATUS "aurora: Dawn auto-resolved provider: ${_aurora_dawn_provider}")
 endif ()
+
+# Stock until the package branch below says otherwise (also clears a value left in the cache by an earlier configure).
+set(AURORA_DAWN_MSAA_PATCHED OFF CACHE INTERNAL "")
 
 if (_aurora_dawn_provider STREQUAL "vendor")
   # ── Vendor: FetchContent build from source ──
@@ -157,35 +162,42 @@ elseif (_aurora_dawn_provider STREQUAL "package")
     set(AURORA_DAWN_PACKAGE_URL
       "https://github.com/theofficialgman/dawn-build/releases/download/${AURORA_DAWN_VERSION}/dawn-${_dawn_system}-${_dawn_arch}.tar.gz")
 
-    # FrightWorks: on Linux (x86_64 and aarch64) we use the Dawn package we build and host ourselves, not
-    # theofficialgman's. It is the same Dawn commit as the stock package plus the Vulkan 2x/8x MSAA patch (author
+    # FrightWorks: on Windows x64 and Linux (x86_64 and aarch64) we use the Dawn package we build and host ourselves,
+    # not theofficialgman's. It is the same Dawn commit as the stock package plus the Vulkan 2x/8x MSAA patch (author
     # Junkaholic55, FrightWorks/dawn branch frightworks/v20260603.191052, commit dd7b19d), so 2x and 8x work on Vulkan
-    # (stock Dawn aborts on them). Built by the workflow on FrightWorks/dawn-build, branch frightworks/build, and
-    # published as release v20260603.191052-msaa. A new AURORA_DAWN_VERSION needs the patch rebased onto it and a new
-    # package on our release first: until then Linux falls back to the stock URL below, and 2x/8x abort again on Vulkan.
-    # Windows and every other platform stay on the stock package. An explicit AURORA_DAWN_PACKAGE_URL or
-    # AURORA_DAWN_PACKAGE_URL_HASH always wins.
+    # (stock Dawn aborts on them). Built by the workflow on FrightWorks/dawn-build, branch frightworks/build (Windows
+    # x64: branch frightworks/windows-build), and published as release v20260603.191052-msaa. A new AURORA_DAWN_VERSION
+    # needs the patch rebased onto it and a new package on our release first: until then these platforms fall back to
+    # the stock URL below, and 2x/8x abort again on Vulkan (AURORA_DAWN_MSAA_PATCHED stays OFF, so the sample-count
+    # guard in lib/webgpu/gpu.cpp takes over). Windows ARM64, macOS, iOS and Android stay on the stock package.
+    # An explicit AURORA_DAWN_PACKAGE_URL or AURORA_DAWN_PACKAGE_URL_HASH always wins.
     if (NOT AURORA_DAWN_PACKAGE_URL_HASH AND AURORA_DAWN_VERSION STREQUAL "v20260603.191052" AND
-        _dawn_system STREQUAL "linux" AND (_dawn_arch STREQUAL "x86_64" OR _dawn_arch STREQUAL "aarch64"))
+        ((_dawn_system STREQUAL "linux" AND (_dawn_arch STREQUAL "x86_64" OR _dawn_arch STREQUAL "aarch64")) OR
+         (_dawn_system STREQUAL "windows" AND _dawn_arch STREQUAL "amd64")))
       set(AURORA_DAWN_PACKAGE_URL
         "https://github.com/FrightWorks/dawn-build/releases/download/v20260603.191052-msaa/dawn-${_dawn_system}-${_dawn_arch}.tar.gz")
-      if (_dawn_arch STREQUAL "x86_64")
+      if (_dawn_system STREQUAL "windows")
+        set(AURORA_DAWN_PACKAGE_URL_HASH
+          "SHA256=67c507f218736f750be8d61c7f7a444bedafcfd6b184bc55a07961bfd001151e")
+        # The same package's bin/webgpu_dawn.dll, checked after the download (see below).
+        set(_dawn_expected_runtime_sha256
+          "84caa209a4dd34656bdc24dc97affc3e1484e20a00e371ff5fddeb266d9ffb64")
+      elseif (_dawn_arch STREQUAL "x86_64")
         set(AURORA_DAWN_PACKAGE_URL_HASH
           "SHA256=832d25775a0f7b0a9c3a0ee78b56afc8d0fb58d93d603e3de2593b925ececb51")
       else ()
         set(AURORA_DAWN_PACKAGE_URL_HASH
           "SHA256=4bf62951fe3c49c7cf497e077988e3b2c109125469b55c94a9ca361c2d062dba")
       endif ()
+      # Tells lib/webgpu/gpu.cpp this Dawn takes 2x and 8x on Vulkan (see aurora_core.cmake).
+      set(AURORA_DAWN_MSAA_PATCHED ON CACHE INTERNAL "")
     endif ()
 
     # A release asset is mutable: the same tag has already served two different windows-amd64 archives,
     # and a cached extraction is never re-verified. Pin the digest for the combinations we ship (stock packages
-    # here; Linux x86_64 and aarch64 are pinned above, to our own release).
+    # here; Windows x64 and Linux are pinned above, to our own release).
     if (NOT AURORA_DAWN_PACKAGE_URL_HASH AND AURORA_DAWN_VERSION STREQUAL "v20260603.191052")
-      if (_dawn_system STREQUAL "windows" AND _dawn_arch STREQUAL "amd64")
-        set(AURORA_DAWN_PACKAGE_URL_HASH
-          "SHA256=13be9cff8b9b179c42dcd16aeabb6effcc8f0dfdcc14463eda2a5caeda225142")
-      elseif (_dawn_system STREQUAL "windows" AND _dawn_arch STREQUAL "arm64")
+      if (_dawn_system STREQUAL "windows" AND _dawn_arch STREQUAL "arm64")
         set(AURORA_DAWN_PACKAGE_URL_HASH
           "SHA256=bf2d921110f14a1d6553f673c5597988e66c02af5587e4a1fee167937d247734")
       elseif (_dawn_system STREQUAL "darwin" AND _dawn_arch STREQUAL "arm64")
@@ -217,6 +229,20 @@ elseif (_aurora_dawn_provider STREQUAL "package")
     DOWNLOAD_EXTRACT_TIMESTAMP FALSE
   )
   FetchContent_MakeAvailable(dawn_prebuilt)
+
+  # A source-dir override (FETCHCONTENT_SOURCE_DIR_DAWN_PREBUILT, which the Windows build always uses) skips URL_HASH,
+  # so a Dependencies folder that still holds the stock package would build against the wrong Dawn without a sound:
+  # the patched-Dawn define would be set while 2x/8x still abort on Vulkan. Refuse that here.
+  if (_dawn_expected_runtime_sha256)
+    file(SHA256 "${dawn_prebuilt_SOURCE_DIR}/bin/webgpu_dawn.dll" _dawn_runtime_sha256)
+    if (NOT _dawn_runtime_sha256 STREQUAL _dawn_expected_runtime_sha256)
+      message(FATAL_ERROR
+        "${dawn_prebuilt_SOURCE_DIR}/bin/webgpu_dawn.dll is not the FrightWorks Dawn package this build expects "
+        "(SHA-256 ${_dawn_runtime_sha256}, expected ${_dawn_expected_runtime_sha256}). It is probably the stock "
+        "package from an older Dependencies folder: delete its dawn_prebuilt folder and run "
+        "buildtools/Prepare-Dependencies.ps1.")
+    endif ()
+  endif ()
 
   # Detect package layout: may be nested in a subdirectory
   set(_dawn_pkg_dir "${dawn_prebuilt_SOURCE_DIR}")
