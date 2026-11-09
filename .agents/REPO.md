@@ -72,6 +72,8 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 - Fix-only PRs branch off `main` with minimal diffs and no heuristics that hide symptoms.
   Diagnostics never go in a fix PR (patches live in `tools/debug/patches/`).
   The debug kit changes in its own PRs.
+- Before opening a PR, run `python tools/check-assets.py` (`docs/testing.md`, section 4c): it fails if the branch or the staged files add anything under "Never commit" below.
+  It is run by hand, not a hook.
 - Open PRs as drafts.
   Say plainly what was and wasn't tested.
 - PR bodies mention other PRs only if they were tested together, with conflict status.
@@ -94,7 +96,7 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 - Issue labels: at most one per category (`type:`, `area:`, `priority:`, `status:`).
   No GitHub issue types.
 
-**Never commit**
+**Never commit** (`python tools/check-assets.py` checks the first four lines, the disc and game data, saves and logs, the HD pack and the local files, by path, file type, size and header)
 - A disc image, `Disc/`, or anything extracted or dumped from the game.
 - Saves or local builds.
 - The HD pack.
@@ -157,7 +159,7 @@ New automated game runs use them.
 **The level sweep** is `python tools/level-sweep.py` (`docs/testing.md`, section 4b): every level, up to 7 windows at once, on the same kit, with `fps60` on (`--fps30` for off).
 Run it before a release.
 
-**Not built yet:** moving the PowerShell scripts onto the test kit (they still take turns through `kit-common.ps1`'s `game-run.lock`, which the slots respect, so old and new scripts cannot overlap) and the asset check.
+**Not built yet:** moving the PowerShell scripts onto the test kit (they still take turns through `kit-common.ps1`'s `game-run.lock`, which the slots respect, so old and new scripts cannot overlap).
 The controller isolation was tried once on a real pad (2026-11-07): a person pressed buttons and sticks for about 40 s of a full three-job run, and all three jobs passed with the same results as without.
 The game logs no controller connects, so the proof is those results, not a log line; repeat it when the isolation changes.
 Nothing runs the smoke test automatically, so the PR says what was run.
