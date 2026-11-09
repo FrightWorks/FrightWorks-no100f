@@ -535,7 +535,7 @@ powershell -ExecutionPolicy Bypass -File tools\debug\worktree.ps1 remove -Name i
   start, check on or finish tasks; it runs the commands below and can message the other sessions. Workers send it
   their questions and approval requests (PRs, options, visual checks), and it answers or asks you (`AGENTS.md`:
   "Questions go through the coordinator"). Commits and pushes to a task's own branch need no approval.
-- `new` creates `..\FrightWorks-worktrees\<name>` from `origin/main` (or checks out an existing branch) and opens a
+- `new` creates `..\FrightWorks-worktrees\<name>` (or `<dir>\<name>` if you ran `git config frightworks.worktreesDir D:\Worktrees\FrightWorks` or `~/worktrees/frightworks`; `-Base` overrides both) from `origin/main` (or checks out an existing branch) and opens a
   tab there running `claude -n <name>` (`-NoOpen` to skip). With `-Task`, the goal goes into the worktree's `TASK.md`
   and the session starts on it. Its first build must be a full one: `toolsuild-no100f.ps1` without
   `-SkipTools`/`-SkipTranslate` (or `new ... -Build`).
