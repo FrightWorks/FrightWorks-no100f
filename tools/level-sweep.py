@@ -101,7 +101,7 @@ def new_game(worker, args, out):
     extra = dict(kw.pop("extra_env", {}))
     extra.setdefault("NO100F_LOG_FPS", "1")           # the game's own fps lines on stderr
     g = launch.TestGame(f"w{worker}", out / "work" / f"w{worker}", hd=False, fps60=not args.fps30, extra_env=extra,
-                        build_check=not args.skip_build_check,
+                        build_check=not args.skip_build_check, release=getattr(args, "release", None),
                         activate_when_shown=getattr(args, "activate_when_shown", None), **kw)
     g.prepare()
     return g
@@ -399,7 +399,7 @@ def main(argv=None):
         (out / sub).mkdir(parents=True, exist_ok=True)
 
     try:
-        build_msg = launch.TestGame("check", out / "work" / "check", build_check=not args.skip_build_check).check_build()
+        build_msg = launch.TestGame("check", out / "work" / "check", build_check=not args.skip_build_check, release=args.release).check_build()
     except (BuildMismatch, FileNotFoundError) as e:
         print(f"level sweep not started: {e}", file=sys.stderr)
         return 2

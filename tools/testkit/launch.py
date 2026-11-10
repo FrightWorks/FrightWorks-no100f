@@ -191,6 +191,32 @@ def check_build(found, expected: BuildId, repo=None):
     return True, f"build {parts[1]}, {head}, only test/doc files differ: {shown or 'none'}"
 
 
+def check_release_exe(text, version):
+    """(ok, message) for a release build's exe (its bytes decoded as latin-1): its ID is the plain version, so the exe
+    must hold that version as a string of its own and no dev ID ("<ver> branch@commit", "<ver> (unknown build ...)")."""
+    dev = find_build_id(text)
+    if dev:
+        return False, f"not a release build: the exe's ID is {dev} (expected {version})"
+    if f"{version} (unknown build" in text:
+        return False, f"not a release build: the exe says {version} (unknown build ...) (expected {version})"
+    if not re.search(r"(?<![0-9A-Za-z.])" + re.escape(version) + r"(?![0-9A-Za-z.])", text):
+        return False, f"release version {version} not found in the exe"
+    return True, f"release build {version}"
+
+
+def find_console_build(text) -> str:
+    """The ID after "FrightWorks build" in console.log ('' when the game has not printed it)."""
+    m = re.search(r"FrightWorks build ([^\r\n]*?)(?: \(dev tools on\))?[ \t]*(?:\r|\n|$)", text)
+    return m.group(1) if m else ""
+
+
+def check_release_console(found, version):
+    """(ok, message): the ID the game printed is exactly the plain version."""
+    if found == version:
+        return True, f"release build {version}"
+    return False, f"not a release build: the game printed {found or 'no build ID'} (expected exactly {version})"
+
+
 def exe_build_id(exe) -> str:
     return find_build_id(Path(exe).read_bytes().decode("latin-1"))
 
@@ -234,7 +260,7 @@ def boot_ini(disc_data, level) -> str:
 class TestGame:
     def __init__(self, name, work_dir, boot=None, hd=False, repo=REPO, src_play=None, disc_data=None, game_cmd=None,
                  extra_env=None, config_extra="", window=(1280, 720), activate_when_shown=None, dev_tools=True,
-                 build_check=True, fps60=True):
+                 build_check=True, fps60=True, release=None):
         self.name, self.repo = name, Path(repo)
         self.play = Path(work_dir) / "Play"
         self.src_play = Path(src_play) if src_play else self.repo / "Play"
@@ -243,6 +269,7 @@ class TestGame:
         self.game_cmd, self.extra_env, self.config_extra = game_cmd, dict(extra_env or {}), config_extra
         self.activate_when_shown, self.dev_tools, self.build_check = activate_when_shown, dev_tools, build_check
         self.fps60 = fps60
+        self.release = release   # a release version: the build ID must be exactly that plain version
         self.proc = None
         self.launches = 0
         self.start_time = 0.0
@@ -319,10 +346,15 @@ class TestGame:
             return "stand-in game: build ID not checked"
         if not self.build_check:
             return "build ID check SKIPPED (manual override)"
-        expected = expected_build_id(self.repo)
         exe = self.exe_path()
         if not exe.exists():  # before prepare(): the build the copy will be made from
             exe = next((self.src_play / n for n in EXE_NAMES if (self.src_play / n).exists()), exe)
+        if self.release:
+            ok, msg = check_release_exe(exe.read_bytes().decode("latin-1"), self.release)
+            if not ok:
+                raise BuildMismatch(msg)
+            return msg
+        expected = expected_build_id(self.repo)
         ok, msg = check_build(exe_build_id(exe), expected, self.repo)
         if not ok:
             raise BuildMismatch(msg)
@@ -330,6 +362,14 @@ class TestGame:
 
     def check_console_build(self):
         """After the game has started: the build ID in its own console.log (None while it has not printed it yet)."""
+        if self.release and self.build_check:
+            found = find_console_build(self.console_text())
+            if not found:
+                return None
+            ok, msg = check_release_console(found, self.release)
+            if not ok:
+                raise BuildMismatch(msg)
+            return msg
         found = find_build_id(self.console_text())
         if not found:
             return None

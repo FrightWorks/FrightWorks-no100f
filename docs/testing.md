@@ -65,7 +65,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   in Config.toml moves the saves in either layout (the launcher's **Extras > Folders** sets it). To test the installed layout without an installer,
   copy `Play\`'s exe, DLLs, `dsp_coef.bin`, `button_icons` and `texture_replacements` into a folder named `data`
   (no `portable.txt`), with `FrightWorks.exe` beside it.
-- Packaging a release zip: `tools\package-scooby.ps1 -Build -Zip` → `dist\`. It also needs ImageMagick (`magick`) on
+- Packaging a release zip: `tools\package-scooby.ps1 -Build -Zip` → `dist\` (`-Build` also brings the pinned dependencies up to date). It also needs ImageMagick (`magick`) on
   PATH, the HD texture pack in `texture_pack\ScoobyHD` (not in git) and the extracted disc in `Disc\DATA`: the pack fix
   (`tools\hd-pack-fixes.py`, run with `--required`) stops the packaging if it can't be applied.
 - **Installer** (Velopack): `tools\package-scooby.ps1 -Installer` → `dist\installer\`: `FrightWorks-win-Setup.exe`,
@@ -88,6 +88,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   ```
   Uninstall afterwards in Windows Settings > Apps (or `%LOCALAPPDATA%\FrightWorks\Update.exe --uninstall`); the data
   folders stay (delete `%LOCALAPPDATA%\FrightWorks-Data` and `Saved Games\FrightWorks` by hand for a clean slate).
+- **Release smoke**: on the tagged, clean checkout, after `-Build`, run `python tools/smoke-test.py --release <ver>` (section 4a).
 - **Release with the installer**: after the zip steps, `-Installer` on the same clean `main` (version from the
   `.csproj`), then put `dist\installer\*` (Setup.exe, the nupkgs, `releases.win.json`, `assets.win.json`) on the same
   draft release as the zip: `gh release upload v<ver> dist\installer\FrightWorks-win-Setup.exe ...`. Installed games
@@ -347,7 +348,7 @@ All jobs fail on a crash, a fault in the log or a black picture. Only a timeout 
 has a known intermittent intro hang). A check that cannot run (no numpy, no screenshot tool on Linux) is "not run", never a pass: exit code 3.
 Exit codes: 0 passed, 1 failed, 2 wrong build, 3 only checks not run. The report is `autotest\smoke-<time>\REPORT.md` (with `results.json`, shots and logs; about 250 MB per run with the HD copies, so clear old runs out of a worktree).
 For scripted runs the readiness `mode` is 11 = in play, 6 = save menu, 2 = title. On `g001` a save is `tp` to the save point, then `a`, `a`; loading from the title is `start`, `down`, `a`, `a`, `a`. On `i004` a jump is `a 30`.
-Options: `--jobs`, `--scenes`, `--slots N`, `--timeout S` (playable limit per job, 150), `--keep` (keep the `Play` copies), `--exclusive` (the machine to yourself) with `--sequential` (one job after another: solo timings), `--activate-when-shown 0|1` (sets `SDL_WINDOW_ACTIVATE_WHEN_SHOWN`), `--skip-build-check` (manual override, said in the report).
+Options: `--jobs`, `--scenes`, `--slots N`, `--timeout S` (playable limit per job, 150), `--keep` (keep the `Play` copies), `--exclusive` (the machine to yourself) with `--sequential` (one job after another: solo timings), `--activate-when-shown 0|1` (sets `SDL_WINDOW_ACTIVATE_WHEN_SHOWN`), `--skip-build-check` (manual override, said in the report), `--release <ver>` (for the build you package: the exe and `console.log` must say exactly the plain version, e.g. `1.1.3`, which a clean checkout at the tag `v<ver>` builds; a dev build of that version fails; not combinable with `--skip-build-check`; `level-sweep.py` takes it too).
 
 Measured on one PC (Ryzen 9 7900X, RTX 3090, 2026-11-07, 1280x720 windows): the three jobs at once take about 47 s after the build (h001 27 s, i004 20 s, g001 47 s, each playable after 8-14 s); one after another 85 s (11.5 + 6 + 12 s to playable). Every window held 60 fps (p95 frame time under 17 ms) whether it was in front of the others or behind, with or without `--activate-when-shown 0`: nothing in the game or runtime sets `pauseOnFocusLost` (it is off), and background windows did not stall.
 A fresh `Play` copy starts with an empty shader and pipeline cache (`UserData\Cache`), which costs about 3.4 s (h001 playable in 13.4 s cold, 10.0 s warm); each game also reads about 1 GiB of disc files into its read cache and starts 22 pipeline compile threads, so more than 3 at once will slow each one down.
