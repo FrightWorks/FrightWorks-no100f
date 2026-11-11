@@ -2,7 +2,6 @@
 #include "memory.h"
 #include "ppc_runtime.h"
 #include "system_bridge.h"
-#include "game_graphics_options.h"
 #include "runtime_log.h"
 
 #include <array>
