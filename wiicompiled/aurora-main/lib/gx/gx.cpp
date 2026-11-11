@@ -601,11 +601,11 @@ namespace {
 
 // Dev menu (F8): name the texture by its replacement key for the texture log (the shared magenta highlight
 // texture is renamed for whichever key Find highlights).
-static void note_debug_key(const gfx::TextureHandle& handle, const GXTexObj_& obj) noexcept {
+static void note_debug_key(const gfx::TextureHandle& handle, const GXTexObj_& obj, const GXTlutObj_* tlut) noexcept {
   if (!handle || (!handle->debugKey.empty() && !gfx::texture_replacement::is_highlight_handle(handle))) {
     return;
   }
-  const auto name = gfx::texture_replacement::build_texture_replacement_name(obj);
+  const auto name = gfx::texture_replacement::build_texture_replacement_name(obj, tlut);
   handle->debugKey = name.substr(0, name.rfind('.'));
 }
 
@@ -650,11 +650,11 @@ gfx::TextureHandle resolve_static_texture(const GXTexObj_& obj) {
   }
 
   gfx::TextureHandle handle;
-  if (const auto replacement = gfx::texture_replacement::find_replacement(obj); replacement.has_value()) {
+  if (const auto replacement = gfx::texture_replacement::find_replacement(obj, nullptr); replacement.has_value()) {
     handle = *replacement;
   } else {
 #if DEBUG
-    const auto name = gfx::texture_replacement::build_texture_replacement_name(obj);
+    const auto name = gfx::texture_replacement::build_texture_replacement_name(obj, nullptr);
     const auto nameStr = name.c_str();
 #else
     const auto nameStr = "GX Static Texture";
@@ -665,7 +665,7 @@ gfx::TextureHandle resolve_static_texture(const GXTexObj_& obj) {
     handle = gfx::new_static_texture_2d(obj.width(), obj.height(), obj.mip_count(), obj.format(),
                                         {static_cast<const uint8_t*>(obj.data), dataSize}, false, nameStr);
   }
-  note_debug_key(handle, obj);
+  note_debug_key(handle, obj, nullptr);
   if (canCacheUpload) {
     store_cached_texture(obj, handle);
     if (canUseSourceCache) {
@@ -718,7 +718,7 @@ gfx::TextureHandle resolve_static_palette_texture(const GXTexObj_& obj, const GX
   }
 
   gfx::TextureHandle handle;
-  if (const auto replacement = gfx::texture_replacement::find_replacement(obj); replacement.has_value()) {
+  if (const auto replacement = gfx::texture_replacement::find_replacement(obj, &tlut); replacement.has_value()) {
     handle = *replacement;
   } else {
     const u32 dataSize = GXGetTexBufferSize(static_cast<u16>(obj.width()), static_cast<u16>(obj.height()),
@@ -735,7 +735,7 @@ gfx::TextureHandle resolve_static_palette_texture(const GXTexObj_& obj, const GX
                                    {converted.data.data(), converted.data.size()}, false, "GX Static Palette Texture");
     handle->hasArbitraryMips = converted.hasArbitraryMips;
   }
-  note_debug_key(handle, obj);
+  note_debug_key(handle, obj, &tlut);
   if (!obj.no_cache() && !tlut.no_cache()) {
     store_cached_texture(obj, handle, tlut.tlutObjId, tlut.tlutDataVersion);
     if (canUseSourceCache) {

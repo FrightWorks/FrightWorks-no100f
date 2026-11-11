@@ -148,8 +148,8 @@ Texture log ("Log every texture" checkbox, or env `NO100F_TEXLOG=1` at start): t
 each distinct sampler + GX state in each scene appends a row to `Play\devmenu_texlog.csv` (scene, key, replacement, texmap,
 size, wrap, filters, mips/LODs, alpha compare, blend, z test/func/write, z-before-tex, colour/alpha write, uploaded size).
 Disc textures without a pack file are logged too (every static texture is named at upload, `TextureRef::debugKey`).
-Take it with HD on: aurora keeps palette (TLUT) mirrors only when `texture_replacements = true`, so with HD off every
-C4/C8/C14X2 key gets a zero palette hash. Rows tagged `none` were drawn before the scene ID was set (boot, first frames).
+Palette (TLUT) hashes come from the palette bound at the draw, so they are real with HD on or off.
+Rows tagged `none` were drawn before the scene ID was set (boot, first frames).
 
 Scripts around the dev menu: `tools\debug\texhunt\` (`look.ps1` open at a spot, `spots-run.ps1` shots, `hunt.ps1` sessions;
 list in `tools\debug\README.md`). "Which geometry samples this texture?": `texhunt\tint-pack.py --hip <HIP> --match <name>

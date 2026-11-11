@@ -10,10 +10,10 @@
 namespace aurora::gfx::texture_replacement {
 void initialize() noexcept;
 void shutdown() noexcept;
-void register_tlut(const GXTlutObj* obj, const void* data, GXTlutFmt format, uint16_t entries) noexcept;
-void load_tlut(const GXTlutObj* obj, uint32_t idx) noexcept;
-std::optional<TextureHandle> find_replacement(const GXTexObj_& obj) noexcept;
-std::string build_texture_replacement_name(const GXTexObj_& obj) noexcept;
+// `tlut`: for a palette texture, the palette the draw uses (the replayed GX state's loadedTluts[obj.tlut]); it names the
+// palette part of the key. Without one a palette texture is keyed with palette hash 0 (nullptr for non-palette textures).
+std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlutObj_* tlut) noexcept;
+std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj_* tlut) noexcept;
 // Dev menu (F8): whether the replacement with this file name (no extension) has been drawn since start.
 bool replacement_used(std::string_view name) noexcept;
 // Dev menu (F8): forget them (new level); the next take_highlight_change returns true.

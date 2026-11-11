@@ -2,6 +2,7 @@
 // texture list (filter, sort, name lookup), and the
 // replacement index's folder order and lookup order (aurora's replacement_layers.hpp, which needs no GPU).
 #include "no100f_texture_list.h"
+#include "palette_slice.hpp"
 #include "no100f_texture_packs.h"
 #include "replacement_layers.hpp"
 
@@ -195,6 +196,31 @@ int main() {
         assert(!no100f_texture_list::PaletteUnknown({"tex1_128x128_0000000000000000_14"}));  // no palette part
         assert(std::string(no100f_texture_list::PackColumn(-1)) == "-" && std::string(no100f_texture_list::PackColumn(0)) == "NO" &&
                std::string(no100f_texture_list::PackColumn(1)) == "yes");
+    }
+
+    // The palette bytes a palette texture's name hashes (texture_replacement's TLUT part): min..max index, in bytes.
+    {
+        using aurora::gfx::kPaletteFormatC14X2;
+        using aurora::gfx::kPaletteFormatC4;
+        using aurora::gfx::kPaletteFormatC8;
+        using aurora::gfx::referenced_palette_slice;
+        const uint8_t c8[] = {3, 7, 5, 200};
+        const auto a8 = referenced_palette_slice(kPaletteFormatC8, c8, 4, 256 * 2);
+        assert(a8 && a8->offset == 6 && a8->size == 2 * (200 + 1 - 3));
+        const uint8_t c4[] = {0x21, 0x5A};  // nibbles 2 1 5 10
+        const auto a4 = referenced_palette_slice(kPaletteFormatC4, c4, 2, 16 * 2);
+        assert(a4 && a4->offset == 2 && a4->size == 2 * 10);
+        const uint8_t c14[] = {0xC0, 0x05, 0x00, 0x09};  // big-endian 0xC005 -> 5 (top 2 bits unused), 9
+        const auto a14 = referenced_palette_slice(kPaletteFormatC14X2, c14, 4, 16 * 2);
+        assert(a14 && a14->offset == 10 && a14->size == 2 * 5);
+        assert(!referenced_palette_slice(kPaletteFormatC8, c8, 4, 100 * 2));  // indices run past the palette
+        assert(!referenced_palette_slice(kPaletteFormatC8, nullptr, 4, 512));
+        assert(!referenced_palette_slice(kPaletteFormatC8, c8, 0, 512));
+        assert(!referenced_palette_slice(/*I8*/ 1, c8, 4, 512));  // not a palette format
+        // One texture's slice does not depend on any palette bytes: the hash is of the draw's own palette
+        const uint8_t one[] = {0};
+        const auto a0 = referenced_palette_slice(kPaletteFormatC8, one, 1, 2);
+        assert(a0 && a0->offset == 0 && a0->size == 2);
     }
 
     fs::remove_all(root);
