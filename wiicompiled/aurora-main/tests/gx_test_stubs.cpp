@@ -2,6 +2,7 @@
 // full renderer, so the test binary links without the WebGPU runtime.
 
 #include "gx/gx.hpp"
+#include "gfx/bloom.hpp"
 #include "gfx/clear.hpp"
 #include "gfx/common.hpp"
 #include "gfx/depth_peek.hpp"
@@ -91,6 +92,11 @@ void note_camera(const Mat4x4<float>&, const webgpu::Viewport&) noexcept {}
 void note_solid_surface(HashType) noexcept {}
 bool is_solid_surface(HashType) noexcept { return false; }
 } // namespace aurora::gfx::scene_stage
+
+namespace aurora::gfx::bloom {
+bool wanted() noexcept { return false; }
+bool is_light_texture(TextureRef&) noexcept { return false; }
+} // namespace aurora::gfx::bloom
 
 namespace aurora::webgpu {
 GraphicsConfig g_graphicsConfig{};

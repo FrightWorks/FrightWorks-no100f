@@ -1,4 +1,5 @@
 add_library(aurora_gx STATIC
+        lib/gfx/bloom.cpp
         lib/gfx/clear.cpp
         lib/gfx/common.cpp
         lib/gfx/depth_peek.cpp

@@ -18,7 +18,6 @@ extern "C" uint8_t* aurora_load_png_rgba(const char* path, uint32_t* width, uint
 #include "controller_button_names.h"
 #include "controller_mapping_wizard.h"
 #include "input_bindings.h"
-#include "game_graphics_options.h"
 #include "music_attenuation.h"
 #include "runtime_config.h"
 #include "display_settings.h"
@@ -143,7 +142,6 @@ std::atomic<bool> g_vsync{RuntimeConfigFile::VSync(false)};
 #if defined(__APPLE__)
 bool g_metalFxSpatialUpscaling = RuntimeConfigFile::MetalFxSpatialUpscaling(false);
 #endif
-uint32_t g_disabledPostProcessingPaths = RuntimeConfigFile::DisabledPostProcessingPaths(0);
 std::array<int32_t, PAD_MAX_CONTROLLERS> g_configuredControllerIndices = [] {
     std::array<int32_t, PAD_MAX_CONTROLLERS> indices{};
     indices.fill(std::numeric_limits<int32_t>::min());
@@ -1465,31 +1463,6 @@ void DrawVideoSettings() {
         Hint("Used when the game goes fullscreen (F11 or Display mode).");
     }
 #endif
-#ifdef AURORA_HAS_SCENE_STAGE
-    {
-        // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
-        const int percent = std::clamp(RuntimeConfigFile::AmbientOcclusion(), 0, 100);
-        std::string current = std::to_string(percent) + "%";
-        for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
-            if (level.percent == percent) current = level.name;
-        }
-        RowLabel("Ambient occlusion", labelWidth, controlWidth);
-        if (ImGui::BeginCombo("##ambientocclusion", current.c_str())) {
-            for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
-                const bool selected = level.percent == percent;
-                if (ImGui::Selectable(level.name, selected) && !selected) {
-                    aurora_set_ambient_occlusion(static_cast<float>(level.percent) / 100.0f);
-                    RuntimeConfigFile::SetAmbientOcclusion(level.percent);
-                }
-                if (selected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        Hint("Soft shade where surfaces meet: in corners, creases and under things.");
-    }
-#endif
 #ifdef AURORA_HAS_INK_OUTLINES
     {
         const int level = std::clamp(RuntimeConfigFile::InkOutlines(), 0, 2);
@@ -1608,28 +1581,61 @@ void DrawVideoSettings() {
     }
 #endif
 
-    SectionTitle("Advanced");
-    struct EffectFlag {
-        const char* label;
-        uint32_t flag;
-    };
-    static constexpr std::array<EffectFlag, 1> kEffectFlags = {{
-        {"Disable bloom", 0x10u},
-    }};
-    for (const auto& effect : kEffectFlags) {
-        bool disabled = (g_disabledPostProcessingPaths & effect.flag) != 0;
-        if (Toggle(effect.label, &disabled)) {
-            if (disabled) {
-                g_disabledPostProcessingPaths |= effect.flag;
-            } else {
-                g_disabledPostProcessingPaths &= ~effect.flag;
-            }
-            RuntimeGameGraphicsOptions::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
-            RuntimeConfigFile::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
+#if defined(AURORA_HAS_SCENE_STAGE) || defined(AURORA_HAS_BLOOM)
+    SectionTitle("Experimental");
+#endif
+#ifdef AURORA_HAS_SCENE_STAGE
+    {
+        // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
+        const int percent = std::clamp(RuntimeConfigFile::AmbientOcclusion(), 0, 100);
+        std::string current = std::to_string(percent) + "%";
+        for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
+            if (level.percent == percent) current = level.name;
         }
+        RowLabel("Ambient occlusion", labelWidth, controlWidth);
+        if (ImGui::BeginCombo("##ambientocclusion", current.c_str())) {
+            for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
+                const bool selected = level.percent == percent;
+                if (ImGui::Selectable(level.name, selected) && !selected) {
+                    aurora_set_ambient_occlusion(static_cast<float>(level.percent) / 100.0f);
+                    RuntimeConfigFile::SetAmbientOcclusion(level.percent);
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        Hint("Soft shade where surfaces meet: in corners, creases and under things. You might see visual glitches.");
     }
-    ImGui::SameLine();
-    ImGui::TextDisabled("(from the next scene)");
+#endif
+#ifdef AURORA_HAS_BLOOM
+    {
+        // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
+        const int percent = std::clamp(RuntimeConfigFile::Bloom(), 0, 100);
+        std::string current = std::to_string(percent) + "%";
+        for (const auto& level : RuntimeConfigFile::kBloomLevels) {
+            if (level.percent == percent) current = level.name;
+        }
+        RowLabel("Bloom", labelWidth, controlWidth);
+        if (ImGui::BeginCombo("##bloom", current.c_str())) {
+            for (const auto& level : RuntimeConfigFile::kBloomLevels) {
+                const bool selected = level.percent == percent;
+                if (ImGui::Selectable(level.name, selected) && !selected) {
+                    aurora_set_bloom(static_cast<float>(level.percent) / 100.0f);
+                    RuntimeConfigFile::SetBloom(level.percent);
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        Hint("A soft glow around lit windows, lamp light, fire and sparkles. You might see visual glitches.");
+    }
+#endif
+
+    SectionTitle("Advanced");
     if (Toggle("Disable copy filter", &g_disableCopyFilter)) {
         aurora_set_disable_copy_filter(g_disableCopyFilter);
         RuntimeConfigFile::SetDisableCopyFilter(g_disableCopyFilter);
@@ -2319,7 +2325,6 @@ void InitializeRuntimeSettings() noexcept {
     MusicAttenuation::SetUiVolume(static_cast<float>(g_uiVolumePercent) / 100.0f);
     MusicAttenuation::SetVoicesVolume(static_cast<float>(g_voicesVolumePercent) / 100.0f);
     MusicAttenuation::SetEnabled(g_attenuateMusicWhenMediaPlays);
-    RuntimeGameGraphicsOptions::SetDisabledPostProcessingPaths(g_disabledPostProcessingPaths);
 #if defined(__APPLE__)
     aurora_set_metalfx_spatial(g_metalFxSpatialUpscaling);
 #endif

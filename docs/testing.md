@@ -254,6 +254,7 @@ Then a solid surface drawn a second time see-through (the game's two-layer mater
 Then a late blended surface in front of a second layer stays after it, and the second layers of solid draws that merged are recognised too.
 Then a frame split mid-way, three ways (between two flushes, with the tail pending, in the middle of the tail), has no stage at all, and the next whole frame has it again.
 Then ink outlines: a solid quad in front of nothing gets a line on its own edge only (not a pixel inside, not on what is drawn after the stage), the outline view shows it black on white, and off nothing changes. Bold's line is wider with nothing inside it, something thinner than the line keeps its colour, and a flat wall and floor stay clean. With no camera that can be inverted, the stage leaves the picture alone.
+Then bloom: of two equally bright white quads, the one whose texture is on the light list glows past its edge and the other does not, either way round; a listed quad in the see-through tail glows too, and a see-through surface drawn in front of a listed quad covers its glow; the source view shows the listed quad alone, and off nothing changes and the targets are freed.
 CTest runs it three times: as is, with `AURORA_GFX_FLAGS=validate`, and with `AURORA_GFX_FLAGS=validate,nofloat32blend`, which hides that feature.
 Its transparency cases submit a cloud before late opaque foliage and check blending, foreground
 occlusion, soft cut-out fringes, translucent submission order, viewport/scissor snapshots and clear/HUD boundaries.
@@ -451,6 +452,10 @@ Occlusion shows the **Ambient occlusion** setting's shading alone at full streng
 `ao PERCENT` in `devmenu.txt` switches the setting's strength for one run to compare (0 off, 35 low, 65 medium).
 Outlines shows the **Ink outlines** lines alone, black on white (Bold when the setting is off): lines belong on silhouettes, never across flat walls or floors, and grass and stems keep no solid black.
 `ink LEVEL` in `devmenu.txt` switches them for one run (0 off, 1 thin, 2 bold).
+
+**Bloom view** (F8, or `bloomview MODE` in `Play\devmenu.txt`: 0 off, 1 glow, 2 source) shows the **Bloom** setting's glow alone at full strength, or its source: the draws of the game's light textures alone (`no100f_light_textures.cpp`).
+A window, lamp or flame that stays black in the source is missing from the list; anything else in it is listed by mistake.
+`bloom PERCENT` switches the setting for one run, `lighttex add KEY` (or `del`) tries a texture, by its texture pack name; `NO100F_TEXLOG=1` at start logs every texture a level draws, with its name, to `devmenu_texlog.csv`.
 
 **F3** (developer tools on) starts / stops a video of the game: `Videos\FrightWorks_<date>_<time>.mp4` beside the
 launcher (`Play\Videos` in a source build) and a `.txt` with the build, picture size, Scooby's position at the start and

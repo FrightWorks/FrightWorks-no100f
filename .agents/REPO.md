@@ -221,7 +221,7 @@ The dev menu (see Facts) is the way to script a run.
 - **Command file:** `devmenu.txt` in the game's working folder (`Play/` for a normal run).
   It is read every 30 frames, then deleted, and results go to `devmenu.log`.
   It waits until the game is in play, except `skip` and `scene`.
-  Useful commands: `scene ID`, `cam X Y Z YAW PITCH`, `camspin DEG`, `cammove DX DY DZ`, `freecam on|off`, `where`, `perf`, `mvview MODE [SCALE]`, `stageview MODE`, `ao PERCENT`, `ink LEVEL`, `save NAME`, `cutscene`, `skip`.
+  Useful commands: `scene ID`, `cam X Y Z YAW PITCH`, `camspin DEG`, `cammove DX DY DZ`, `freecam on|off`, `where`, `perf`, `mvview MODE [SCALE]`, `stageview MODE`, `ao PERCENT`, `ink LEVEL`, `bloom PERCENT`, `bloomview MODE`, `lighttex add|del KEY`, `save NAME`, `cutscene`, `skip`.
   The full list is at the top of `PollCommandFile` in `wiicompiled/runtime/src/no100f_devmenu.cpp` and in the `game-logic-debug` skill.
 - **Presses:** `devmenu_press.txt`, read every 30 frames even outside play.
   Each line is `BUTTON[+BUTTON] [FRAMES] [cutscene]`, with buttons `a b x y z start up down left right` and 10 frames by default.
@@ -330,7 +330,7 @@ Never name a session `main`.
   With nothing using it, nothing is split or recorded.
   It records the solid scene's camera (projection and viewport of the last perspective draw that wrote depth) to turn depth back into positions.
   `stageview 1` (or F8 > Scene stage view) tints what is drawn before it, `2` shows the solid scene's depth, `3` the ambient occlusion alone, `4` the ink outlines alone.
-- Ambient occlusion (`[video] ambient_occlusion`, percent; F10 > Video > Picture and the launcher: Off, Low 35, Medium 65; any other value up to 100, set by hand, shows as its percentage) runs at the scene stage: at half resolution from the depth alone, blurred keeping edges, then multiplied into the solid scene's colour (never its alpha).
+- Ambient occlusion (`[video] ambient_occlusion`, percent; experimental; F10 > Video > Experimental and the launcher's Experimental section: Off, Low 35, Medium 65; any other value up to 100, set by hand, shows as its percentage) runs at the scene stage: at half resolution from the depth alone, blurred keeping edges, then multiplied into the solid scene's colour (never its alpha).
   Its tuning is at the top of `scene_stage.cpp`; the angle bias keeps the game's low-poly walls and rocks from darkening at every polygon edge.
   `ao PERCENT` in `devmenu.txt` sets it for one run without changing the setting.
   Its targets exist only while it is on or the occlusion view is showing, and are freed at the next frame.
@@ -339,6 +339,13 @@ Never name a session `main`.
   Line width follows the picture's height, and lines fade out from 35 to 80 units.
   Tuning is at the top of `scene_stage.cpp`.
   `ink LEVEL` in `devmenu.txt` sets it for one run without changing the setting.
+- Bloom (`[video] bloom`, percent; experimental; F10 > Video > Experimental and the launcher's Experimental section: Off, Low 40, Medium 70, High 100) makes the game's lights glow: lit windows, lamps and their light cones, fire, the moon, sparkles.
+  Nothing in how the game draws marks its lights (its lit windows are painted textures no brighter than its moonlit paths, its fire and light cones are blended like its fog, its chimney smoke adds light), so brightness or blending would make the wrong things glow.
+  They are listed by texture pack name in `no100f_light_textures.cpp`; a draw that samples one is a light.
+  With bloom on, the frame also splits after the see-through tail, which marks where the tail ends (`gfx/bloom.cpp`, the scene stage's frames only).
+  At the scene stage, the light draws of the solid scene and the tail are drawn again, alone over black, against the depth kept there (the faded walls the game draws later with depth writes, at the start of `i004`, would hide them), blurred and added before the tail is drawn, so glass, mist and smoke in front of a light cover its glow.
+  Only the coloured parts of a light texture glow, and near white (the moon, the sparkles): the cyan lamps' texture also holds their grey pole, which the game draws distant lamps' poles with.
+  Finding light textures: `NO100F_TEXLOG=1` logs every texture a level draws to `devmenu_texlog.csv`, `lighttex add KEY` in `devmenu.txt` makes one glow for this run, and `bloomview 2` shows what glows.
 - MSAA: on Windows x64 and Linux (x86_64 and aarch64) the Vulkan 2x and 8x modes need the patched Dawn package that the build downloads from FrightWorks/dawn-build (release `v20260603.191052-msaa`).
   Other platforms (Windows ARM64, macOS) use the stock package and play 2x and 8x as 4x on Vulkan, with a log line.
   A new Dawn version quietly goes back to stock (2x and 8x then play as 4x on Vulkan) until the pins are updated (`docs/testing.md`).

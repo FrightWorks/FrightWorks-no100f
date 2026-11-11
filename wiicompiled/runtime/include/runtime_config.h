@@ -38,6 +38,7 @@ struct RuntimeUserConfig {
     std::optional<int32_t> motionBlur;  // [video] motion_blur: strength in percent, 0 = off (MotionBlurShutter)
     std::optional<int32_t> ambientOcclusion;  // [video] ambient_occlusion: strength in percent, 0 = off
     std::optional<int32_t> inkOutlines;  // [video] ink_outlines: 0 off, 1 thin, 2 bold
+    std::optional<int32_t> bloom;  // [video] bloom: strength in percent, 0 = off
     std::optional<int32_t> gpuCompat;  // 0 auto (by graphics adapter), 1 on, 2 off (AuroraGpuCompat)
     std::optional<int32_t> windowPosX;
     std::optional<int32_t> windowPosY;
@@ -68,7 +69,6 @@ struct RuntimeUserConfig {
     std::optional<float> hdrPaperWhiteNits;
     std::optional<float> hdrPeakNits;
     std::optional<bool> vsync;          // [video] vsync, presents wait for the display (Windows)
-    std::optional<uint32_t> disabledPostProcessingPaths;
     std::optional<float> audioVolume;
     std::optional<float> audioMusicVolume;
     std::optional<float> audioSoundEffectsVolume;
@@ -372,11 +372,14 @@ inline void EnsureConfigFile() {
               "fps60 = false\n"
               "# motion blur strength in percent: 0 = off, 10 = extra low, 20 = low, 30 = medium, 40 = high, 50 = extra high\n"
               "motion_blur = 0\n"
-              "# ambient occlusion (shade in creases, corners and under things) in percent: 0 = off, 35 = low, 65 = medium,\n"
-              "# 100 = high\n"
+              "# ambient occlusion (experimental: shade in creases, corners and under things) in percent: 0 = off, 35 = low,\n"
+              "# 65 = medium\n"
               "ambient_occlusion = 0\n"
               "# cartoon ink outlines: 0 = off, 1 = thin, 2 = bold\n"
               "ink_outlines = 0\n"
+              "# bloom (experimental: a soft glow around lit windows, lamp light, fire and sparkles) in percent: 0 = off,\n"
+              "# 40 = low, 70 = medium, 100 = high\n"
+              "bloom = 0\n"
               "# 0 = original 4:3, 1 = 16:9, 2 = fill the screen, 3 = cinematic 2.39:1\n"
               "aspect_mode = 3\n"
               "display_mode = \"borderless\"\n"
@@ -549,6 +552,9 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
     if (auto value = FindConfigInt(document, "video", "ink_outlines"); value && *value >= 0 && *value <= 2) {
         config.inkOutlines = *value;
     }
+    if (auto value = FindConfigInt(document, "video", "bloom"); value && *value >= 0 && *value <= 100) {
+        config.bloom = *value;
+    }
     if (auto value = FindConfigInt(document, "video", "gpu_compat"); value && *value >= 0 && *value <= 2) {
         config.gpuCompat = *value;
     }
@@ -614,10 +620,6 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
             if (*value == kModes[i]) config.cutoutMode = i;
     }
     config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
-    if (auto value = FindConfigUint(document, "video", "disabled_post_processing_paths");
-        value && (*value & ~0x10u) == 0) {
-        config.disabledPostProcessingPaths = *value & 0x10u;
-    }
 
     auto readVolume = [&](std::string_view key) -> std::optional<float> {
         auto value = FindConfigFloat(document, "audio", key);
@@ -910,13 +912,6 @@ inline bool SetShowFps(bool value) {
     return WriteSetting("video", "show_fps", value ? "true" : "false");
 }
 
-inline bool SetDisabledPostProcessingPaths(uint32_t value) {
-    Mutable().disabledPostProcessingPaths = value;
-    std::ostringstream formatted;
-    formatted << "0x" << std::hex << std::uppercase << value;
-    return WriteSetting("video", "disabled_post_processing_paths", formatted.str());
-}
-
 inline bool SetControllerButton(size_t index, std::string value) {
     if (index >= kControllerButtonKeys.size()) {
         return false;
@@ -1123,6 +1118,21 @@ inline constexpr const char* kInkOutlineLevels[] = {"Off", "Thin", "Bold"};
 inline bool SetInkOutlines(int32_t value) {
     Mutable().inkOutlines = value;
     return WriteSetting("video", "ink_outlines", std::to_string(value));
+}
+
+// Bloom strength in percent, 0 = off (aurora_set_bloom takes it as 0 to 1). The menus offer the levels below; any other
+// value from 0 to 100 works too.
+inline int32_t Bloom(int32_t fallback = 0) {
+    return Get().bloom.value_or(fallback);
+}
+
+inline constexpr MotionBlurLevel kBloomLevels[] = {
+    {"Off", 0}, {"Low", 40}, {"Medium", 70}, {"High", 100},
+};
+
+inline bool SetBloom(int32_t value) {
+    Mutable().bloom = value;
+    return WriteSetting("video", "bloom", std::to_string(value));
 }
 
 inline bool SetForceAspect169(bool value) {
@@ -1337,10 +1347,6 @@ inline int CutoutMode(int fallback = 3) {
 // gates it on TextureReplacements() as well.
 inline bool TextureDumps(bool fallback = false) {
     return Get().textureDumps.value_or(fallback);
-}
-
-inline uint32_t DisabledPostProcessingPaths(uint32_t fallback = 0) {
-    return Get().disabledPostProcessingPaths.value_or(fallback) & 0x10u;
 }
 
 inline std::string GraphicsApi(std::string fallback = "auto") {
@@ -1559,6 +1565,9 @@ inline void LogLoadedConfig() {
             }
             if (config.inkOutlines) {
                 std::cout << " ink_outlines=" << *config.inkOutlines;
+            }
+            if (config.bloom) {
+                std::cout << " bloom=" << *config.bloom;
             }
             if (config.skipUnreadyPipelines) {
                 std::cout << " skip_unready_pipelines=" << (*config.skipUnreadyPipelines ? "true" : "false");
