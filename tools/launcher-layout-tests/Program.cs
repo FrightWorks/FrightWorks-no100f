@@ -517,10 +517,15 @@ static class LauncherLayoutTests
             var sys = Path.Combine(fixture, "Disc", "DATA", "sys");
             Directory.CreateDirectory(sys);
             File.WriteAllBytes(Path.Combine(sys, "boot.bin"), System.Text.Encoding.ASCII.GetBytes("GIHE78\0\u0001"));
-            string stub = Path.Combine(game, DataPaths.GameExe), marker = Path.Combine(game, "started.txt");
-            File.WriteAllText(stub, "#!/bin/sh\npwd > started.txt\n");
+            string stub = Path.Combine(game, DataPaths.GameExe), marker = Path.Combine(game, "started.txt"),
+                release = Path.Combine(game, "release.txt");
+            // The stand-in runs until the test lets it go (the launcher comes back as soon as the game ends), 20 s at most,
+            // so a failed check leaves no process behind.
+            File.WriteAllText(stub, "#!/bin/sh\npwd > started.txt\ni=0\n" +
+                                    "while [ ! -f release.txt ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i + 1)); done\n");
             File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             window.CloseBoards();
+            window.launchInFixture = true;  // services stay off (no controller polling); only the launch is allowed
             Pump();
             var play = window.scene.SignCenter("play")!.Value;
             var at = window.scene.TranslatePoint(play, window)!.Value;
@@ -535,6 +540,15 @@ static class LauncherLayoutTests
             Check(File.Exists(marker), "Play did not start the game");
             Check(File.ReadAllText(marker).Trim() == game, "The game did not start in its own folder");
             Check(window.WindowState == WindowState.Minimized, "The launcher did not minimise when the game started");
+
+            // A clean quit brings the launcher back too (the pad can't reach a minimised one).
+            File.WriteAllText(release, "");
+            for (var waited = System.Diagnostics.Stopwatch.StartNew(); window.WindowState != WindowState.Normal && waited.Elapsed.TotalSeconds < 10;)
+            {
+                Thread.Sleep(25);
+                Pump();
+            }
+            Check(window.WindowState == WindowState.Normal, "The launcher stayed minimised after the game quit");
 
             // A game that ends with an error brings the launcher back with a message (it used to look like Play did nothing).
             File.WriteAllText(stub, "#!/bin/sh\nexit 3\n");
