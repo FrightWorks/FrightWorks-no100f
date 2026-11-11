@@ -1,5 +1,7 @@
-// Dev tools texture pack switcher: the pack list and cycle order, the dev tools gate, the command words, and the
+// Dev tools texture pack switcher: the pack list and cycle order, the dev tools gate, the command words, the dev menu's
+// texture list (filter, sort, name lookup), and the
 // replacement index's folder order and lookup order (aurora's replacement_layers.hpp, which needs no GPU).
+#include "no100f_texture_list.h"
 #include "no100f_texture_packs.h"
 #include "replacement_layers.hpp"
 
@@ -150,9 +152,49 @@ int main() {
         assert(look(false, {5, 6, 3}) == "usual wildcard");
         assert(look(true, {1, 2, 3}) == "pack exact");
         assert(look(true, {5, 2, 3}) == "pack wildcard");  // the usual chain's tlut wildcard (2) is not consulted
-        assert(look(true, {4}) == "none");                  // only in the usual chain: missing from the pack
+        assert(look(true, {4}) == "none");                  // only in the usual chain: not in the pack, so the original shows
         assert(look(true, {5, 6}) == "none");
         assert(look(false, {4}) == "usual only");
+    }
+
+    // The level's texture list: filter, sort, `texfind` name lookup.
+    {
+        using no100f_texture_list::Row;
+        using no100f_texture_list::Sort;
+        const std::vector<Row> rows{
+            {"tex1_256x256_aaaa_14", 256, 256, "CMPR", 1, true},
+            {"tex1_64x64_bbbb_0", 64, 64, "I4", 0, false},
+            {"tex1_512x128_cccc_dddd_9", 512, 128, "C8", 0, true},
+            {"tex1_64x64_bbbc_14", 64, 64, "CMPR", 1, false},
+        };
+        const auto names = [&](const std::string& filter, Sort sort, bool onlyMissing) {
+            std::string out;
+            for (const Row* row : no100f_texture_list::Shown(rows, filter, sort, onlyMissing)) out += row->name.substr(5, 3) + ",";
+            return out;
+        };
+        assert(names("", Sort::FirstDrawn, false) == "256,64x,512,64x,");
+        assert(names("", Sort::Name, false) == "256,512,64x,64x,");
+        assert(names("", Sort::LargestFirst, false) == "256,512,64x,64x,");  // 65536, 65536 tie keeps first-drawn order
+        assert(names("", Sort::Format, false) == "512,256,64x,64x,");  // C8, CMPR, CMPR, I4
+        assert(names("cmpr", Sort::FirstDrawn, false) == "256,64x,");
+        assert(names("64x64 CMPR", Sort::FirstDrawn, false) == "64x,");  // every word must match
+        assert(names("BBBB", Sort::FirstDrawn, false) == "64x,");
+        assert(names("nothing", Sort::FirstDrawn, false).empty());
+        assert(names("", Sort::FirstDrawn, true) == "64x,512,");  // only the textures the pack lacks
+        assert(no100f_texture_list::CleanName("  tex1_64x64_bbbb_0.PNG \r") == "tex1_64x64_bbbb_0");
+        assert(no100f_texture_list::CleanName("tex1_64x64_bbbb_0.dds") == "tex1_64x64_bbbb_0");
+        assert(no100f_texture_list::CleanName(" Off ").empty());
+        assert(no100f_texture_list::CleanName("").empty());
+        size_t matches = 0;
+        assert(no100f_texture_list::Find(rows, "tex1_64x64_bbbb_0", &matches)->name == "tex1_64x64_bbbb_0" && matches == 1);
+        assert(no100f_texture_list::Find(rows, "cccc", &matches)->name == "tex1_512x128_cccc_dddd_9" && matches == 1);
+        assert(no100f_texture_list::Find(rows, "bbb", &matches) == nullptr && matches == 2);  // two rows: ask for more letters
+        assert(no100f_texture_list::Find(rows, "zzzz", &matches) == nullptr && matches == 0);
+        assert(no100f_texture_list::PaletteUnknown({"tex1_128x128_aaaa_0000000000000000_9"}));
+        assert(!no100f_texture_list::PaletteUnknown({"tex1_128x128_aaaa_bbbb_9"}));
+        assert(!no100f_texture_list::PaletteUnknown({"tex1_128x128_0000000000000000_14"}));  // no palette part
+        assert(std::string(no100f_texture_list::PackColumn(-1)) == "-" && std::string(no100f_texture_list::PackColumn(0)) == "NO" &&
+               std::string(no100f_texture_list::PackColumn(1)) == "yes");
     }
 
     fs::remove_all(root);

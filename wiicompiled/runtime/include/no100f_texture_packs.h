@@ -2,7 +2,7 @@
 
 // Dev tools texture pack switcher (F6, the dev menu's Textures tab, `texpack` in devmenu.txt). Packs are folders,
 // <UserData>/texture_packs/<name>/, any layout inside (the same file names as texture_replacements); the selected one is
-// the only source of replacements in aurora (aurora_set_texture_pack); what it lacks draws magenta. This header is the part that needs
+// the only source of replacements in aurora (aurora_set_texture_pack); what it lacks keeps the game's original. This header is the part that needs
 // neither the game nor aurora: the pack list, the cycle order, the command words and the dev tools gate.
 
 #include <algorithm>

@@ -56,8 +56,8 @@ inline std::filesystem::path pack_root(const std::filesystem::path& userPath, st
 }
 
 // One replacement lookup. `candidates` are the keys to try, most specific first (exact, TLUT wildcard, texture
-// wildcard). With a texture pack selected only the pack's index is searched: a texture it doesn't have is missing, and
-// never falls back to the usual chain (user texture_replacements, mods, the built-in HD pack). With no pack the usual
+// wildcard). With a texture pack selected only the pack's index is searched: a texture it doesn't have is not found (the
+// game's original is drawn), and it never falls back to the usual chain (user texture_replacements, mods, the built-in HD pack). With no pack the usual
 // index is searched, as it always was.
 template <class Map>
 const typename Map::mapped_type* find_active(const Map& pack, const Map& usual, bool packSelected,

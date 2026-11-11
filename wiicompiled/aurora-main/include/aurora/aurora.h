@@ -285,12 +285,12 @@ size_t aurora_get_button_icon_folder(char* out, size_t size);
 bool aurora_texture_replacement_used(const char* name);
 // Dev menu (F8): forget what has been drawn (the dev menu tracks drawn per level).
 void aurora_texture_replacement_reset_used();
-// Dev menu (F8): draw the replacement with this file name (no extension) solid magenta; nullptr or "" = off.
+// Dev menu (F8): draw the texture with this replacement file name (no extension) solid magenta, whether or not it has a
+// replacement; nullptr or "" = off. Needs aurora_texture_list_enable(true) when texture replacements are off.
 void aurora_texture_replacement_highlight(const char* name);
 // Dev tools texture pack switcher: use <UserData>/texture_packs/<name>/ as the only replacements (not the user's
-// texture_replacements, mods or the built-in HD pack); a texture the pack lacks draws solid magenta. nullptr or "" =
-// no pack (the usual chain). Applied on the next frame; asking for the
-// pack in use again rescans its folder. False when the name isn't a plain folder name.
+// texture_replacements, mods or the built-in HD pack); a texture the pack lacks keeps the game's original. nullptr or
+// "" = no pack (the usual chain). Applied on the next frame; asking for the pack in use again rescans its folder. False when the name isn't a plain folder name.
 bool aurora_set_texture_pack(const char* name);
 // The pack asked for ("" = none), written like aurora_get_button_icon_folder; and the number of replacement files found
 // in the applied one.
@@ -299,6 +299,20 @@ size_t aurora_get_texture_pack_entries();
 // Dev menu (F8): log every texture's draw states to devmenu_texlog.csv, rows tagged with this scene; nullptr or
 // "" = off.
 void aurora_texture_log(const char* scene);
+// Dev menu (F8) texture list: every texture the game has resolved since aurora_texture_replacement_reset_used (one row
+// per texture, not per draw). Off until switched on (dev tools only). The list changes when the generation does.
+typedef struct {
+  char name[96];      // replacement file name without extension: what a texture pack or a dump needs
+  uint32_t width;
+  uint32_t height;
+  char format[8];     // GX texture format: I4, CMPR, ...
+  int8_t pack;        // -1 no pack selected, 0 the selected pack has no file for it, 1 it has
+  int8_t usual;       // 1 the usual chain (texture_replacements, mods, HD pack) has a file for it
+} AuroraTextureInfo;
+void aurora_texture_list_enable(bool on);
+uint32_t aurora_texture_list_generation();
+// Copies up to `max` rows (in the order first drawn) into `out`; returns how many there are in all.
+size_t aurora_texture_list_copy(AuroraTextureInfo* out, size_t max);
 AuroraMetalFXStatus aurora_get_metalfx_status();
 
 AuroraBackend aurora_get_backend();

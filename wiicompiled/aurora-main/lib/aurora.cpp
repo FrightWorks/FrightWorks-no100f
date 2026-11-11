@@ -2693,6 +2693,43 @@ size_t aurora_get_texture_pack_entries() {
   return 0;
 #endif
 }
+void aurora_texture_list_enable(bool on) {
+#ifdef AURORA_ENABLE_GX
+  aurora::gfx::texture_replacement::set_texture_list_enabled(on);
+#else
+  (void)on;
+#endif
+}
+uint32_t aurora_texture_list_generation() {
+#ifdef AURORA_ENABLE_GX
+  return aurora::gfx::texture_replacement::texture_list_generation();
+#else
+  return 0;
+#endif
+}
+size_t aurora_texture_list_copy(AuroraTextureInfo* out, size_t max) {
+#ifdef AURORA_ENABLE_GX
+  const auto list = aurora::gfx::texture_replacement::texture_list();
+  static const char* const kFormats[16] = {"I4",  "I8",  "IA4", "IA8", "RGB565", "RGB5A3", "RGBA8", "?7",
+                                           "C4",  "C8",  "C14X2", "?11", "?12",    "?13",    "CMPR",  "?15"};
+  for (size_t i = 0; out != nullptr && i < list.size() && i < max; ++i) {
+    const auto& e = list[i];
+    AuroraTextureInfo& o = out[i];
+    std::memset(&o, 0, sizeof o);
+    std::snprintf(o.name, sizeof o.name, "%s", e.name.c_str());
+    o.width = e.width;
+    o.height = e.height;
+    std::snprintf(o.format, sizeof o.format, "%s", e.format < 16 ? kFormats[e.format] : "?");
+    o.pack = e.packSelected ? (e.inPack ? 1 : 0) : -1;
+    o.usual = e.inUsual ? 1 : 0;
+  }
+  return list.size();
+#else
+  (void)out;
+  (void)max;
+  return 0;
+#endif
+}
 void aurora_texture_log(const char* scene) {
 #ifdef AURORA_ENABLE_GX
   aurora::gfx::texture_replacement::set_texture_log_scene(scene != nullptr ? scene : "");

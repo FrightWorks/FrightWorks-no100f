@@ -25,6 +25,7 @@
 #include "no100f_devmenu_progress.h"
 #include "no100f_game_state.h"
 #include "no100f_recorder.h"
+#include "no100f_texture_list.h"
 #include "no100f_texture_packs.h"
 #include "no100f_resources.h"
 #include "build_info.h"
@@ -115,6 +116,8 @@ struct Spot {
 };
 
 bool g_open = false;
+bool g_selectTexturesTab = false;  // `menu textures`: select the Textures tab on the next frame, scrolled to the list
+bool g_scrollToTextureList = false;
 bool g_focused = false;  // the menu window has focus: game input is held (click the game to move with the menu open)
 bool g_toggleFocus = false;  // LB pressed: focus the menu / give focus back to the game
 std::vector<Level> g_levels;
@@ -1130,12 +1133,41 @@ std::vector<Suspect> g_suspects;
 bool g_suspectsLoaded = false;
 bool g_suspectsThisScene[2] = {true, true};  // Textures, Effects
 std::string g_findId;  // suspect drawn solid magenta ("Find"), empty = none
+std::string g_texPicked;  // texture from the level's texture list drawn solid magenta, empty = none
 
 // Draws the suspect's replacement solid magenta (needs texture replacements on); nullptr = off.
 void SetFind(const Suspect* s) {
     g_findId = s ? s->id : "";
+    g_texPicked.clear();
     aurora_texture_replacement_highlight(s ? s->key.c_str() : nullptr);
     g_status = s ? "Finding " + s->id + " (magenta)" : "Find off";
+}
+
+// Draws the texture with this file name (no extension) solid magenta, with or without a replacement; "" = off.
+void PickTexture(const std::string& name) {
+    g_findId.clear();
+    g_texPicked = name;
+    aurora_texture_replacement_highlight(name.empty() ? nullptr : name.c_str());
+    g_status = name.empty() ? "Texture highlight off" : "Highlighting " + name + " (magenta)";
+}
+
+// This level's textures (every texture the game has resolved since the level began), copied from aurora when the list
+// changes. Only dev tools reach this; aurora collects nothing until the list is switched on in Draw().
+using TextureRow = no100f_texture_list::Row;
+std::vector<TextureRow> g_texRows;
+uint32_t g_texRowsGeneration = UINT32_MAX;
+
+const std::vector<TextureRow>& LevelTextures() {
+    const uint32_t generation = aurora_texture_list_generation();
+    if (generation == g_texRowsGeneration) return g_texRows;
+    g_texRowsGeneration = generation;
+    std::vector<AuroraTextureInfo> raw(aurora_texture_list_copy(nullptr, 0));
+    raw.resize(std::min(raw.size(), aurora_texture_list_copy(raw.data(), raw.size())));
+    g_texRows.clear();
+    g_texRows.reserve(raw.size());
+    for (const AuroraTextureInfo& t : raw)
+        g_texRows.push_back({t.name, t.width, t.height, t.format, t.pack, t.usual != 0});
+    return g_texRows;
 }
 
 // Verdicts per scene, UserData/devmenu_verdicts.txt (tab-separated: id, scene, status; scene "*" = every scene). The
@@ -1250,7 +1282,8 @@ const Spot* FindSpot(const std::string& name, uint32_t scene) {
 // Texture packs (dev tools): F6 switches to the next pack (Shift+F6 the previous one), the Textures tab has the same
 // control and `texpack` in devmenu.txt does too. The cycle is usual (no pack), each pack in name order, usual again.
 // A pack is <UserData>/texture_packs/<name>/ (any layout, texture_replacements file names). With one selected,
-// aurora draws every texture it doesn't have solid magenta (no fallback to the usual replacements or the original).
+// aurora uses only its files as replacements: a texture it lacks keeps the game's original (no fallback to the usual
+// replacements, mods or the HD pack).
 no100f_texture_packs::Switcher& Packs() {
     static no100f_texture_packs::Switcher switcher(
         RuntimeConfigFile::DevTools(),
@@ -1294,7 +1327,7 @@ void DrawPackToast() {
     if (ImGui::Begin("##devmenu_texpack", nullptr, kFlags)) {
         ImGui::TextUnformatted(g_packToast.c_str());
         if (!Packs().Active().empty()) {
-            ImGui::TextDisabled("%zu replacements; every other texture is magenta", aurora_get_texture_pack_entries());
+            ImGui::TextDisabled("%zu replacements; every other texture is the original", aurora_get_texture_pack_entries());
             if (!RuntimeConfigFile::TextureReplacements(true))
                 ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "texture replacements are off ([video] texture_replacements)");
         }
@@ -1328,7 +1361,7 @@ void DrawPackPicker() {
     if (packs.empty())
         ImGui::TextDisabled("No packs: make a folder per pack in UserData/texture_packs.");
     else if (!active.empty())
-        ImGui::TextDisabled("%zu replacements in the pack; everything else is magenta.", aurora_get_texture_pack_entries());
+        ImGui::TextDisabled("%zu replacements in the pack; everything else is the original.", aurora_get_texture_pack_entries());
 }
 
 // devmenu.txt (cwd = Play), read every 30 frames and then deleted; results go to devmenu.log. The file waits (is
@@ -1500,7 +1533,10 @@ void DrawDiagnostics() {
 //   textures            log which suspect textures (devmenu_textures.txt) have been drawn in this level
 //   find ID|off         draw that suspect's texture solid magenta / back to normal
 //   texpack ARG         texture packs (UserData/texture_packs/<name>): next, prev, usual, reload, list, or a pack's
-//                       name; no ARG = which is active. With a pack on, textures it lacks draw magenta
+//                       name; no ARG = which is active. With a pack on, textures it lacks show the original
+//   texlist [WORDS]     write this level's drawn textures (devmenu_texlist.txt in Play), filtered by WORDS
+//   menu open|close|textures   the F8 menu (textures = open on the Textures tab), for scripted screenshots
+//   texfind NAME|off    draw that texture (file name without extension, or a part of one from texlist) solid magenta
 //   freecam on|off      free camera (starts at the game camera)
 //   cam X Y Z YAW PITCH free camera at this pose (degrees; pitch > 0 looks down)
 //   camspin DEG         free camera turns DEG degrees every frame (0 stops; turns the free camera on)
@@ -1634,6 +1670,38 @@ void PollCommandFile() {
             const std::string before = Packs().Active();
             g_status = Packs().Command(arg);
             if (Packs().Active() != before || arg == "reload") ShowPackToast();
+        } else if (cmd == "menu") {
+            const std::string word = Lower(arg);
+            if (word == "open" || word == "textures") g_open = true;
+            if (word == "close") g_open = false;
+            if (word == "textures") g_selectTexturesTab = g_scrollToTextureList = true;
+            g_status = "menu " + word + (g_open ? " (open)" : " (closed)");
+        } else if (cmd == "texlist") {
+            const auto& rows = LevelTextures();
+            std::ofstream out("devmenu_texlist.txt", std::ios::trunc);
+            out << "# name\twidth\theight\tformat\tin_pack(-1 no pack)\tusual_hd  (textures drawn in this level)\n";
+            size_t written = 0;
+            for (const TextureRow& row : rows) {
+                if (!no100f_texture_list::Matches(row, arg)) continue;
+                out << row.name << '\t' << row.width << '\t' << row.height << '\t' << row.format << '\t' << row.pack
+                    << '\t' << (row.usual ? 1 : 0) << '\n';
+                ++written;
+            }
+            g_status = std::to_string(written) + " of " + std::to_string(rows.size()) +
+                       " textures drawn in this level -> devmenu_texlist.txt";
+        } else if (cmd == "texfind") {
+            const std::string name = no100f_texture_list::CleanName(arg);
+            if (name.empty()) {
+                PickTexture("");
+            } else {
+                size_t matches = 0;
+                if (const TextureRow* row = no100f_texture_list::Find(LevelTextures(), name, &matches))
+                    PickTexture(row->name);
+                else
+                    g_status = matches == 0 ? "texfind: no texture drawn in this level matches " + name
+                                            : "texfind: " + std::to_string(matches) + " textures match " + name +
+                                                  " (more letters)";
+            }
         } else if (cmd == "cutout") {
 #ifdef AURORA_HAS_CUTOUT_MODE
             if (!arg.empty()) aurora_set_cutout_mode(std::atoi(arg.c_str()));
@@ -2172,6 +2240,84 @@ void UpdateTexLog() {
 // Rows marked since the menu opened stay listed with "Hide fine/fixed" on, so the cursor isn't lost mid-cycle.
 std::set<std::string> g_markedOpen;
 
+// The textures the game has drawn in this level, each with the file name a texture pack needs (the same name a dump
+// writes, without the extension; .png or .dds both work). Click a row to draw that texture solid magenta on screen,
+// click it again (or Clear) to stop.
+void DrawLevelTextures() {
+    static char filter[96] = "";
+    static int sort = 0;
+    static bool onlyMissing = false;
+    const auto& rows = LevelTextures();
+    ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+    if (std::exchange(g_scrollToTextureList, false)) ImGui::SetScrollHereY(0.0f);
+    if (!ImGui::CollapsingHeader("Textures in this level")) return;
+    ImGui::SetNextItemWidth(OverlayTheme::Px(180.0f));
+    ImGui::InputTextWithHint("##texfilter", "filter: name, 256x256, CMPR", filter, sizeof filter);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(OverlayTheme::Px(130.0f));
+    static const char* const kSorts[] = {"first drawn", "name", "largest first", "format"};
+    ImGui::Combo("##texsort", &sort, kSorts, 4);
+    const bool packOn = !rows.empty() && rows.front().pack >= 0;
+    if (ImGui::SmallButton("Clear highlight")) PickTexture("");
+    if (packOn) {
+        ImGui::SameLine();
+        OverlayTheme::Toggle("Only textures the pack lacks", &onlyMissing);
+    }
+    const auto shown = no100f_texture_list::Shown(rows, filter, static_cast<no100f_texture_list::Sort>(sort),
+                                                  packOn && onlyMissing);
+    ImGui::TextDisabled("%zu of %zu drawn in this level%s", shown.size(), rows.size(),
+                        g_texPicked.empty() ? "" : "; the picked one is magenta on screen");
+    if (rows.empty()) return;
+    constexpr ImGuiTableFlags kFlags = ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit |
+                                       ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders;
+    if (!ImGui::BeginTable("leveltextures", 6, kFlags, ImVec2(0.0f, OverlayTheme::Px(260.0f)))) return;
+    ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupColumn("");
+    ImGui::TableSetupColumn("File name (.png or .dds)");
+    ImGui::TableSetupColumn("In pack");
+    ImGui::TableSetupColumn("Size");
+    ImGui::TableSetupColumn("Format");
+    ImGui::TableSetupColumn("Usual HD");
+    ImGui::TableHeadersRow();
+    bool noPalette = false;
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(shown.size()));
+    while (clipper.Step()) {
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i) {
+            const TextureRow& row = *shown[i];
+            ImGui::PushID(i);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (ImGui::SmallButton("Copy")) ImGui::SetClipboardText((row.name + ".png").c_str());
+            ImGui::TableNextColumn();
+            const bool picked = g_texPicked == row.name;
+            if (ImGui::Selectable(row.name.c_str(), picked,
+                                  ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap))
+                PickTexture(picked ? "" : row.name);
+            ImGui::TableNextColumn();
+            if (row.pack == 0)
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "%s", no100f_texture_list::PackColumn(row.pack));
+            else
+                ImGui::TextUnformatted(no100f_texture_list::PackColumn(row.pack));
+            ImGui::TableNextColumn();
+            ImGui::Text("%ux%u", row.width, row.height);
+            ImGui::TableNextColumn();
+            if (no100f_texture_list::PaletteUnknown(row)) {
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "%s *", row.format.c_str());
+                noPalette = true;
+            } else {
+                ImGui::TextUnformatted(row.format.c_str());
+            }
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(row.usual ? "yes" : "-");
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndTable();
+    if (noPalette)
+        ImGui::TextDisabled("* palette not known when the game drew it: the name has a zero palette hash (a file with that name still matches).");
+}
+
 // Textures tab (effects = false) / Effects tab (effects = true: drawn at runtime, e.g. on a kill or a bonk).
 void DrawTextures(bool effects) {
     bool& thisScene = g_suspectsThisScene[effects ? 1 : 0];
@@ -2196,7 +2342,10 @@ void DrawTextures(bool effects) {
         if (ImGui::Combo("Cut-outs (F7 cycles)", &cutout, kCutoutModes, 4)) aurora_set_cutout_mode(cutout);
     }
 #endif
-    if (!effects) DrawPackPicker();
+    if (!effects) {
+        DrawPackPicker();
+        DrawLevelTextures();
+    }
     if (g_suspects.empty()) {
         ImGui::TextWrapped("No list loaded: put devmenu_textures.txt in UserData (e.g. from autotest\\texhunt), then Reload. Effects entries have 'effect' in the seventh column.");
         return;
@@ -2305,7 +2454,7 @@ void DrawTextures(bool effects) {
 
 // While Find is on: a label at the bottom centre (also with the menu closed); takes no input or focus.
 void DrawFindToast() {
-    if (g_findId.empty()) return;
+    if (g_findId.empty() && g_texPicked.empty()) return;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y - 40.0f),
                             ImGuiCond_Always, ImVec2(0.5f, 1.0f));
@@ -2315,7 +2464,8 @@ void DrawFindToast() {
                                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
                                         ImGuiWindowFlags_NoDocking;
     if (ImGui::Begin("##devmenu_find", nullptr, kFlags))
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 1.0f, 1.0f), "Finding %s: drawn solid magenta", g_findId.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 1.0f, 1.0f), "Finding %s: drawn solid magenta",
+                           (g_findId.empty() ? g_texPicked : g_findId).c_str());
     ImGui::End();
 }
 
@@ -2507,6 +2657,8 @@ void ApplyFreecam(uint32_t camera, CpuContext* ctx) {
 
 void Draw() noexcept {
     if (!Enabled() || !kReserved) return;
+    static const bool listOn = (aurora_texture_list_enable(true), true);  // dev tools only: Enabled() gates this
+    (void)listOn;
     ObserveGallery();
     if (InPlay() && CurrentSceneId() == kGalleryScene &&
         (g_galleryRules.Get(GallerySection::Pictures) != GalleryRule::Natural ||
@@ -2612,7 +2764,8 @@ void Draw() noexcept {
                 no100f_resources::Draw();
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem("Textures")) {
+            const bool pickTextures = std::exchange(g_selectTexturesTab, false);
+            if (ImGui::BeginTabItem("Textures", nullptr, pickTextures ? ImGuiTabItemFlags_SetSelected : 0)) {
                 ImGui::PushID("textures");  // both tabs draw the same widgets: keep their IDs apart
                 DrawTextures(false);
                 ImGui::PopID();
