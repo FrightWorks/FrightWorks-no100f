@@ -330,7 +330,7 @@ Never name a session `main`.
   With nothing using it, nothing is split or recorded.
   It records the solid scene's camera (projection and viewport of the last perspective draw that wrote depth) to turn depth back into positions.
   `stageview 1` (or F8 > Scene stage view) tints what is drawn before it, `2` shows the solid scene's depth, `3` the ambient occlusion alone, `4` the ink outlines alone.
-- Ambient occlusion (`[video] ambient_occlusion`, percent; F10 > Video > Picture and the launcher: Off, Low 35, Medium 65; any other value up to 100, set by hand, shows as its percentage) runs at the scene stage: at half resolution from the depth alone, blurred keeping edges, then multiplied into the solid scene's colour (never its alpha).
+- Ambient occlusion (`[video] ambient_occlusion`, percent; experimental; F10 > Video > Experimental and the launcher's Experimental section: Off, Low 35, Medium 65; any other value up to 100, set by hand, shows as its percentage) runs at the scene stage: at half resolution from the depth alone, blurred keeping edges, then multiplied into the solid scene's colour (never its alpha).
   Its tuning is at the top of `scene_stage.cpp`; the angle bias keeps the game's low-poly walls and rocks from darkening at every polygon edge.
   `ao PERCENT` in `devmenu.txt` sets it for one run without changing the setting.
   Its targets exist only while it is on or the occlusion view is showing, and are freed at the next frame.

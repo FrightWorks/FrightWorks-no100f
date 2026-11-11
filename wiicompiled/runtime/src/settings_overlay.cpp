@@ -1465,31 +1465,6 @@ void DrawVideoSettings() {
         Hint("Used when the game goes fullscreen (F11 or Display mode).");
     }
 #endif
-#ifdef AURORA_HAS_SCENE_STAGE
-    {
-        // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
-        const int percent = std::clamp(RuntimeConfigFile::AmbientOcclusion(), 0, 100);
-        std::string current = std::to_string(percent) + "%";
-        for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
-            if (level.percent == percent) current = level.name;
-        }
-        RowLabel("Ambient occlusion", labelWidth, controlWidth);
-        if (ImGui::BeginCombo("##ambientocclusion", current.c_str())) {
-            for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
-                const bool selected = level.percent == percent;
-                if (ImGui::Selectable(level.name, selected) && !selected) {
-                    aurora_set_ambient_occlusion(static_cast<float>(level.percent) / 100.0f);
-                    RuntimeConfigFile::SetAmbientOcclusion(level.percent);
-                }
-                if (selected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        Hint("Soft shade where surfaces meet: in corners, creases and under things.");
-    }
-#endif
 #ifdef AURORA_HAS_INK_OUTLINES
     {
         const int level = std::clamp(RuntimeConfigFile::InkOutlines(), 0, 2);
@@ -1608,8 +1583,35 @@ void DrawVideoSettings() {
     }
 #endif
 
-#ifdef AURORA_HAS_BLOOM
+#if defined(AURORA_HAS_SCENE_STAGE) || defined(AURORA_HAS_BLOOM)
     SectionTitle("Experimental");
+#endif
+#ifdef AURORA_HAS_SCENE_STAGE
+    {
+        // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
+        const int percent = std::clamp(RuntimeConfigFile::AmbientOcclusion(), 0, 100);
+        std::string current = std::to_string(percent) + "%";
+        for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
+            if (level.percent == percent) current = level.name;
+        }
+        RowLabel("Ambient occlusion", labelWidth, controlWidth);
+        if (ImGui::BeginCombo("##ambientocclusion", current.c_str())) {
+            for (const auto& level : RuntimeConfigFile::kAmbientOcclusionLevels) {
+                const bool selected = level.percent == percent;
+                if (ImGui::Selectable(level.name, selected) && !selected) {
+                    aurora_set_ambient_occlusion(static_cast<float>(level.percent) / 100.0f);
+                    RuntimeConfigFile::SetAmbientOcclusion(level.percent);
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        Hint("Soft shade where surfaces meet: in corners, creases and under things. You might see visual glitches.");
+    }
+#endif
+#ifdef AURORA_HAS_BLOOM
     {
         // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
         const int percent = std::clamp(RuntimeConfigFile::Bloom(), 0, 100);
