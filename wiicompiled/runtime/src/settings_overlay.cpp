@@ -1510,31 +1510,6 @@ void DrawVideoSettings() {
         Hint("Cartoon lines around characters and objects. Bold also draws sharp edges inside them.");
     }
 #endif
-#ifdef AURORA_HAS_BLOOM
-    {
-        // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
-        const int percent = std::clamp(RuntimeConfigFile::Bloom(), 0, 100);
-        std::string current = std::to_string(percent) + "%";
-        for (const auto& level : RuntimeConfigFile::kBloomLevels) {
-            if (level.percent == percent) current = level.name;
-        }
-        RowLabel("Bloom", labelWidth, controlWidth);
-        if (ImGui::BeginCombo("##bloom", current.c_str())) {
-            for (const auto& level : RuntimeConfigFile::kBloomLevels) {
-                const bool selected = level.percent == percent;
-                if (ImGui::Selectable(level.name, selected) && !selected) {
-                    aurora_set_bloom(static_cast<float>(level.percent) / 100.0f);
-                    RuntimeConfigFile::SetBloom(level.percent);
-                }
-                if (selected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        Hint("A soft glow around lit windows, lamp light, fire and sparkles.");
-    }
-#endif
 
 #if defined(_WIN32)
     SectionTitle("HDR");
@@ -1630,6 +1605,33 @@ void DrawVideoSettings() {
         Hint(metalFxSupported ? "Render below output resolution for sharper lower-cost output."
                               : "MetalFX spatial upscaling is unavailable on this device.");
         break;
+    }
+#endif
+
+#ifdef AURORA_HAS_BLOOM
+    SectionTitle("Experimental");
+    {
+        // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
+        const int percent = std::clamp(RuntimeConfigFile::Bloom(), 0, 100);
+        std::string current = std::to_string(percent) + "%";
+        for (const auto& level : RuntimeConfigFile::kBloomLevels) {
+            if (level.percent == percent) current = level.name;
+        }
+        RowLabel("Bloom", labelWidth, controlWidth);
+        if (ImGui::BeginCombo("##bloom", current.c_str())) {
+            for (const auto& level : RuntimeConfigFile::kBloomLevels) {
+                const bool selected = level.percent == percent;
+                if (ImGui::Selectable(level.name, selected) && !selected) {
+                    aurora_set_bloom(static_cast<float>(level.percent) / 100.0f);
+                    RuntimeConfigFile::SetBloom(level.percent);
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        Hint("A soft glow around lit windows, lamp light, fire and sparkles. You might see visual glitches.");
     }
 #endif
 

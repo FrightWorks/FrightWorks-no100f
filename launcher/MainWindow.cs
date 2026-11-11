@@ -412,6 +412,26 @@ sealed class MainWindow : Window
             Row("Ambient occlusion", "ambient_occlusion", levels.ToArray(), "0");
         }
         Row("Ink outlines", "ink_outlines", new[] { ("Off", "0"), ("Thin", "1"), ("Bold", "2") }, "0");
+        Row("Intro movies", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
+        table.Add(FieldLabel("HDR"), new PlankButton("Adjust HDR", (_, _) => OpenHdr().Watch()));
+        body.Children.Add(table);
+        body.Children.Add(Note("Changes are saved at once and apply the next time the game starts. In the game, F10 has the " +
+                               (MonitorChoice ? "resolution, picture shape, window, fullscreen monitor, frame interpolation, motion blur, ambient occlusion and ink outline settings too, and more (sound, controls); "
+                                              : "resolution, picture shape, window, frame interpolation, motion blur, ambient occlusion and ink outline settings too, and more (sound, controls); ") +
+                               "F11 switches between fullscreen and a window, and F2 saves a screenshot." +
+                               (MonitorChoice ? " Fullscreen monitor also applies when F11 goes fullscreen from a window." : "")));
+
+        // Experimental: F10's Smoothness > Frame interpolation and Experimental > Bloom. Going above 60 fps at 6x or 8x
+        // drops the resolution to 4x, as F10 does.
+        body.Children.Add(Title("Experimental"));
+        table = new FormTable();  // Row adds to this one now
+        interpolationBox = Row("Frame interpolation", "frame_interpolation_fps", interpolationModes,
+            InterpolationFps(cfg).ToString(), c =>
+            {
+                if (InterpolationFps(c) > 60 && AboveCap(c.Get("video", "resolution_multiplier") ?? "")) c.Set("video", "resolution_multiplier", "4");
+                FillResolutions(c);
+            });
+        ShowInterpolation(cfg);
         {
             // Strength in percent, as in F10 (runtime_config.h kBloomLevels); a strength set by hand in Config.toml
             // that is none of the levels is kept as its own entry.
@@ -424,29 +444,10 @@ sealed class MainWindow : Window
             }
             Row("Bloom", "bloom", levels.ToArray(), "0");
         }
-        Row("Intro movies", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
-        table.Add(FieldLabel("HDR"), new PlankButton("Adjust HDR", (_, _) => OpenHdr().Watch()));
         body.Children.Add(table);
-        body.Children.Add(Note("Changes are saved at once and apply the next time the game starts. In the game, F10 has the " +
-                               (MonitorChoice ? "resolution, picture shape, window, fullscreen monitor, frame interpolation, motion blur, ambient occlusion, ink outline and bloom settings too, and more (sound, controls); "
-                                              : "resolution, picture shape, window, frame interpolation, motion blur, ambient occlusion, ink outline and bloom settings too, and more (sound, controls); ") +
-                               "F11 switches between fullscreen and a window, and F2 saves a screenshot." +
-                               (MonitorChoice ? " Fullscreen monitor also applies when F11 goes fullscreen from a window." : "")));
-
-        // Experimental: F10's Smoothness > Frame interpolation. Going above 60 fps at 6x or 8x drops the resolution to
-        // 4x, as F10 does.
-        body.Children.Add(Title("Experimental"));
-        table = new FormTable();  // Row adds to this one now
-        interpolationBox = Row("Frame interpolation", "frame_interpolation_fps", interpolationModes,
-            InterpolationFps(cfg).ToString(), c =>
-            {
-                if (InterpolationFps(c) > 60 && AboveCap(c.Get("video", "resolution_multiplier") ?? "")) c.Set("video", "resolution_multiplier", "4");
-                FillResolutions(c);
-            });
-        ShowInterpolation(cfg);
-        body.Children.Add(table);
-        body.Children.Add(Note("Draws extra frames between the game's own for smoother motion. Only works at 60 fps, so it stays " +
-                               "Off at 30 fps. Experimental: you might see visual glitches. At 120 or 180 FPS the resolution goes up to 4x (1920p)."));
+        body.Children.Add(Note("These might show visual glitches. Frame interpolation draws extra frames between the game's own for " +
+                               "smoother motion. It only works at 60 fps, so it stays Off at 30 fps, and at 120 or 180 FPS the resolution " +
+                               "goes up to 4x (1920p). Bloom puts a soft glow around lit windows, lamp light, fire and sparkles."));
     }
 
     internal HdrWindow CreateHdrWindow() => new(configPath, hdrStatus, this);
