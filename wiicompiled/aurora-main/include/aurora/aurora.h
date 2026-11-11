@@ -287,6 +287,15 @@ bool aurora_texture_replacement_used(const char* name);
 void aurora_texture_replacement_reset_used();
 // Dev menu (F8): draw the replacement with this file name (no extension) solid magenta; nullptr or "" = off.
 void aurora_texture_replacement_highlight(const char* name);
+// Dev tools texture pack switcher: use <UserData>/texture_packs/<name>/ as the only replacements (not the user's
+// texture_replacements, mods or the built-in HD pack); a texture the pack lacks draws solid magenta. nullptr or "" =
+// no pack (the usual chain). Applied on the next frame; asking for the
+// pack in use again rescans its folder. False when the name isn't a plain folder name.
+bool aurora_set_texture_pack(const char* name);
+// The pack asked for ("" = none), written like aurora_get_button_icon_folder; and the number of replacement files found
+// in the applied one.
+size_t aurora_get_texture_pack(char* out, size_t size);
+size_t aurora_get_texture_pack_entries();
 // Dev menu (F8): log every texture's draw states to devmenu_texlog.csv, rows tagged with this scene; nullptr or
 // "" = off.
 void aurora_texture_log(const char* scene);

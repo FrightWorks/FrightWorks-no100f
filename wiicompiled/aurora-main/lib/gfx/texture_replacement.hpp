@@ -4,6 +4,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace aurora::gfx::texture_replacement {
 void initialize() noexcept;
@@ -27,6 +28,15 @@ bool is_highlight_handle(const TextureHandle& handle) noexcept;
 void set_texture_log_scene(std::string_view scene) noexcept;
 std::string texture_log_scene() noexcept;
 uint32_t texture_log_generation() noexcept;
+// Dev tools texture pack switcher: <UserData>/texture_packs/<name>/ replaces the usual chain (the user's
+// texture_replacements, mods, the built-in HD pack) while selected, and a texture it lacks draws magenta; "" = usual (no pack). set_texture_pack (any thread) only leaves a
+// request, and asking for the pack in use again rescans it; false = not a plain folder name. take_texture_pack_change
+// (renderer thread, before textures are resolved) applies it and returns true once after a change: the caller must drop
+// its cached textures so find_replacement runs again.
+bool set_texture_pack(std::string_view name) noexcept;
+std::string texture_pack() noexcept;         // the pack asked for ("" = usual)
+size_t texture_pack_entries() noexcept;      // replacements found in the applied pack
+bool take_texture_pack_change() noexcept;
 // Button prompts for the controller in use: `family` 0 xbox, 1 playstation, 2 nintendo, -1 the game's own GameCube
 // icons; `buttons` = the pad button (controller_button_names.h config name) drawn for the GameCube A, B, X and Y
 // buttons, "" = that button's usual one. take_button_icon_style_change returns true once after a change, so cached

@@ -27,6 +27,7 @@
 #include <string_view>
 
 #include "png_io.hpp"
+#include "replacement_layers.hpp"
 #include "../fs_helper.hpp"
 
 using namespace aurora::gx;
@@ -62,18 +63,28 @@ struct TlutMetadata {
   ByteBuffer data;
 };
 
+struct ReplacementIndexEntry {
+  std::filesystem::path path;
+  bool buttonIcons = false;  // the button prompt atlas, put together from button_icons (compose_button_icons)
+  bool missing = false;      // texture pack selected and it has no file for this texture: drawn magenta (no file)
+};
+
 struct CachedReplacement {
   gfx::TextureHandle handle;
   uint64_t bytes = 0;
   std::list<RuntimeTextureKey>::iterator lruIt;
-};
-
-struct ReplacementIndexEntry {
-  std::filesystem::path path;
-  bool buttonIcons = false;  // the button prompt atlas, put together from button_icons (compose_button_icons)
+  ReplacementIndexEntry source;  // where the handle came from: a texture pack switch can change a key's file
 };
 
 absl::flat_hash_map<RuntimeTextureKey, ReplacementIndexEntry> s_replacementIndex;
+// Dev tools texture pack switcher: the selected pack's own index (empty = "usual"), tried before s_replacementIndex.
+// Only the renderer thread reads or changes these; set_texture_pack only leaves a request (s_packMutex).
+absl::flat_hash_map<RuntimeTextureKey, ReplacementIndexEntry> s_packIndex;
+std::filesystem::path s_packRoot;
+std::mutex s_packMutex;
+std::string s_packRequested;   // under s_packMutex: the pack asked for ("" = usual)
+bool s_packChanged = false;    // under s_packMutex: s_packRequested is not applied yet (or a reload was asked for)
+std::atomic<size_t> s_packEntries{0};
 // button_icons beside the game (<resourcesPath>, tools/make-button-icons.py; shipped, so never in the user's
 // folder): the game's button picture, an atlas of the GameCube A, B, X
 // and Y buttons, put together from one icon per pad button of the controller in use, so the prompts follow the
@@ -556,6 +567,12 @@ void touch_cached_replacement(decltype(s_replacementCache)::iterator it) noexcep
   }
 }
 
+void erase_cached_replacement(decltype(s_replacementCache)::iterator it) noexcept {
+  s_replacementLru.erase(it->second.lruIt);
+  s_replacementCacheBytes -= std::min(s_replacementCacheBytes, it->second.bytes);
+  s_replacementCache.erase(it);
+}
+
 void evict_replacement_cache_if_needed() noexcept {
   while (s_replacementCacheBytes > kReplacementCacheBudgetBytes && !s_replacementLru.empty()) {
     const RuntimeTextureKey key = s_replacementLru.back();
@@ -613,49 +630,10 @@ static void index_button_icons(const std::filesystem::path& resourcesPath) noexc
   }
 }
 
-void build_index() noexcept {
-  auto userPath = fs_path_from_string(g_config.userPath);
-  // Files the game ships (button_icons, the built-in HD pack in texture_replacements) sit beside it, not in the user's
-  // folder: an installed game's program folder is replaced on every update.
-  const auto resourcesPath = g_config.resourcesPath != nullptr ? fs_path_from_string(g_config.resourcesPath)
-                                                               : std::filesystem::path{};
-  index_button_icons(resourcesPath);
-  if (!g_config.allowTextureReplacements) {
-    return;
-  }
-
-  auto cachePath = fs_path_from_string(g_config.cachePath);
-
-  s_replacementRoot = userPath / "texture_replacements";
-  s_dumpRoot = cachePath / "texture_dumps";
-
-  if (!ensure_directory(s_replacementRoot)) {
-    return;
-  }
-  if (g_config.allowTextureDumps && !ensure_directory(s_dumpRoot)) {
-    return;
-  }
-
+// Every replacement file under `root` (any layout) goes in `index`; a key already there keeps its file (first wins).
+void index_folder(const std::filesystem::path& root,
+                  absl::flat_hash_map<RuntimeTextureKey, ReplacementIndexEntry>& index) noexcept {
   std::error_code ec;
-  // Texture mods: <UserData>/mods/<name>/textures (skipped when the mod folder holds a file
-  // named "disabled"). The user's own folder is indexed first and try_emplace keeps the first entry, so
-  // it wins over mods; among mods the alphabetically later one wins, like their disc file overrides.
-  // The game's own texture_replacements (the built-in HD pack) come last, so anything of the user's wins.
-  std::vector<std::filesystem::path> roots{s_replacementRoot};
-  std::vector<std::filesystem::path> mods;
-  for (const auto& entry : std::filesystem::directory_iterator(userPath / "mods", ec)) {
-    if (entry.is_directory(ec) && !std::filesystem::exists(entry.path() / "disabled", ec) &&
-        std::filesystem::is_directory(entry.path() / "textures", ec)) {
-      mods.push_back(entry.path() / "textures");
-    }
-  }
-  std::sort(mods.begin(), mods.end(), std::greater<>());
-  roots.insert(roots.end(), mods.begin(), mods.end());
-  if (!resourcesPath.empty() && std::filesystem::is_directory(resourcesPath / "texture_replacements", ec)) {
-    roots.push_back(resourcesPath / "texture_replacements");
-  }
-  ec.clear();
-  for (const auto& root : roots)
   for (std::filesystem::recursive_directory_iterator it(
            root,
            std::filesystem::directory_options::skip_permission_denied |
@@ -689,46 +667,116 @@ void build_index() noexcept {
       continue;
     }
 
-    s_replacementIndex.try_emplace(*parsed, path);
+    index.try_emplace(*parsed, path);
+  }
+}
+
+void build_index() noexcept {
+  auto userPath = fs_path_from_string(g_config.userPath);
+  // Files the game ships (button_icons, the built-in HD pack in texture_replacements) sit beside it, not in the user's
+  // folder: an installed game's program folder is replaced on every update.
+  const auto resourcesPath = g_config.resourcesPath != nullptr ? fs_path_from_string(g_config.resourcesPath)
+                                                               : std::filesystem::path{};
+  index_button_icons(resourcesPath);
+  if (!g_config.allowTextureReplacements) {
+    return;
+  }
+
+  auto cachePath = fs_path_from_string(g_config.cachePath);
+
+  s_replacementRoot = userPath / "texture_replacements";
+  s_dumpRoot = cachePath / "texture_dumps";
+
+  if (!ensure_directory(s_replacementRoot)) {
+    return;
+  }
+  if (g_config.allowTextureDumps && !ensure_directory(s_dumpRoot)) {
+    return;
+  }
+
+  // Texture mods: <UserData>/mods/<name>/textures (skipped when the mod folder holds a file
+  // named "disabled"). The user's own folder is indexed first and try_emplace keeps the first entry, so
+  // it wins over mods; among mods the alphabetically later one wins, like their disc file overrides.
+  // The game's own texture_replacements (the built-in HD pack) come last, so anything of the user's wins.
+  const auto roots = usual_roots(userPath, resourcesPath);
+  for (const auto& root : roots) {
+    index_folder(root, s_replacementIndex);
   }
 
   Log.info("Indexed {} texture replacements from {} folder(s) (texture_replacements + mods + the game's own)", s_replacementIndex.size(), roots.size());
 }
+
+// A texture pack is selected (and replacements are on): the pack's files are the only replacements, and a texture
+// without one is drawn magenta. Renderer thread.
+bool pack_selected() noexcept { return !s_packRoot.empty() && g_config.allowTextureReplacements; }
 
 const ReplacementIndexEntry* find_replacement_path(const RuntimeTextureKey& key) noexcept {
   if (s_appliedButtonIcons.family >= 0 && s_buttonIconLayout.valid && key == s_buttonIconLayout.atlasKey) {
     return &s_buttonIconEntry;
   }
   if (!g_config.allowTextureReplacements) return nullptr;
-  if (const auto it = s_replacementIndex.find(key); it != s_replacementIndex.end()) {
-    return &it->second;
-  }
 
+  // Exact key, then the TLUT wildcard, then the texture wildcard; the selected texture pack (if any) before the usual
+  // chain at each step.
+  std::array<RuntimeTextureKey, 3> candidates{key};
+  size_t count = 1;
   if (key.hasTlut) {
-    RuntimeTextureKey tlutWildcardKey = key;
-    tlutWildcardKey.tlutHash = kReplacementWildcardTlutHash;
-    if (const auto it = s_replacementIndex.find(tlutWildcardKey); it != s_replacementIndex.end()) {
-      return &it->second;
-    }
+    candidates[count] = key;
+    candidates[count++].tlutHash = kReplacementWildcardTlutHash;
   }
-
-  RuntimeTextureKey textureWildcardKey = key;
-  textureWildcardKey.textureHash = kReplacementWildcardTextureHash;
-  if (const auto it = s_replacementIndex.find(textureWildcardKey); it != s_replacementIndex.end()) {
-    return &it->second;
-  }
-
-  return nullptr;
+  candidates[count] = key;
+  candidates[count++].textureHash = kReplacementWildcardTextureHash;
+  return find_active(s_packIndex, s_replacementIndex, pack_selected(),
+                     std::span<const RuntimeTextureKey>(candidates.data(), count));
 }
 
-const gfx::TextureHandle* find_cached_replacement(const RuntimeTextureKey& key) noexcept {
+// The cached handle for `key`, if it was made from `source`: a texture pack switch can make the same key come from
+// another file, and then the old handle is dropped.
+const gfx::TextureHandle* find_cached_replacement(const RuntimeTextureKey& key,
+                                                  const ReplacementIndexEntry& source) noexcept {
   const auto cached = s_replacementCache.find(key);
   if (cached == s_replacementCache.end()) {
+    return nullptr;
+  }
+  if (cached->second.source.buttonIcons != source.buttonIcons || cached->second.source.missing != source.missing ||
+      cached->second.source.path != source.path) {
+    erase_cached_replacement(cached);
     return nullptr;
   }
 
   touch_cached_replacement(cached);
   return &cached->second.handle;
+}
+
+gfx::TextureHandle create_replacement_handle(const std::string& label, const ConvertedTexture& replacement) noexcept {
+  const wgpu::Extent3D size{
+      .width = replacement.width,
+      .height = replacement.height,
+      .depthOrArrayLayers = 1,
+  };
+  const wgpu::TextureDescriptor textureDescriptor{
+      .label = label.c_str(),
+      .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst,
+      .dimension = wgpu::TextureDimension::e2D,
+      .size = size,
+      .format = replacement.format,
+      .mipLevelCount = replacement.mips,
+      .sampleCount = 1,
+  };
+  auto texture = g_device.CreateTexture(&textureDescriptor);
+  const auto viewLabel = fmt::format("{} view", label);
+  const wgpu::TextureViewDescriptor textureViewDescriptor{
+      .label = viewLabel.c_str(),
+      .format = replacement.format,
+      .dimension = wgpu::TextureViewDimension::e2D,
+      .mipLevelCount = replacement.mips,
+  };
+  auto textureView = texture.CreateView(&textureViewDescriptor);
+  auto handle = std::make_shared<gfx::TextureRef>(std::move(texture), std::move(textureView), wgpu::TextureView{}, size,
+                                                  replacement.format, replacement.mips, gfx::InvalidTextureFormat);
+  handle->isReplacement = true;
+  gfx::write_texture(*handle, replacement.data);
+  return handle;
 }
 
 gfx::TextureHandle load_replacement_texture(const RuntimeTextureKey& key, const ReplacementIndexEntry& entry) noexcept {
@@ -738,48 +786,25 @@ gfx::TextureHandle load_replacement_texture(const RuntimeTextureKey& key, const 
     return {};
   }
 
-  const auto label = fmt::format("TextureReplacement {}", format_replacement_filename(key));
-  const wgpu::Extent3D size{
-      .width = replacement->width,
-      .height = replacement->height,
-      .depthOrArrayLayers = 1,
-  };
-  const wgpu::TextureDescriptor textureDescriptor{
-      .label = label.c_str(),
-      .usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst,
-      .dimension = wgpu::TextureDimension::e2D,
-      .size = size,
-      .format = replacement->format,
-      .mipLevelCount = replacement->mips,
-      .sampleCount = 1,
-  };
-  auto texture = g_device.CreateTexture(&textureDescriptor);
-  const auto viewLabel = fmt::format("{} view", label);
-  const wgpu::TextureViewDescriptor textureViewDescriptor{
-      .label = viewLabel.c_str(),
-      .format = replacement->format,
-      .dimension = wgpu::TextureViewDimension::e2D,
-      .mipLevelCount = replacement->mips,
-  };
-  auto textureView = texture.CreateView(&textureViewDescriptor);
-  auto handle = std::make_shared<gfx::TextureRef>(std::move(texture), std::move(textureView), wgpu::TextureView{}, size,
-                                                  replacement->format, replacement->mips, gfx::InvalidTextureFormat);
-  handle->isReplacement = true;
-  gfx::write_texture(*handle, replacement->data);
-  return handle;
+  return create_replacement_handle(fmt::format("TextureReplacement {}", format_replacement_filename(key)), *replacement);
 }
 
-void cache_replacement(const RuntimeTextureKey& key, const gfx::TextureHandle& handle) noexcept {
+void cache_replacement(const RuntimeTextureKey& key, const gfx::TextureHandle& handle,
+                       const ReplacementIndexEntry& source) noexcept {
   const uint64_t replacementBytes =
       calc_texture_size(handle->format, handle->size.width, handle->size.height, handle->mipCount);
   s_replacementLru.push_front(key);
-  s_replacementCache.emplace(
-      key, CachedReplacement{.handle = handle, .bytes = replacementBytes, .lruIt = s_replacementLru.begin()});
+  s_replacementCache.emplace(key, CachedReplacement{.handle = handle,
+                                                    .bytes = replacementBytes,
+                                                    .lruIt = s_replacementLru.begin(),
+                                                    .source = source});
   s_replacementCacheBytes += replacementBytes;
   evict_replacement_cache_if_needed();
 }
 
-bool dump_editable_texture_dds(const RuntimeTextureKey& key, const GXTexObj_& obj) noexcept {
+// The game's texture as plain RGBA8 (base level only), or nothing when it can't be decoded (no palette loaded for it,
+// a format that doesn't convert to RGBA8).
+std::optional<ConvertedTexture> decode_rgba(const GXTexObj_& obj) noexcept {
   const ArrayRef<uint8_t> texData{static_cast<const uint8_t*>(obj.data), UINT32_MAX};
   const uint32_t texWidth = obj.width();
   const uint32_t texHeight = obj.height();
@@ -788,7 +813,7 @@ bool dump_editable_texture_dds(const RuntimeTextureKey& key, const GXTexObj_& ob
   if (is_palette_format(obj.format())) {
     const TlutMetadata* tlut = get_loaded_tlut(obj);
     if (tlut == nullptr) {
-      return false;
+      return std::nullopt;
     }
     pixels =
         convert_texture_palette(obj.format(), texWidth, texHeight, 1, texData, static_cast<GXTlutFmt>(tlut->format),
@@ -800,11 +825,44 @@ bool dump_editable_texture_dds(const RuntimeTextureKey& key, const GXTexObj_& ob
   const uint64_t rgbaBytes = calc_texture_size(wgpu::TextureFormat::RGBA8Unorm, texWidth, texHeight, 1);
 
   if (pixels.data.empty() || pixels.format != wgpu::TextureFormat::RGBA8Unorm || pixels.data.size() != rgbaBytes) {
+    return std::nullopt;
+  }
+  return pixels;
+}
+
+bool dump_editable_texture_dds(const RuntimeTextureKey& key, const GXTexObj_& obj) noexcept {
+  const auto pixels = decode_rgba(obj);
+  if (!pixels.has_value()) {
     return false;
   }
 
   const auto path = s_dumpRoot / format_replacement_filename(key);
-  return dds::write_rgba8_dds(path, texWidth, texHeight, pixels.data);
+  return dds::write_rgba8_dds(path, obj.width(), obj.height(), pixels->data);
+}
+
+// Texture pack selected and it has nothing for this texture: solid #FF00FF so the gap is obvious. The original's alpha
+// is kept, so cut-outs (fences, foliage) stay recognisable shapes; a texture that can't be decoded is opaque. Made from
+// the texture's own pixels on the CPU, once per texture key, and dropped when the pack changes.
+gfx::TextureHandle make_missing_texture(const RuntimeTextureKey& key, const GXTexObj_& obj) noexcept {
+  ConvertedTexture magenta;
+  if (auto pixels = decode_rgba(obj); pixels.has_value()) {
+    magenta = std::move(*pixels);
+  } else {
+    magenta = ConvertedTexture{.format = wgpu::TextureFormat::RGBA8Unorm,
+                               .width = 4,
+                               .height = 4,
+                               .mips = 1,
+                               .data = ByteBuffer{4 * 4 * 4}};
+    std::memset(magenta.data.data(), 0xFF, magenta.data.size());
+  }
+  uint8_t* const rgba = magenta.data.data();
+  for (size_t i = 0; i + 3 < magenta.data.size(); i += 4) {
+    rgba[i] = 0xFF;
+    rgba[i + 1] = 0x00;
+    rgba[i + 2] = 0xFF;
+  }
+  return create_replacement_handle(fmt::format("TextureReplacement missing {}", format_replacement_filename(key)),
+                                   magenta);
 }
 
 bool report_missing_key(const RuntimeTextureKey& key, const GXTexObj_& obj) noexcept {
@@ -928,6 +986,14 @@ void initialize() noexcept { build_index(); }
 
 void shutdown() noexcept {
   s_replacementIndex.clear();
+  s_packIndex.clear();
+  s_packRoot.clear();
+  s_packEntries.store(0);
+  {
+    std::lock_guard lock(s_packMutex);
+    s_packRequested.clear();
+    s_packChanged = false;
+  }
   s_replacementCache.clear();
   s_failedKeys.clear();
   s_reportedMisses.clear();
@@ -1018,6 +1084,26 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj) noexcept {
 
   const RuntimeTextureKey key = build_runtime_key(obj);
   const auto* path = find_replacement_path(key);
+  if (path == nullptr && pack_selected()) {
+    // Not in the selected pack: magenta, never the usual replacement or the original. The button prompt atlas is left
+    // alone (the game's own GameCube icons while no controller picks another set; otherwise it has its own entry).
+    if (s_buttonIconLayout.valid && key == s_buttonIconLayout.atlasKey) {
+      return std::nullopt;
+    }
+    if (is_highlighted(key)) {
+      return highlight_texture();
+    }
+    static const ReplacementIndexEntry kMissing{.missing = true};
+    if (const auto* cached = find_cached_replacement(key, kMissing); cached != nullptr) {
+      return *cached;
+    }
+    auto handle = make_missing_texture(key, obj);
+    if (!handle) {
+      return std::nullopt;
+    }
+    cache_replacement(key, handle, kMissing);
+    return handle;
+  }
   if (path == nullptr) {
     if (g_config.allowTextureReplacements) report_missing_key(key, obj);
     return std::nullopt;
@@ -1027,7 +1113,7 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj) noexcept {
     return highlight_texture();
   }
 
-  if (const auto* cached = find_cached_replacement(key); cached != nullptr) {
+  if (const auto* cached = find_cached_replacement(key, *path); cached != nullptr) {
     return *cached;
   }
 
@@ -1040,7 +1126,7 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj) noexcept {
     return std::nullopt;
   }
 
-  cache_replacement(key, handle);
+  cache_replacement(key, handle, *path);
   return handle;
 }
 
@@ -1073,11 +1159,74 @@ bool take_button_icon_style_change() noexcept {
   if (s_buttonIconLayout.valid) {
     const auto& key = s_buttonIconLayout.atlasKey;
     if (const auto it = s_replacementCache.find(key); it != s_replacementCache.end()) {
-      s_replacementLru.erase(it->second.lruIt);
-      s_replacementCacheBytes -= std::min(s_replacementCacheBytes, it->second.bytes);
-      s_replacementCache.erase(it);
+      erase_cached_replacement(it);
     }
     s_failedKeys.erase(key);
+  }
+  return true;
+}
+
+// Dev tools texture pack switcher. Any thread: ask for the pack <UserData>/texture_packs/<name>/ ("" = usual: no pack).
+// Asking again for the pack in use rescans its folder and reloads its files. A name that isn't a plain folder name is
+// refused (false). Nothing changes until the renderer's thread applies it (take_texture_pack_change).
+bool set_texture_pack(std::string_view name) noexcept {
+  if (!name.empty() && !valid_pack_name(name)) {
+    return false;
+  }
+  std::lock_guard lock(s_packMutex);
+  s_packRequested = std::string(name);
+  s_packChanged = true;
+  return true;
+}
+
+std::string texture_pack() noexcept {
+  std::lock_guard lock(s_packMutex);
+  return s_packRequested;
+}
+
+size_t texture_pack_entries() noexcept { return s_packEntries.load(std::memory_order_relaxed); }
+
+// Renderer thread, before textures are resolved: applies a requested pack. Returns true when it changed anything, and
+// the caller must then drop its cached textures so find_replacement runs again for everything on screen.
+bool take_texture_pack_change() noexcept {
+  std::string name;
+  {
+    std::lock_guard lock(s_packMutex);
+    if (!s_packChanged) {
+      return false;
+    }
+    s_packChanged = false;
+    name = s_packRequested;
+  }
+
+  const auto oldRoot = s_packRoot;
+  s_packIndex.clear();
+  s_packRoot = pack_root(fs_path_from_string(g_config.userPath), name);
+  if (!s_packRoot.empty()) {
+    index_folder(s_packRoot, s_packIndex);
+  }
+  s_packEntries.store(s_packIndex.size(), std::memory_order_relaxed);
+
+  // Free the textures the old pack made, the magenta stand-ins, and any the new pack made earlier (it may have been
+  // edited on disk). The usual chain's stay cached, so switching back to them is quick.
+  for (auto it = s_replacementCache.begin(); it != s_replacementCache.end();) {
+    const auto& path = it->second.source.path;
+    const bool inPack = it->second.source.missing ||
+                        (!it->second.source.buttonIcons &&
+                         (is_relative_to(path, oldRoot) || is_relative_to(path, s_packRoot)));
+    if (inPack) {
+      auto doomed = it++;
+      erase_cached_replacement(doomed);
+    } else {
+      ++it;
+    }
+  }
+  s_failedKeys.clear();
+
+  if (s_packRoot.empty()) {
+    Log.info("Texture pack: usual (no pack)");
+  } else {
+    Log.info("Texture pack: {} ({} replacements in {})", name, s_packIndex.size(), fs_path_to_string(s_packRoot));
   }
   return true;
 }

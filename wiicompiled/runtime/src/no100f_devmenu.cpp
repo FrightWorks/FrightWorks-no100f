@@ -1,6 +1,6 @@
 // Dev menu (F8) for Scooby-Doo! Night of 100 Frights: teleport to any scene, save spots and go back to them,
 // god mode, player stats, monsters off, power-ups on/off, free camera, texture finder. Only with [game] dev_tools = true (launcher: Extras >
-// Developer tools); otherwise it reserves no memory and ignores F3 (video, no100f_recorder), F7 and F8.
+// Developer tools); otherwise it reserves no memory and ignores F3 (video, no100f_recorder), F6 (texture packs), F7 and F8.
 //
 // Scene switch: the game travels through a portal by setting the current scene's pending portal ([scene+0x70]);
 // the scene update (0x800CEB30) then fades out and the switch handler (0x800ACD30, state 0xB/5) reads the portal's
@@ -25,6 +25,7 @@
 #include "no100f_devmenu_progress.h"
 #include "no100f_game_state.h"
 #include "no100f_recorder.h"
+#include "no100f_texture_packs.h"
 #include "no100f_resources.h"
 #include "build_info.h"
 #include "overlay_theme.h"
@@ -1246,6 +1247,90 @@ const Spot* FindSpot(const std::string& name, uint32_t scene) {
     return any;
 }
 
+// Texture packs (dev tools): F6 switches to the next pack (Shift+F6 the previous one), the Textures tab has the same
+// control and `texpack` in devmenu.txt does too. The cycle is usual (no pack), each pack in name order, usual again.
+// A pack is <UserData>/texture_packs/<name>/ (any layout, texture_replacements file names). With one selected,
+// aurora draws every texture it doesn't have solid magenta (no fallback to the usual replacements or the original).
+no100f_texture_packs::Switcher& Packs() {
+    static no100f_texture_packs::Switcher switcher(
+        RuntimeConfigFile::DevTools(),
+        {[] { return no100f_texture_packs::ListPacks(RuntimeConfigFile::ApplicationDataDirectory()); },
+         [](const std::string& name) { return aurora_set_texture_pack(name.c_str()); }});
+    return switcher;
+}
+
+uint64_t g_packToastUntil = 0;
+std::string g_packToast;
+
+// The note at the bottom of the screen for the pack now active, for 3 s.
+void ShowPackToast() {
+    const auto packs = no100f_texture_packs::ListPacks(RuntimeConfigFile::ApplicationDataDirectory());
+    const std::string& active = Packs().Active();
+    const auto at = std::find(packs.begin(), packs.end(), active);
+    if (active.empty() || at == packs.end())
+        g_packToast = packs.empty() ? "Texture pack: usual (no packs in UserData/texture_packs)"
+                                    : "Texture pack: usual (no pack)";
+    else
+        g_packToast = "Texture pack " + std::to_string(at - packs.begin() + 1) + "/" + std::to_string(packs.size()) +
+                      ": " + active;
+    g_packToastUntil = SDL_GetTicks() + 3000;
+}
+
+void CyclePack(bool backwards) {
+    if (!Packs().Cycle(backwards)) return;
+    ShowPackToast();
+}
+
+void DrawPackToast() {
+    if (SDL_GetTicks() >= g_packToastUntil) return;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y - 120.0f),
+                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.75f);
+    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
+                                        ImGuiWindowFlags_NoDocking;
+    if (ImGui::Begin("##devmenu_texpack", nullptr, kFlags)) {
+        ImGui::TextUnformatted(g_packToast.c_str());
+        if (!Packs().Active().empty()) {
+            ImGui::TextDisabled("%zu replacements; every other texture is magenta", aurora_get_texture_pack_entries());
+            if (!RuntimeConfigFile::TextureReplacements(true))
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "texture replacements are off ([video] texture_replacements)");
+        }
+    }
+    ImGui::End();
+}
+
+// Textures tab: the same switch as F6, with a list of the packs.
+void DrawPackPicker() {
+    static std::vector<std::string> packs;
+    static uint64_t nextScan = 0;
+    if (SDL_GetTicks() >= nextScan) {
+        packs = no100f_texture_packs::ListPacks(RuntimeConfigFile::ApplicationDataDirectory());
+        nextScan = SDL_GetTicks() + 1000;
+    }
+    ImGui::TextUnformatted("Texture pack (F6 next, Shift+F6 previous)");
+    const std::string active = Packs().Active();
+    if (ImGui::Button("<")) CyclePack(true);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(OverlayTheme::Px(220.0f));
+    if (ImGui::BeginCombo("##texpack", no100f_texture_packs::Label(active).c_str())) {
+        if (ImGui::Selectable("usual (no pack)", active.empty()) && Packs().Select("")) ShowPackToast();
+        for (const std::string& pack : packs)
+            if (ImGui::Selectable(pack.c_str(), pack == active) && Packs().Select(pack)) ShowPackToast();
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(">")) CyclePack(false);
+    ImGui::SameLine();
+    if (ImGui::Button("Rescan") && Packs().Select(active)) ShowPackToast();
+    if (packs.empty())
+        ImGui::TextDisabled("No packs: make a folder per pack in UserData/texture_packs.");
+    else if (!active.empty())
+        ImGui::TextDisabled("%zu replacements in the pack; everything else is magenta.", aurora_get_texture_pack_entries());
+}
+
 // devmenu.txt (cwd = Play), read every 30 frames and then deleted; results go to devmenu.log. The file waits (is
 // left alone) until the game is in play with no scene/spot transfer pending, unless every line is "skip" or, with no
 // transfer pending, "scene".
@@ -1414,6 +1499,8 @@ void DrawDiagnostics() {
 //   ents                log the scene's entity list
 //   textures            log which suspect textures (devmenu_textures.txt) have been drawn in this level
 //   find ID|off         draw that suspect's texture solid magenta / back to normal
+//   texpack ARG         texture packs (UserData/texture_packs/<name>): next, prev, usual, reload, list, or a pack's
+//                       name; no ARG = which is active. With a pack on, textures it lacks draw magenta
 //   freecam on|off      free camera (starts at the game camera)
 //   cam X Y Z YAW PITCH free camera at this pose (degrees; pitch > 0 looks down)
 //   camspin DEG         free camera turns DEG degrees every frame (0 stops; turns the free camera on)
@@ -1443,7 +1530,7 @@ void PollCommandFile() {
             if (!(ss >> cmd)) continue;
             const bool diagnostic = cmd == "warps" || cmd == "warp" || cmd == "gallery" ||
                                     cmd == "receipt" || cmd == "readiness" || IsPlayerCommand(cmd);
-            if (cmd != "skip" && !(cmd == "scene" && !busy) && !diagnostic) return;  // wait for play
+            if (cmd != "skip" && cmd != "texpack" && !(cmd == "scene" && !busy) && !diagnostic) return;  // wait for play
         }
     }
     std::remove("devmenu.txt");
@@ -1543,6 +1630,10 @@ void PollCommandFile() {
             g_status = "drawn suspects:";
             for (const Suspect& s : g_suspects)
                 if (Drawn(s.id, CurrentSceneId())) g_status += " " + s.id;
+        } else if (cmd == "texpack") {
+            const std::string before = Packs().Active();
+            g_status = Packs().Command(arg);
+            if (Packs().Active() != before || arg == "reload") ShowPackToast();
         } else if (cmd == "cutout") {
 #ifdef AURORA_HAS_CUTOUT_MODE
             if (!arg.empty()) aurora_set_cutout_mode(std::atoi(arg.c_str()));
@@ -2105,6 +2196,7 @@ void DrawTextures(bool effects) {
         if (ImGui::Combo("Cut-outs (F7 cycles)", &cutout, kCutoutModes, 4)) aurora_set_cutout_mode(cutout);
     }
 #endif
+    if (!effects) DrawPackPicker();
     if (g_suspects.empty()) {
         ImGui::TextWrapped("No list loaded: put devmenu_textures.txt in UserData (e.g. from autotest\\texhunt), then Reload. Effects entries have 'effect' in the seventh column.");
         return;
@@ -2363,6 +2455,8 @@ void HandleSdlEvent(const SDL_Event& event) noexcept {
     if (!Enabled()) return;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F8) g_open = !g_open;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F7) CycleCutoutMode();
+    if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F6)
+        CyclePack((event.key.mod & SDL_KMOD_SHIFT) != 0);
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F3)
         no100f_recorder::Toggle();
     // LB: not mapped on the default controller layouts (it is L on the NSO GameCube one)
@@ -2446,6 +2540,7 @@ void Draw() noexcept {
     UpdateTexLog();
     DrawFindToast();
     DrawCutoutToast();
+    DrawPackToast();
     UpdateFreecam(g_open && g_focused);
     const bool wasFocused = g_focused;
     g_focused = false;

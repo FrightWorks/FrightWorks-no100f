@@ -2667,6 +2667,32 @@ void aurora_texture_replacement_highlight(const char* name) {
   aurora::gfx::texture_replacement::set_highlight(name != nullptr ? name : "");
 #endif
 }
+bool aurora_set_texture_pack(const char* name) {
+#ifdef AURORA_ENABLE_GX
+  return aurora::gfx::texture_replacement::set_texture_pack(name != nullptr ? name : "");
+#else
+  return false;
+#endif
+}
+size_t aurora_get_texture_pack(char* out, size_t size) {
+  std::string pack;
+#ifdef AURORA_ENABLE_GX
+  pack = aurora::gfx::texture_replacement::texture_pack();
+#endif
+  if (out != nullptr && size > 0) {
+    const size_t n = std::min(pack.size(), size - 1);
+    std::memcpy(out, pack.data(), n);
+    out[n] = '\0';
+  }
+  return pack.size();
+}
+size_t aurora_get_texture_pack_entries() {
+#ifdef AURORA_ENABLE_GX
+  return aurora::gfx::texture_replacement::texture_pack_entries();
+#else
+  return 0;
+#endif
+}
 void aurora_texture_log(const char* scene) {
 #ifdef AURORA_ENABLE_GX
   aurora::gfx::texture_replacement::set_texture_log_scene(scene != nullptr ? scene : "");

@@ -1510,7 +1510,9 @@ static void drop_replacement_texture_sources() noexcept {
 void resolve_sampled_textures(const ShaderInfo& info) noexcept {
   ZoneScoped;
   if (gfx::texture_replacement::take_button_icon_style_change()) drop_replacement_texture_sources();
-  if (gfx::texture_replacement::take_highlight_change()) {
+  // Dev tools texture pack switch: every texture goes through find_replacement again, like a highlight change.
+  const bool packChanged = gfx::texture_replacement::take_texture_pack_change();
+  if (gfx::texture_replacement::take_highlight_change() || packChanged) {
     drop_static_texture_caches();
     s_drawStatesLogged.clear();
   }

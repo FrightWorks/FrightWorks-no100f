@@ -1,0 +1,160 @@
+// Dev tools texture pack switcher: the pack list and cycle order, the dev tools gate, the command words, and the
+// replacement index's folder order and lookup order (aurora's replacement_layers.hpp, which needs no GPU).
+#include "no100f_texture_packs.h"
+#include "replacement_layers.hpp"
+
+#include <cassert>
+#include <fstream>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace fs = std::filesystem;
+using namespace no100f_texture_packs;
+namespace tr = aurora::gfx::texture_replacement;
+
+namespace {
+
+void Touch(const fs::path& path) {
+    fs::create_directories(path.parent_path());
+    std::ofstream(path) << "x";
+}
+
+struct Hooked {
+    std::vector<std::string> packs;
+    std::vector<std::string> applied;
+    int lists = 0;
+    Switcher::Hooks Hooks() {
+        return {[this] {
+                    ++lists;
+                    return packs;
+                },
+                [this](const std::string& name) {
+                    applied.push_back(name);
+                    return true;
+                }};
+    }
+};
+
+}  // namespace
+
+int main() {
+    const fs::path root = fs::temp_directory_path() / "no100f_texture_packs_tests";
+    fs::remove_all(root);
+
+    // Pack list: folders only, no hidden ones, name order with either case together.
+    fs::create_directories(root / "texture_packs" / "Beta");
+    fs::create_directories(root / "texture_packs" / "alpha");
+    fs::create_directories(root / "texture_packs" / "gamma2");
+    fs::create_directories(root / "texture_packs" / "Gamma");
+    fs::create_directories(root / "texture_packs" / ".hidden");
+    Touch(root / "texture_packs" / "notes.txt");
+    const std::vector<std::string> expected{"alpha", "Beta", "Gamma", "gamma2"};
+    assert(ListPacks(root) == expected);
+    assert(ListPacks(root / "nowhere").empty());
+
+    // Cycle: usual, each pack, usual again; and back.
+    const std::vector<std::string> three{"a", "b", "c"};
+    assert(NextInCycle(three, "", false) == "a");
+    assert(NextInCycle(three, "a", false) == "b");
+    assert(NextInCycle(three, "b", false) == "c");
+    assert(NextInCycle(three, "c", false) == "");
+    assert(NextInCycle(three, "", true) == "c");
+    assert(NextInCycle(three, "c", true) == "b");
+    assert(NextInCycle(three, "a", true) == "");
+    assert(NextInCycle(three, "gone", false) == "a");  // a pack that vanished counts as usual
+    assert(NextInCycle({}, "", false).empty() && NextInCycle({}, "", true).empty());
+    assert(Label("").find("usual") == 0 && Label("a") == "a");
+
+    // Gate: with the developer tools off nothing is listed or applied.
+    {
+        Hooked h;
+        h.packs = three;
+        Switcher off(false, h.Hooks());
+        assert(!off.Enabled());
+        assert(!off.Cycle(false) && !off.Select("a") && !off.Select(""));
+        assert(off.Command("next").find("off") != std::string::npos);
+        assert(off.Command("list").find("off") != std::string::npos);
+        assert(h.lists == 0 && h.applied.empty() && off.Active().empty());
+    }
+
+    // On: cycling, selecting, commands.
+    {
+        Hooked h;
+        h.packs = {"Alpha", "beta", "Gamma"};
+        Switcher on(true, h.Hooks());
+        assert(on.Enabled() && on.Active().empty());
+        assert(on.Command("").find("usual") != std::string::npos);
+        assert(on.Cycle(false) && on.Active() == "Alpha");
+        assert(on.Cycle(false) && on.Active() == "beta");
+        assert(on.Command("next") == "texpack: Gamma" && on.Active() == "Gamma");
+        assert(on.Command("next") == "texpack: usual (no pack)" && on.Active().empty());
+        assert(on.Command("prev") == "texpack: Gamma");
+        assert(on.Command(" beta \r") == "texpack: beta");  // trimmed
+        assert(on.Command("GAMMA") == "texpack: Gamma");    // letters of either case
+        assert(on.Command("nope").find("no pack named") != std::string::npos && on.Active() == "Gamma");
+        assert(!on.Select("nope") && on.Active() == "Gamma");
+        assert(on.Command("list") == "texpack: usual (no pack), Alpha, beta, Gamma | active Gamma");
+        const size_t before = h.applied.size();
+        assert(on.Command("reload") == "texpack: Gamma" && h.applied.size() == before + 1 && h.applied.back() == "Gamma");
+        assert(on.Command("usual") == "texpack: usual (no pack)" && h.applied.back().empty());
+        assert(on.Command("none").find("usual") != std::string::npos);
+    }
+    {
+        // Two packs that differ only in case: the exact name picks, a wrong-case one is ambiguous.
+        Hooked h;
+        h.packs = {"Style", "style"};
+        Switcher on(true, h.Hooks());
+        assert(on.Command("style") == "texpack: style");
+        assert(on.Command("STYLE").find("no pack named") != std::string::npos);
+    }
+    {
+        // aurora refusing the name leaves the active pack alone.
+        Switcher refusing(true, {[] { return std::vector<std::string>{"a"}; }, [](const std::string&) { return false; }});
+        assert(!refusing.Cycle(false) && refusing.Active().empty());
+    }
+
+    // Pack names reach aurora as plain folder names only.
+    assert(tr::valid_pack_name("styleA") && tr::valid_pack_name("my pack 2"));
+    for (const char* bad : {"", ".", "..", "a/b", "a\\b", "..\\x", "C:", "a:b"}) assert(!tr::valid_pack_name(bad));
+    assert(tr::pack_root(root, "") .empty() && tr::pack_root(root, "..").empty());
+    assert(tr::pack_root(root, "styleA") == root / "texture_packs" / "styleA");
+
+    // The usual folder order: the user's, mods (later name first, "disabled" and no textures folder skipped), the game's.
+    {
+        const fs::path user = root / "user", game = root / "game";
+        fs::create_directories(user / "texture_replacements");
+        fs::create_directories(game / "texture_replacements");
+        fs::create_directories(user / "mods" / "aaa" / "textures");
+        fs::create_directories(user / "mods" / "zzz" / "textures");
+        fs::create_directories(user / "mods" / "mmm" / "textures");
+        Touch(user / "mods" / "mmm" / "disabled");
+        fs::create_directories(user / "mods" / "notextures");
+        const auto roots = tr::usual_roots(user, game);
+        const std::vector<fs::path> want{user / "texture_replacements", user / "mods" / "zzz" / "textures",
+                                         user / "mods" / "aaa" / "textures", game / "texture_replacements"};
+        assert(roots == want);
+        assert(tr::usual_roots(user, {}).size() == 3);
+    }
+
+    // Lookup: candidates in priority order; with a pack selected only its index counts, never the usual one.
+    {
+        const std::map<int, std::string> pack{{1, "pack exact"}, {3, "pack wildcard"}};
+        const std::map<int, std::string> usual{{1, "usual exact"}, {2, "usual tlut wildcard"}, {3, "usual wildcard"}, {4, "usual only"}};
+        const auto look = [&](bool packSelected, std::vector<int> candidates) -> std::string {
+            const auto* found = tr::find_active(pack, usual, packSelected, std::span<const int>(candidates));
+            return found ? *found : "none";
+        };
+        assert(look(false, {1, 2, 3}) == "usual exact");
+        assert(look(false, {5, 2, 3}) == "usual tlut wildcard");
+        assert(look(false, {5, 6, 3}) == "usual wildcard");
+        assert(look(true, {1, 2, 3}) == "pack exact");
+        assert(look(true, {5, 2, 3}) == "pack wildcard");  // the usual chain's tlut wildcard (2) is not consulted
+        assert(look(true, {4}) == "none");                  // only in the usual chain: missing from the pack
+        assert(look(true, {5, 6}) == "none");
+        assert(look(false, {4}) == "usual only");
+    }
+
+    fs::remove_all(root);
+    return 0;
+}
