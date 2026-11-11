@@ -519,8 +519,10 @@ static class LauncherLayoutTests
             File.WriteAllBytes(Path.Combine(sys, "boot.bin"), System.Text.Encoding.ASCII.GetBytes("GIHE78\0\u0001"));
             string stub = Path.Combine(game, DataPaths.GameExe), marker = Path.Combine(game, "started.txt"),
                 release = Path.Combine(game, "release.txt");
-            // The stand-in runs until the test lets it go: the launcher comes back as soon as the game ends.
-            File.WriteAllText(stub, "#!/bin/sh\npwd > started.txt\nwhile [ ! -f release.txt ]; do sleep 0.05; done\n");
+            // The stand-in runs until the test lets it go (the launcher comes back as soon as the game ends), 20 s at most,
+            // so a failed check leaves no process behind.
+            File.WriteAllText(stub, "#!/bin/sh\npwd > started.txt\ni=0\n" +
+                                    "while [ ! -f release.txt ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i + 1)); done\n");
             File.SetUnixFileMode(stub, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             window.CloseBoards();
             window.launchInFixture = true;  // services stay off (no controller polling); only the launch is allowed
