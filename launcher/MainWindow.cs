@@ -25,6 +25,8 @@ sealed class MainWindow : Window
     readonly string root, play, userData, configPath, modsDir, discDir;
     readonly string? shotDir;
     readonly bool enableServices;
+    // A test fixture (services off) that starts a stand-in game: only Play's own check sets it.
+    internal bool launchInFixture;
     internal bool GameOwnsControllers { get; private set; }
     internal readonly MansionScene scene;
     internal readonly Dictionary<string, Board> boards = new();
@@ -1058,7 +1060,7 @@ sealed class MainWindow : Window
 
     async Task Launch()
     {
-        if (!enableServices) throw new InvalidOperationException("Game launch is disabled in this test fixture.");
+        if (!enableServices && !launchInFixture) throw new InvalidOperationException("Game launch is disabled in this test fixture.");
         var exe = Path.Combine(play, GameExe);
         if (!File.Exists(exe)) { await Dialogs.Message(this, "The game files (the data folder) are missing. Re-extract the download next to this launcher."); return; }
         await Patches.BeforePlay();  // can't stop the game starting; the check below comes after it so a second press can't start two
