@@ -138,6 +138,21 @@ class Hip:
         self.assets.sort(key=lambda x: x.id)
         return a
 
+    def replace(self, aid, data):
+        """Swap the bytes of an existing asset (local experiments; not in launcher/ModPatches/HipFile.cs, which only adds).
+        Its ID, name, flags and ADBG stay as they are, so materials still find it. A size change keeps the asset's end on the
+        alignment it had (the largest power of two up to 0x40 that its size plus padding divided by); every later offset
+        moves in build()."""
+        a = self.by[aid]
+        total = len(a.data) + a.plus
+        if len(data) != len(a.data):
+            unit = 1
+            while unit < 0x40 and total % (unit * 2) == 0:
+                unit *= 2
+            a.plus = align(len(data), unit) - len(data)
+        a.data = bytes(data)
+        return a
+
     def build(self):
         # Lay the stream out relative to its start. Existing assets keep their plus unless an added asset follows them.
         rel = 0
