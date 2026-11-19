@@ -243,3 +243,63 @@ TEST(FrameInterpolationContract, IdenticalMeshesInDifferentViewportsDoNotShareHi
   gx::set_frame_interpolation_fps(0);
   gx::begin_frame_interpolation();
 }
+
+TEST(FrameInterpolationContract, CompletesParallelUniformInterpolation) {
+  using namespace aurora;
+  constexpr size_t drawCount = 64;
+  constexpr size_t positionOffset = sizeof(Mat4x4<float>);
+  constexpr size_t normalOffset = positionOffset + gx::MaxPnMtx * sizeof(Mat3x4<float>);
+  constexpr size_t uniformSize = normalOffset + gx::MaxPnMtx * sizeof(Mat3x4<float>);
+  const Mat4x4<float> projection{};
+  const Mat3x4<float> normal{{1.f, 0.f, 0.f, 0.f}, {0.f, 1.f, 0.f, 0.f}, {0.f, 0.f, 1.f, 0.f}};
+  std::array<gfx::Range, drawCount> interpolatedRanges{};
+  const auto recordFrame = [&](float x, bool captureRanges) {
+    std::vector<uint8_t> sources(drawCount * uniformSize);
+    gx::begin_frame_interpolation();
+    for (size_t i = 0; i < drawCount; ++i) {
+      const Mat3x4<float> position{{1.f, 0.f, 0.f, x}, {0.f, 1.f, 0.f, 0.f}, {0.f, 0.f, 1.f, 0.f}};
+      auto* source = sources.data() + i * uniformSize;
+      std::memcpy(source + positionOffset, &position, sizeof(position));
+      std::memcpy(source + normalOffset, &normal, sizeof(normal));
+      gx::g_gxState.currentPnMtx = 0;
+      gx::g_gxState.pnMtx[0].pos = position;
+      gx::g_gxState.pnMtx[0].nrm = normal;
+      const gx::FrameInterpolationDrawIdentity identity{
+          .combined = i + 1,
+          .pipeline = 0x1234,
+          .texture = 0x5678,
+      };
+      const auto ranges = gx::record_interpolation_draw(identity, projection, 1,
+                                                        {.sourceUniformData = source,
+                                                         .uniformSize = uniformSize,
+                                                         .projectionOffset = 0,
+                                                         .positionOffset = positionOffset,
+                                                         .normalOffset = normalOffset,
+                                                         .currentMatrix = 0,
+                                                         .indexedMatrices = false});
+      if (captureRanges) {
+        interpolatedRanges[i] = ranges[0];
+      }
+    }
+    gx::finalize_frame_interpolation();
+  };
+
+  gx::set_frame_interpolation_fps(0);
+  gx::begin_frame_interpolation();
+  gx::set_frame_interpolation_fps(120);
+  recordFrame(0.f, false);
+  recordFrame(1.f, true);
+  recordFrame(2.f, true);
+
+  ASSERT_TRUE(gx::has_interpolated_frame());
+  for (const auto& range : interpolatedRanges) {
+    ASSERT_EQ(range.size, uniformSize);
+    const auto& uniform = gfx::testing::uniform_allocation(range.offset);
+    Mat3x4<float> position{};
+    std::memcpy(&position, uniform.data() + positionOffset, sizeof(position));
+    EXPECT_FLOAT_EQ(position.m0.w(), 1.5f);
+  }
+
+  gx::set_frame_interpolation_fps(0);
+  gx::begin_frame_interpolation();
+}
