@@ -371,7 +371,7 @@ To build old source there, set only the paths that differ with `git restore --so
 - Volume sliders work through a native override of MIXAdjustFader (#86, `music_attenuation.cpp`).
   Known limits: resident dialog counts as SFX, Bink audio is master only.
 - Volume categories, the AX address fix and the stuck-music cause are in the `audio-debug` skill.
-- Stream voices' DVD read callback is a native override that also fixes the game's end-of-track check (`hle/no100f_stream_read.h`, issue 14).
+- Stream voices' DVD read callback is wrapped to fix the game's end-of-track check: the wrapper clears the stale value on a stream's first chunk, then the game's callback runs (`hle/no100f_stream_read.h`, issue 14).
 - Timing-sensitive bugs: dev menu `scene` warps skip what a player does before the warp, so a clean run from them doesn't clear a bug reported from normal play. Reproduce it with the reporter's route, using timed presses rather than mashing: menus drop presses that arrive too early.
 
 **Gameplay**
