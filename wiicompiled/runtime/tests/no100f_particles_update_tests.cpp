@@ -293,6 +293,23 @@ int main() {
             Require(std::fabs(fixed - at30) <= 1.0f / 30.0f, "speed kill matches 30 fps");
             Require(std::fabs(bug / at30 - std::sqrt(2.0f)) < 0.02f, "speed kill comes late without the table");
         }
+
+        // The group update wrapper hands the game's fade rates scaled by step / dt. With a steady 60 fps frame time that
+        // is 0 between steps and 2 at a step, and the game's rate * dt then gives exactly what rate * step would.
+        {
+            StepClock clock;
+            const float dt = 1.0f / 60.0f;
+            for (uint32_t frame = 0; frame < 4; ++frame) {
+                const float step = clock.Step(frame, dt);
+                const float scale = step / dt;
+                Require(scale == (frame % 2 ? 2.0f : 0.0f), "scale is 0 between steps, 2 at a step");
+                for (float rate = -600.0f; rate <= 600.0f; rate += 0.37f)
+                    for (int channel = 0; channel < 256; channel += 51)
+                        Require(FadeChannel(static_cast<uint8_t>(channel), rate * scale, dt) ==
+                                    FadeChannel(static_cast<uint8_t>(channel), rate, step),
+                                "a scaled rate fades exactly as the step time does");
+            }
+        }
     } catch (const std::exception& e) {
         std::cerr << "FAILED: " << e.what() << "\n";
         return 1;

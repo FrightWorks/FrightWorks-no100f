@@ -203,8 +203,8 @@ set(RECOMP_TRANSLATED_PPC_FP_OPTIONS -fno-fast-math -ffp-contract=off)
 # kpad.cpp derives the accelerometer values the game reads (magnitude, speed, acc_vertical) in
 # native float math; network play needs them bit-identical on x86 and ARM, as the translated
 # code is.
-# no100f_particles_update.cpp is a native copy of game code and must match it bit for bit without
-# fps60: fast-math would erase the rounding in PPC_Fmadds, so particle sizes would be cut, not rounded.
+# no100f_particles_update.cpp scales the game's particle fade rates by step / dt with fps60, which must stay
+# exact (a scaled rate * dt equal to rate * step bit for bit): no fast-math reassociation.
 set(RECOMP_PPC_SEMANTIC_RUNTIME_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/src/ppc_helpers.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/src/fpu_helpers.cpp"
