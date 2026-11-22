@@ -1,10 +1,18 @@
+// NO100F title backdrop: the title model (asset id No100fTitleBackdrop::kModelId) gets forest side panels for wide
+// pictures (BuildModel), with its texture's U addressing set to clamp so the panel edges don't wrap.
+//
+// A wrapper on the model asset reader MODEL_Read (0x800458D4, reached through the asset type table):
+// REGISTER_NATIVE_FUNCTION_AS takes the address over and keeps the game's reader translated as func_800458D4,
+// which loads the model from (r5 data, r6 size), stores the asset size at *r7 and returns the model. For the title
+// model the reader gets the expanded copy (allocated on the scene heap) instead of the disc's data; every other
+// model, and the title model when it can't be expanded, goes to the game's reader unchanged.
 #include "abi_bridge.h"
 #include "hle/no100f_title_backdrop.h"
 #include "hle_stubs.h"
 #include "memory.h"
 #include "runtime_log.h"
 
-extern "C" void func_8000E978(CpuContext* ctx); // iModelFileNew: consumes and closes the memory stream synchronously
+extern "C" void func_800458D4(CpuContext* ctx); // the game's MODEL_Read, kept translated (iModelFileNew reads the data at once)
 extern "C" void func_8002FDB0(CpuContext* ctx); // xMemAlloc(heap, size), released with the scene heap
 
 namespace {
@@ -34,38 +42,36 @@ bool SetTitleTextureEdges(uint32_t atomic) {
 
 } // namespace
 
-// GIHE78 rev 1 MODEL_Read: iModelFileNew(r5, r6), *r7 = 0x70, return model.
 extern "C" void No100f_ReadTitleModel(CpuContext* ctx) {
-    uint32_t data = ctx->gpr[5], size = ctx->gpr[6];
-    const uint32_t outSize = ctx->gpr[7];
+    if (ctx->gpr[4] != No100fTitleBackdrop::kModelId) {
+        func_800458D4(ctx);
+        return;
+    }
+    const uint32_t data = ctx->gpr[5], size = ctx->gpr[6];
     bool expandedTitle = false;
-    if (ctx->gpr[4] == No100fTitleBackdrop::kModelId) {
-        if (!Memory::Contains(data, size)) {
-            RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] model input outside guest memory\n";
+    if (!Memory::Contains(data, size)) {
+        RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] model input outside guest memory\n";
+    } else {
+        const auto expanded = No100fTitleBackdrop::BuildModel(Memory::GetPointer(data, size), size);
+        if (expanded.empty()) {
+            RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] incompatible title model; original retained\n";
         } else {
-            const auto expanded = No100fTitleBackdrop::BuildModel(Memory::GetPointer(data, size), size);
-            if (expanded.empty()) {
-                RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] incompatible title model; original retained\n";
+            CpuContext allocation = *ctx;
+            allocation.gpr[3] = Memory::Read32(ctx->gpr[13] - 31024);
+            allocation.gpr[4] = static_cast<uint32_t>(expanded.size());
+            func_8002FDB0(&allocation);
+            const uint32_t buffer = allocation.gpr[3];
+            if (!buffer || !Memory::Contains(buffer, expanded.size())) {
+                RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] cannot allocate side panels; original retained\n";
             } else {
-                CpuContext allocation = *ctx;
-                allocation.gpr[3] = Memory::Read32(ctx->gpr[13] - 31024);
-                allocation.gpr[4] = static_cast<uint32_t>(expanded.size());
-                func_8002FDB0(&allocation);
-                const uint32_t buffer = allocation.gpr[3];
-                if (!buffer || !Memory::Contains(buffer, expanded.size())) {
-                    RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] cannot allocate side panels; original retained\n";
-                } else {
-                    std::memcpy(Memory::GetPointer(buffer, expanded.size()), expanded.data(), expanded.size());
-                    data = buffer;
-                    size = static_cast<uint32_t>(expanded.size());
-                    expandedTitle = true;
-                }
+                std::memcpy(Memory::GetPointer(buffer, expanded.size()), expanded.data(), expanded.size());
+                ctx->gpr[5] = buffer;
+                ctx->gpr[6] = static_cast<uint32_t>(expanded.size());
+                expandedTitle = true;
             }
         }
     }
-    ctx->gpr[3] = data;
-    ctx->gpr[4] = size;
-    func_8000E978(ctx);
+    func_800458D4(ctx);
     if (expandedTitle) {
         if (SetTitleTextureEdges(ctx->gpr[3])) {
             RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] injected forest side panels with edge-addressed texture; original title box retained\n";
@@ -73,6 +79,5 @@ extern "C" void No100f_ReadTitleModel(CpuContext* ctx) {
             RT_LOG(RT_TAG_RUNTIME) << "[title-backdrop] cannot configure loaded title texture; edge seams may remain\n";
         }
     }
-    Memory::Write32(outSize, 0x70);
 }
-PPC_NATIVE_OVERRIDE_VOID(800458D4, No100f_ReadTitleModel, (CpuContext* ctx), (ctx));
+REGISTER_NATIVE_FUNCTION_AS(0x800458D4, No100f_ReadTitleModel, "No100f_ReadTitleModel");
