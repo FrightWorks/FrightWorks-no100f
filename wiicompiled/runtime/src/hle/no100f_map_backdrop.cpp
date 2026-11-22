@@ -1,3 +1,11 @@
+// NO100F map backdrop: in a wide picture, the pause Map's full-screen picture gets forest panels on both sides (the
+// hub's resident bkg_hub texture, clamped) and a feathered edge, instead of black bars.
+//
+// A wrapper on RwIm2DRenderIndexedPrimitive (0x80160BF4): REGISTER_NATIVE_FUNCTION_AS takes the address over and keeps
+// the game's function translated as func_80160BF4. Only the Map picture's draw from the UI renderer (return address,
+// asset and vertices checked by ReadMapSource) is replaced by our draws, each a call of the game's function with
+// vertices and indices in a scratch frame on the guest stack; every other draw, and the Map in 4:3 or when anything
+// doesn't match, is a plain call of the game's function.
 #include "abi_bridge.h"
 #include "hle/no100f_map_backdrop.h"
 #include "hle_stubs.h"
@@ -10,6 +18,7 @@ extern std::atomic<float> g_gameCameraAspect;
 extern "C" void func_8003FF84(CpuContext* ctx); // xSTFindAsset
 extern "C" void func_80160B10(CpuContext* ctx); // RwRenderStateSet
 extern "C" void func_80160B70(CpuContext* ctx); // RwRenderStateGet
+extern "C" void func_80160BF4(CpuContext* ctx); // the game's RwIm2DRenderIndexedPrimitive, kept translated
 
 namespace {
 
@@ -58,19 +67,16 @@ bool ReadMapSource(CpuContext* ctx, float aspect, std::array<No100fMapBackdrop::
     return true;
 }
 
-void DispatchIndexed(CpuContext* ctx, uint32_t frameSize) {
+// One of our draws: the game's function, called from a frame of our own (the scratch with the vertices and indices)
+// with the back chain set and the return address saved in the caller's frame, as a guest function owning it would.
+void DrawFromScratchFrame(CpuContext* ctx) {
     const uint32_t stack = ctx->gpr[1], lr = ctx->lr;
-    ctx->gpr[1] = stack - frameSize;
-    Memory::Write32(ctx->gpr[1], stack);
     Memory::Write32(stack + 4, lr);
-    ctx->gpr[8] = Memory::Read32(ctx->gpr[13] - 0x6C04);
-    ctx->gpr[12] = Memory::Read32(ctx->gpr[8] + 0x34);
-    ctx->ctr = ctx->gpr[12];
-    ctx->lr = 0x80160C10u;
-    InvokeIndirectCpu(ctx->gpr[12], ctx);
-    ctx->gpr[0] = Memory::Read32(stack + 4);
-    ctx->lr = ctx->gpr[0];
+    ctx->gpr[1] = stack - kScratchSize;
+    Memory::Write32(ctx->gpr[1], stack);
+    func_80160BF4(ctx);
     ctx->gpr[1] = stack;
+    ctx->lr = lr;
 }
 
 template <size_t N>
@@ -94,7 +100,7 @@ bool Draw(CpuContext* ctx, const std::array<No100fMapBackdrop::Vertex, N>& verti
     ctx->gpr[5] = static_cast<uint32_t>(vertices.size());
     ctx->gpr[6] = scratch + kIndexOffset;
     ctx->gpr[7] = indexCount;
-    DispatchIndexed(ctx, kScratchSize);
+    DrawFromScratchFrame(ctx);
     return ctx->gpr[3] != 0;
 }
 
@@ -215,12 +221,10 @@ bool DrawMap(CpuContext* ctx, const std::array<No100fMapBackdrop::Vertex, 4>& so
 
 } // namespace
 
-// GIHE78 rev 1 RwIm2DRenderIndexedPrimitive: dispatch through RwEngineInstance +0x34.
-// Retain the original linkage frame, engine in r8, indirect target in r12/CTR and callback return value.
 extern "C" void No100f_DrawIndexed2D(CpuContext* ctx) {
     const float aspect = g_gameCameraAspect.load(std::memory_order_relaxed);
     std::array<No100fMapBackdrop::Vertex, 4> source{};
     if (aspect > 4.0f / 3.0f && ReadMapSource(ctx, aspect, source) && DrawMap(ctx, source, aspect)) return;
-    DispatchIndexed(ctx, 0x10u);
+    func_80160BF4(ctx);
 }
-PPC_NATIVE_OVERRIDE_VOID(80160BF4, No100f_DrawIndexed2D, (CpuContext* ctx), (ctx));
+REGISTER_NATIVE_FUNCTION_AS(0x80160BF4, No100f_DrawIndexed2D, "No100f_DrawIndexed2D");
