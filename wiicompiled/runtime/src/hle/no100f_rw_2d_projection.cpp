@@ -15,73 +15,66 @@
 // y = 256; at higher resolutions everything inside the box sits up to a screen pixel off along its right and bottom
 // edges, and textures crossing them look cut. (Correcting only the restore quad uncovers the strip the clear and
 // invert spill.)
-// Here those three projections span 0..fbWidth x 0..xfbHeight, so 2D coordinates are pixel coordinates. The three
-// calls are told apart by their return address; every other projection is built and loaded as before.
+// Here those three projections span 0..fbWidth x 0..xfbHeight, so 2D coordinates are pixel coordinates.
 //
-// Native in full: an override's address is excluded from translation, so the original body cannot be called.
-// C_MTXOrtho(m, t, b, l, r, n, f) (0x80103544), single precision: m = [2/(r-l) 0 0 -(r+l)/(r-l); 0 2/(t-b) 0
-// -(t+b)/(t-b); 0 0 -1/(f-n) -f/(f-n); 0 0 0 1]. Its other caller (0x800DB268) is unchanged.
-// GXSetProjectionv(v) (0x801025A8): __GXData (*(r13 - 0x7DB8)) +0x420 = (u32)v[0] (projection type), +0x424..+0x438 =
-// v[1..6]; FIFO: 0x10, 0x00061020, v[1..6], type (XF projection registers); __GXData +2 (u16) = 1. Its other callers
-// (camera begin update 0x80176698, the Im2D restore of the camera's projection 0x80172E48) are unchanged.
+// Two wrappers (REGISTER_NATIVE_FUNCTION_AS): the SDK's C_MTXOrtho (0x80103544) and GXSetProjectionv (0x801025A8) stay
+// translated as func_<addr>, and the wrappers change only the arguments of those three calls, told apart by their
+// return address; every other call (C_MTXOrtho from 0x800DB268; GXSetProjectionv from the camera begin update
+// 0x80176698 and the Im2D restore of the camera's projection 0x80172E48) goes straight on.
+// - C_MTXOrtho(m, t, b, l, r, n, f) takes its bounds in f1..f6: the Im2D setup's bottom (f2) and right (f4) are
+//   xfbHeight - 1 and fbWidth - 1, so each gets 1 added.
+// - GXSetProjectionv(v) reads a 7-float vector at r3 (type, x scale, x offset, y scale, y offset, z scale, z offset).
+//   It gets a copy with the x and y scales made full-pixel, in a 40-byte frame of our own on the guest stack with the
+//   back chain set; the caller's vector is left as it was. The offsets (-1, +1) keep 0 at the top-left corner.
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include "abi_bridge.h"
 #include "memory.h"
 #include "hle_stubs.h"
 #include "ppc_runtime.h"
 
+extern "C" void func_80103544(CpuContext* ctx);  // the SDK's C_MTXOrtho, kept translated
+extern "C" void func_801025A8(CpuContext* ctx);  // the SDK's GXSetProjectionv, kept translated
+
 namespace {
 constexpr uint32_t kIm2DOrthoReturn = 0x80172A88u;        // after C_MTXOrtho at 0x80172A84 (Im2D setup)
 constexpr uint32_t kClearProjectionReturn = 0x8017A6F0u;  // after GXSetProjectionv at 0x8017A6EC (camera clear)
 constexpr uint32_t kBlitProjectionReturn = 0x80179A64u;   // after GXSetProjectionv at 0x80179A60 (0x80179734)
-constexpr uint32_t kGxFifo = 0xCC008000u;
-constexpr int32_t kGxDataSda = -0x7DB8;  // [r13 - 0x7DB8]: __GXData
 
 // A 2D scale 2/(n - 1) (or -2/(n - 1)) from those projection vectors, as 2/n: n - 1 is a whole pixel count.
 float FullPixelScale(float scale) {
     const float span = std::round(2.0f / std::fabs(scale));
     return std::copysign(2.0f / (span + 1.0f), scale);
 }
+
+uint32_t Bits(float f) { uint32_t w; std::memcpy(&w, &f, 4); return w; }
 }  // namespace
 
 extern "C" void No100f_MtxOrtho(CpuContext* ctx) {
-    const uint32_t m = ctx->gpr[3];
-    const float t = static_cast<float>(ctx->fpr[1].d), l = static_cast<float>(ctx->fpr[3].d);
-    const float n = static_cast<float>(ctx->fpr[5].d), f = static_cast<float>(ctx->fpr[6].d);
-    float b = static_cast<float>(ctx->fpr[2].d), r = static_cast<float>(ctx->fpr[4].d);
     if (ctx->lr == kIm2DOrthoReturn) {
-        // The Im2D setup passes bottom = xfbHeight - 1 and right = fbWidth - 1 (whole numbers): span the full pixels.
-        b += 1.0f;
-        r += 1.0f;
+        ctx->fpr[2].d = static_cast<double>(static_cast<float>(ctx->fpr[2].d) + 1.0f);  // bottom
+        ctx->fpr[4].d = static_cast<double>(static_cast<float>(ctx->fpr[4].d) + 1.0f);  // right
     }
-    const float invRl = 1.0f / (r - l), invTb = 1.0f / (t - b), invFn = 1.0f / (f - n);
-    const float row[16] = {
-        2.0f * invRl, 0.0f, 0.0f, invRl * -(r + l),
-        0.0f, 2.0f * invTb, 0.0f, invTb * -(t + b),
-        0.0f, 0.0f, -1.0f * invFn, -f * invFn,
-        0.0f, 0.0f, 0.0f, 1.0f,
-    };
-    for (uint32_t i = 0; i < 16; ++i) Memory::WriteFloat32(m + i * 4, row[i]);
+    func_80103544(ctx);
 }
-PPC_NATIVE_OVERRIDE_VOID(80103544, No100f_MtxOrtho, (CpuContext* ctx), (ctx));
+REGISTER_NATIVE_FUNCTION_AS(0x80103544, No100f_MtxOrtho, "No100f_MtxOrtho");
 
 extern "C" void No100f_SetProjectionv(CpuContext* ctx) {
-    const uint32_t src = ctx->gpr[3];
-    float v[7];
-    for (uint32_t i = 0; i < 7; ++i) v[i] = Memory::ReadFloat32(src + i * 4);
-    if (ctx->lr == kClearProjectionReturn || ctx->lr == kBlitProjectionReturn) {
-        v[1] = FullPixelScale(v[1]);  // offsets v[2] = -1, v[4] = +1 keep 0 at the top-left corner
-        v[3] = FullPixelScale(v[3]);
+    if (ctx->lr != kClearProjectionReturn && ctx->lr != kBlitProjectionReturn) {
+        func_801025A8(ctx);
+        return;
     }
-    const uint32_t type = v[0] > 0.0f ? static_cast<uint32_t>(v[0]) : 0u;  // __cvt_fp2unsigned
-    const uint32_t gx = Memory::Read32(ctx->gpr[13] + kGxDataSda);
-    Memory::Write32(gx + 0x420, type);
-    for (uint32_t i = 1; i < 7; ++i) Memory::WriteFloat32(gx + 0x420 + i * 4, v[i]);
-    Memory::Write8(kGxFifo, 0x10);
-    Memory::Write32(kGxFifo, 0x00061020u);
-    for (uint32_t i = 1; i < 7; ++i) Memory::WriteFloat32(kGxFifo, v[i]);
-    Memory::Write32(kGxFifo, type);
-    Memory::Write16(gx + 2, 1);
+    const uint32_t src = ctx->gpr[3];
+    const uint32_t sp = ctx->gpr[1];
+    const uint32_t frame = sp - 40;
+    Memory::Write32(frame, sp);  // back chain
+    for (uint32_t i = 0; i < 7; ++i) Memory::Write32(frame + 8 + i * 4, Memory::Read32(src + i * 4));
+    Memory::Write32(frame + 8 + 1 * 4, Bits(FullPixelScale(Memory::ReadFloat32(src + 1 * 4))));  // x scale
+    Memory::Write32(frame + 8 + 3 * 4, Bits(FullPixelScale(Memory::ReadFloat32(src + 3 * 4))));  // y scale
+    ctx->gpr[1] = frame;
+    ctx->gpr[3] = frame + 8;
+    func_801025A8(ctx);
+    ctx->gpr[1] = sp;
 }
-PPC_NATIVE_OVERRIDE_VOID(801025A8, No100f_SetProjectionv, (CpuContext* ctx), (ctx));
+REGISTER_NATIVE_FUNCTION_AS(0x801025A8, No100f_SetProjectionv, "No100f_SetProjectionv");
