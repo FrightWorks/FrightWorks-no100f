@@ -1,7 +1,7 @@
 """Determinism check: run the game twice on the virtual clock and compare guest memory frame by frame.
 Python 3.8+, Windows and Linux, standard library only.
 
-    python tools/det-check.py [--boot i004] [--retraces 1200] [--every 30] [--input "8000:A:200"] [--input-b S] [--fps30] [--whole-memory]
+    python tools/det-check.py [--boot i004] [--retraces 1200] [--every 30] [--input "8000:A:200"] [--input-b S] [--dump R,...] [--fps30] [--whole-memory]
                               [--play-a DIR] [--play-b DIR] [--disc DIR] [--keep] [--skip-build-check] [--timeout 180]
 
 Each run is the deterministic mode (NO100F_DETERMINISTIC=1, wiicompiled/runtime/include/det_clock.h) with the guest
@@ -35,14 +35,16 @@ class Run:
     def __init__(self, name, args, out, play, pad_input):
         self.name, self.args, self.out = name, args, out
         self.pad_input = pad_input
-        self.hash_file = out / f"{name}.hash"
+        # Memory images go next to the hash file under fixed names: one folder per run keeps a and b apart.
+        self.hash_file = (out / name if args.dump else out) / f"{name}.hash"
         self.game = launch.TestGame(
             name, out / "work" / name, boot=args.boot, hd=False, src_play=play, disc_data=args.disc, dev_tools=False,
             build_check=not args.skip_build_check and play is None, fps60=not args.fps30,
             extra_env={"NO100F_DETERMINISTIC": "1",
                        "NO100F_DET_HASH": f"{self.hash_file}:{args.every}",
                        "NO100F_DET_HASH_SKIP_DEAD_STACK": "0" if args.whole_memory else "1",
-                       "NO100F_INPUT_SCRIPT": pad_input})
+                       "NO100F_INPUT_SCRIPT": pad_input,
+                       **({"NO100F_DET_DUMP": args.dump} if args.dump else {})})
         self.error = None
         self.reached = -1
 
@@ -77,6 +79,8 @@ def main(argv=None):
     p.add_argument("--every", type=int, default=30, help="fingerprint every N retraces")
     p.add_argument("--input", default=DEFAULT_INPUT, help="NO100F_INPUT_SCRIPT for both runs")
     p.add_argument("--input-b", help="a different script for run b: a control that must come out different")
+    p.add_argument("--dump", metavar="RETRACES",
+                   help="also write each run's mem1/mem2 images at these retraces (comma list), with the hash files in a/ and b/")
     p.add_argument("--fps30", action="store_true", help="[video] fps60 = false")
     p.add_argument("--whole-memory", action="store_true",
                    help="hash each thread's unused stack too (left out by default: builds leave different bytes there)")
