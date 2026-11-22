@@ -1,7 +1,15 @@
 // xEntRender's early iModelCull tests only the root atomic. On multi-atomic
 // characters that can be a hat, not the body. Keep that optimization only when
 // every visible model is outside; leave the later per-atomic tests unchanged.
+//
+// A wrapper on RwCameraFrustumTestSphere (0x80168D74): REGISTER_NATIVE_FUNCTION_AS
+// takes the address over and keeps the game's function translated as
+// func_80168D74, which always runs first and gives the result. Only an
+// "outside" from the entity-level gate in a widened picture (main camera, called
+// from iModelCull for xEntRender) gets the extra test of the entity's other
+// models; every other call returns the game's result as it is.
 #include "no100f_model_culling.h"
+#include "abi_bridge.h"
 #include "hle_stubs.h"
 #include "memory.h"
 #include "ppc_runtime.h"
@@ -11,7 +19,8 @@
 #include <cstring>
 
 extern std::atomic<float> g_gameCameraAspect;
-extern "C" void func_8000E220(CpuContext* ctx);
+extern "C" void func_8000E220(CpuContext* ctx);  // iModelCull
+extern "C" void func_80168D74(CpuContext* ctx);  // the game's RwCameraFrustumTestSphere, kept translated
 
 namespace {
 float ReadFloat(uint32_t address) {
@@ -52,12 +61,14 @@ bool ModelVisible(uint32_t model, CpuContext& probe, uint32_t scratchMatrix) {
 
 extern "C" void No100f_CameraFrustumTestSphere(CpuContext* ctx) {
     const uint32_t camera = ctx->gpr[3];
-    uint32_t result = no100f_model_culling::ClassifySphere(camera, ctx->gpr[4], ReadFloat);
+    const uint32_t returnAddress = ctx->lr;
+    func_80168D74(ctx);  // a leaf: r1 and the saved registers read below are as the caller left them
+    uint32_t result = ctx->gpr[3];
     const float aspect = g_gameCameraAspect.load(std::memory_order_relaxed);
     // iModelCull's fixed 0x30-byte frame saves its caller at SP+0x34.
-    if (result == 0 && ctx->lr == 0x8000E380u &&
+    if (result == 0 && returnAddress == 0x8000E380u &&
         no100f_model_culling::IsWideEntityGate(aspect, camera, Memory::Read32(0x80245190u),
-                                             ctx->lr, Memory::Read32(ctx->gpr[1] + 0x34))) {
+                                             returnAddress, Memory::Read32(ctx->gpr[1] + 0x34))) {
         const uint32_t root = Memory::Read32(ctx->gpr[27] + 0x2C);
         if (Memory::Read32(root + 0x10) == ctx->gpr[29] &&
             Memory::Read32(root + 0x20) == ctx->gpr[30]) {
@@ -78,4 +89,4 @@ extern "C" void No100f_CameraFrustumTestSphere(CpuContext* ctx) {
     }
     ctx->gpr[3] = result;
 }
-PPC_NATIVE_OVERRIDE_VOID(80168D74, No100f_CameraFrustumTestSphere, (CpuContext* ctx), (ctx));
+REGISTER_NATIVE_FUNCTION_AS(0x80168D74, No100f_CameraFrustumTestSphere, "No100f_CameraFrustumTestSphere");
