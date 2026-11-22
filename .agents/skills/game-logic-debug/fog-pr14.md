@@ -27,8 +27,11 @@ i004/i001/e001/h002; grate flash frames 1/219 (30 fps baseline 3/171). Smoke i00
 
 ## Path 2 — `fix/particles-fps60-path2` `212643d` (off `main`)
 
-- `0x800C5C0C` native in full (`hle/no100f_particles_entity.cpp`): applies overrides (flags word at ov+0, bits mapped in
-  the file), optional save/restore (flag 0x4000, save area `0x802486A0`), emit, restore. Callers: 89 sites; 36 pass a fixed
+- `0x800C5C0C` "emit with overrides": applies overrides (flags word at ov+0), optional save/restore (flag 0x4000, save
+  area `0x802486A0`), emit (`bl 0x800C4B04` at `0x800C5EB8`, caller's f1 passed through), restore. Was native in full;
+  since `refactor/particles-entity-wrapper` (2026-11-22) `hle/no100f_particles_entity.cpp` wraps emit `0x800C4B04`
+  instead and acts only when lr == `0x800C5EBC` (emit's only other caller is the update, `0x800C4AE8`), so the game's
+  own code applies and restores the overrides. Callers: 89 sites; 36 pass a fixed
   1/30 (sda2 `0x3D088889`) instead of frame dt -> 2x speed at 60 fps (`PAREMIT_CHAND_CANDLE`), plus 2x count for timer-0
   emitters (`SMALL_VAN_PUFF`, `FIREWORKS_TRAIL`, chandelier candles).
 - Fix (fps60 only): dt == 1/30 -> frame time `[0x80270D84]` (r13-0x74FC, clamped 1/60..0.1); if timer <= 0, per emitter skip
@@ -37,7 +40,7 @@ i004/i001/e001/h002; grate flash frames 1/219 (30 fps baseline 3/171). Smoke i00
   firework burst a 1-frame streak, skipped 0).
 - Result: VAN_PUFF 0.96-1.01x, FIREWORKS_TRAIL 0.75-0.91x (random launch timing), CHAND_CANDLE speed 2.00x -> 1.00x.
   Tried a shared global 30 Hz phase for path 1+2: no measurable difference, dropped (keeps the two files independent).
-- Probes: `patches/particles-path2-probes.patch` (p2 tag, per-asset call streaks / skips / caller lr+flags / avg system
+- Probes: `patches/particles-path2-probes.patch` (written against the full port: no longer applies to the wrapper; p2 tag, per-asset call streaks / skips / caller lr+flags / avg system
   population -> `postool/streaks.txt`; `births-run.ps1` copies extra postool txt files).
 - `births` is wrong for `PAREMIT_CHAND_CANDLE` (13 "births"/s but ~0.6 alive with 0.75 s life): use the population probe.
   i004 CHAND_CANDLE at 60 fps ~0 on every build including `main` (pre-existing).

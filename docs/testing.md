@@ -434,10 +434,11 @@ Input is the scripted pad (`--input`, the `NO100F_INPUT_SCRIPT` format of sectio
 `--input-b` gives run b other input: a control, which must come out "different", to show the check can see a change at all.
 Each thread's stack below its stack pointer is left out of the hashes (`NO100F_DET_HASH_SKIP_DEAD_STACK=1`): two builds that behave the same still leave different leftovers there, for instance when a function moves between native and translated code. `--whole-memory` hashes it too.
 
-Options: `--boot` (`i004`), `--retraces`, `--every`, `--input`, `--input-b`, `--fps30`, `--whole-memory`, `--play-a`, `--play-b`, `--disc`, `--timeout`, `--slots`, `--keep`, `--skip-build-check`.
+Options: `--boot` (`i004`), `--retraces`, `--every`, `--input`, `--input-b`, `--dump`, `--fps30`, `--whole-memory`, `--play-a`, `--play-b`, `--disc`, `--timeout`, `--slots`, `--keep`, `--skip-build-check`.
 Exit codes: 0 identical, 1 different, 2 wrong build, 3 not run (a run crashed or did not get far enough). Output: `autotest\det-<time>\` with `REPORT.md`, the two hash files and the runs' logs.
 It shows that memory matches, not that the picture or the sound does: Aurora and the audio mixer run outside guest memory.
-A difference names the retrace; `NO100F_DET_DUMP=<retrace>` writes both memory images there for a byte diff (`det_hash.h`).
+A difference names the retrace; `--dump <retrace>[,...]` writes both runs' memory images there (`NO100F_DET_DUMP`, `det_hash.h`; the kit drops that variable from your own shell), in `a\` and `b\` with the hash files, for a byte diff.
+Diff before trusting "different": when a function goes from native back to translated code, stale stack bytes can end up in structure padding and differ for good while everything else matches. A control that breaks the change on purpose shows whether the run reaches the changed code at all.
 Measured on one PC (2026-11-18): `i004` with two A presses, same build twice, identical at 60 and 30 fps; a control with one extra press differed from the first hash after it.
 
 ## 5. Dev menu (F8)
