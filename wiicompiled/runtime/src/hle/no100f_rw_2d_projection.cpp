@@ -48,7 +48,7 @@ float FullPixelScale(float scale) {
     return std::copysign(2.0f / (span + 1.0f), scale);
 }
 
-uint32_t Bits(float f) { uint32_t w; std::memcpy(&w, &f, 4); return w; }
+uint32_t ProjectionWordBits(float f) { uint32_t w; std::memcpy(&w, &f, 4); return w; }
 }  // namespace
 
 extern "C" void No100f_MtxOrtho(CpuContext* ctx) {
@@ -70,8 +70,8 @@ extern "C" void No100f_SetProjectionv(CpuContext* ctx) {
     const uint32_t frame = sp - 40;
     Memory::Write32(frame, sp);  // back chain
     for (uint32_t i = 0; i < 7; ++i) Memory::Write32(frame + 8 + i * 4, Memory::Read32(src + i * 4));
-    Memory::Write32(frame + 8 + 1 * 4, Bits(FullPixelScale(Memory::ReadFloat32(src + 1 * 4))));  // x scale
-    Memory::Write32(frame + 8 + 3 * 4, Bits(FullPixelScale(Memory::ReadFloat32(src + 3 * 4))));  // y scale
+    Memory::Write32(frame + 8 + 1 * 4, ProjectionWordBits(FullPixelScale(Memory::ReadFloat32(src + 1 * 4))));  // x scale
+    Memory::Write32(frame + 8 + 3 * 4, ProjectionWordBits(FullPixelScale(Memory::ReadFloat32(src + 3 * 4))));  // y scale
     ctx->gpr[1] = frame;
     ctx->gpr[3] = frame + 8;
     func_801025A8(ctx);
