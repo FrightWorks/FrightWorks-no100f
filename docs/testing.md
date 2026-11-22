@@ -429,12 +429,13 @@ Two uses:
 - **Two builds** (`--play-a DIR --play-b DIR`, each a built `Play\` folder, or a copy of one): checks that a change which should not change behaviour doesn't, such as a refactor of an override or a change behind an option that is off.
   Build the baseline from `main`, copy its `Play\` aside (the files at its top level and `button_icons\`), then build the change.
   Run it once with `--fps30` and once without, so both frame rates are covered.
+  The kit's test config is 16:9 (`aspect_mode = 1`): for a change that depends on the picture aspect, also run with `--aspect-mode 0` (4:3), and 2 or 3 where it matters.
 
 Input is the scripted pad (`--input`, the `NO100F_INPUT_SCRIPT` format of section 7, with times in milliseconds of virtual time from boot); the default presses nothing.
 `--input-b` gives run b other input: a control, which must come out "different", to show the check can see a change at all.
 Each thread's stack below its stack pointer is left out of the hashes (`NO100F_DET_HASH_SKIP_DEAD_STACK=1`): two builds that behave the same still leave different leftovers there, for instance when a function moves between native and translated code. `--whole-memory` hashes it too.
 
-Options: `--boot` (`i004`), `--retraces`, `--every`, `--input`, `--input-b`, `--dump`, `--fps30`, `--whole-memory`, `--play-a`, `--play-b`, `--disc`, `--timeout`, `--slots`, `--keep`, `--skip-build-check`.
+Options: `--boot` (`i004`), `--retraces`, `--every`, `--input`, `--input-b`, `--dump`, `--aspect-mode`, `--fps30`, `--whole-memory`, `--play-a`, `--play-b`, `--disc`, `--timeout`, `--slots`, `--keep`, `--skip-build-check`.
 Exit codes: 0 identical, 1 different, 2 wrong build, 3 not run (a run crashed or did not get far enough). Output: `autotest\det-<time>\` with `REPORT.md`, the two hash files and the runs' logs.
 It shows that memory matches, not that the picture or the sound does: Aurora and the audio mixer run outside guest memory.
 A difference names the retrace; `--dump <retrace>[,...]` writes both runs' memory images there (`NO100F_DET_DUMP`, `det_hash.h`; the kit drops that variable from your own shell), in `a\` and `b\` with the hash files, for a byte diff.

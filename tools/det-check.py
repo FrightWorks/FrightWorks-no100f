@@ -1,7 +1,7 @@
 """Determinism check: run the game twice on the virtual clock and compare guest memory frame by frame.
 Python 3.8+, Windows and Linux, standard library only.
 
-    python tools/det-check.py [--boot i004] [--retraces 1200] [--every 30] [--input "8000:A:200"] [--input-b S] [--dump R,...] [--fps30] [--whole-memory]
+    python tools/det-check.py [--boot i004] [--retraces 1200] [--every 30] [--input "8000:A:200"] [--input-b S] [--dump R,...] [--aspect-mode N] [--fps30] [--whole-memory]
                               [--play-a DIR] [--play-b DIR] [--disc DIR] [--keep] [--skip-build-check] [--timeout 180]
 
 Each run is the deterministic mode (NO100F_DETERMINISTIC=1, wiicompiled/runtime/include/det_clock.h) with the guest
@@ -53,6 +53,8 @@ class Run:
             with pool.acquire(f"det-check {self.name}", root=str(REPO)):
                 self.game.check_build()
                 self.game.prepare()
+                if self.args.aspect_mode is not None:
+                    set_aspect_mode(self.game.play / "UserData" / "Config.toml", self.args.aspect_mode)
                 self.game.start()
                 end = time.time() + self.args.timeout
                 while time.time() < end:
@@ -72,6 +74,14 @@ class Run:
             self.game.stop()
 
 
+def set_aspect_mode(cfg, mode):
+    """The kit's test config is 16:9 (aspect_mode = 1); --aspect-mode replaces that line."""
+    text = cfg.read_text(encoding="utf-8")
+    if "aspect_mode = 1\n" not in text:
+        raise RuntimeError(f"{cfg}: no 'aspect_mode = 1' line to replace")
+    cfg.write_text(text.replace("aspect_mode = 1\n", f"aspect_mode = {mode}\n", 1), encoding="utf-8")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--boot", default="i004")
@@ -81,6 +91,8 @@ def main(argv=None):
     p.add_argument("--input-b", help="a different script for run b: a control that must come out different")
     p.add_argument("--dump", metavar="RETRACES",
                    help="also write each run's mem1/mem2 images at these retraces (comma list), with the hash files in a/ and b/")
+    p.add_argument("--aspect-mode", type=int, choices=(0, 1, 2, 3),
+                   help="[video] aspect_mode for both runs (0 4:3, 1 16:9 = the kit's default, 2 fill, 3 cinematic)")
     p.add_argument("--fps30", action="store_true", help="[video] fps60 = false")
     p.add_argument("--whole-memory", action="store_true",
                    help="hash each thread's unused stack too (left out by default: builds leave different bytes there)")
