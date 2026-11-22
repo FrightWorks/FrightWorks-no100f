@@ -12,18 +12,18 @@ static void Require(bool condition, const char* message) {
 
 namespace {
 constexpr uint32_t kEntry = 0x8024C258u;
+constexpr uint32_t kChunkBytes = 0x2EE0;
 
 struct Guest {
     std::unordered_map<uint32_t, uint32_t> mem;
-    Guest() {
-        mem[kEntry] = 0x8026C098u;
-        mem[kEntry + kAramHalf1] = 0xEA60;
-        mem[kEntry + kAramHalf2] = 0x11940;
-    }
+    Guest() { mem[kEntry] = 0x8026C098u; }
     uint32_t& At(uint32_t field) { return mem[kEntry + field]; }
-    Result Read(uint32_t bytes = kChunkBytes) {
-        return OnChunkRead(kEntry, bytes, [this](uint32_t a) { return mem[a]; },
-                           [this](uint32_t a, uint32_t v) { mem[a] = v; });
+    // A chunk arrives: the wrapper's clear, then what the game's callback does to bytes read (fn_800DA71C).
+    bool Read(uint32_t bytes = kChunkBytes) {
+        const bool cleared = ClearPrevReadOnFirstChunk(kEntry, [this](uint32_t a) { return mem[a]; },
+                                                       [this](uint32_t a, uint32_t v) { mem[a] = v; });
+        if (mem[kEntry] != 0) At(kBytesRead) += bytes;
+        return cleared;
     }
     // The end check at a crossing into half 1 (fn_800D9EF8, 800DA058): returns true when the track looks finished.
     bool CrossHalf1() {
@@ -40,7 +40,8 @@ int main() {
         {
             Guest g;
             g.At(kPrevRead) = 0xBB80;
-            for (int i = 0; i < 4; ++i) g.Read();
+            Require(g.Read(), "the first chunk clears the previous read");
+            for (int i = 0; i < 3; ++i) g.Read();
             Require(g.At(kBytesRead) == 0xBB80, "four chunks read");
             Require(!g.CrossHalf1(), "a new stream's first crossing is not the end of the track");
             Require(g.At(kPrevRead) == 0xBB80, "the crossing stores bytes read");
@@ -50,48 +51,19 @@ int main() {
             Guest g;
             g.Read();
             g.At(kPrevRead) = 0x1234;
-            g.Read();
+            Require(!g.Read(), "later chunks don't clear");
             Require(g.At(kPrevRead) == 0x1234, "later chunks leave the previous read alone");
             g.At(kPrevRead) = 0;
             Require(!g.CrossHalf1(), "still reading");
             Require(g.CrossHalf1(), "no read since the last crossing is the end of the track");
         }
-        // The rest of the callback, as in fn_800DA71C.
-        {
-            Guest g;
-            g.At(kPosition) = 0x40966E0;
-            g.At(kFlags) = kFlagReadBusy | kFlagStarting;
-            const Result first = g.Read();
-            Require(g.At(kPosition) == 0x40966E0 + kChunkBytes, "position advances");
-            Require(g.At(kFlags) == (kFlagChunkReady | kFlagStarting | kFlagCopy1Busy), "chunk ready, copy to half 1");
-            Require(first.copyDest == 0xEA60, "first chunk goes to half 1");
-            Require(!first.wakeRefill, "no copy was in flight when the chunk arrived");
-
-            g.At(kFlags) = kFlagStarting | kFlagHalf1Full;
-            const Result second = g.Read();
-            Require(second.copyDest == 0x11940, "second chunk goes to half 2");
-            Require(g.At(kFlags) == (kFlagChunkReady | kFlagStarting | kFlagHalf1Full | kFlagCopy2Busy), "copy to half 2");
-
-            g.At(kFlags) = kFlagStarting | kFlagHalf1Full | kFlagHalf2Full;
-            Require(g.Read().copyDest == 0, "both halves full: no copy");
-
-            g.At(kFlags) = kFlagReadBusy;
-            const Result running = g.Read();
-            Require(running.copyDest == 0 && !running.wakeRefill, "running stream: the refill callback does the copy");
-            Require(g.At(kFlags) == kFlagChunkReady, "read busy cleared");
-
-            g.At(kFlags) = kFlagCopy1Busy;
-            Require(g.Read().wakeRefill, "a copy in flight wakes the refill");
-        }
         // A freed voice changes nothing.
         {
             Guest g;
             g.At(0) = 0;
-            g.At(kFlags) = kFlagReadBusy;
-            g.At(kBytesRead) = 0x2EE0;
-            const Result result = g.Read();
-            Require(result.copyDest == 0 && !result.wakeRefill, "no copy");
-            Require(g.At(kBytesRead) == 0x2EE0 && g.At(kFlags) == kFlagReadBusy, "no state change");
+            g.At(kPrevRead) = 0xBB80;
+            Require(!g.Read(), "no clear");
+            Require(g.At(kPrevRead) == 0xBB80 && g.At(kBytesRead) == 0, "no state change");
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
