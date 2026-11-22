@@ -1,7 +1,7 @@
 """Determinism check: run the game twice on the virtual clock and compare guest memory frame by frame.
 Python 3.8+, Windows and Linux, standard library only.
 
-    python tools/det-check.py [--boot i004] [--retraces 1200] [--every 30] [--input "8000:A:200"] [--input-b S] [--dump R,...] [--aspect-mode N] [--fps30] [--whole-memory]
+    python tools/det-check.py [--boot i004|title] [--retraces 1200] [--every 30] [--input "8000:A:200"] [--input-b S] [--dump R,...] [--aspect-mode N] [--fps30] [--whole-memory]
                               [--play-a DIR] [--play-b DIR] [--disc DIR] [--keep] [--skip-build-check] [--timeout 180]
 
 Each run is the deterministic mode (NO100F_DETERMINISTIC=1, wiicompiled/runtime/include/det_clock.h) with the guest
@@ -38,7 +38,7 @@ class Run:
         # Memory images go next to the hash file under fixed names: one folder per run keeps a and b apart.
         self.hash_file = (out / name if args.dump else out) / f"{name}.hash"
         self.game = launch.TestGame(
-            name, out / "work" / name, boot=args.boot, hd=False, src_play=play, disc_data=args.disc, dev_tools=False,
+            name, out / "work" / name, boot=None if args.boot == "title" else args.boot, hd=False, src_play=play, disc_data=args.disc, dev_tools=False,
             build_check=not args.skip_build_check and play is None, fps60=not args.fps30,
             extra_env={"NO100F_DETERMINISTIC": "1",
                        "NO100F_DET_HASH": f"{self.hash_file}:{args.every}",
@@ -84,7 +84,7 @@ def set_aspect_mode(cfg, mode):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    p.add_argument("--boot", default="i004")
+    p.add_argument("--boot", default="i004", help="level to boot straight into, or 'title' for the game's own title menu")
     p.add_argument("--retraces", type=int, default=1200, help="compare up to this retrace (60 a second)")
     p.add_argument("--every", type=int, default=30, help="fingerprint every N retraces")
     p.add_argument("--input", default=DEFAULT_INPUT, help="NO100F_INPUT_SCRIPT for both runs")

@@ -435,7 +435,7 @@ Input is the scripted pad (`--input`, the `NO100F_INPUT_SCRIPT` format of sectio
 `--input-b` gives run b other input: a control, which must come out "different", to show the check can see a change at all.
 Each thread's stack below its stack pointer is left out of the hashes (`NO100F_DET_HASH_SKIP_DEAD_STACK=1`): two builds that behave the same still leave different leftovers there, for instance when a function moves between native and translated code. `--whole-memory` hashes it too.
 
-Options: `--boot` (`i004`), `--retraces`, `--every`, `--input`, `--input-b`, `--dump`, `--aspect-mode`, `--fps30`, `--whole-memory`, `--play-a`, `--play-b`, `--disc`, `--timeout`, `--slots`, `--keep`, `--skip-build-check`.
+Options: `--boot` (`i004`; `title` for the game's own title menu), `--retraces`, `--every`, `--input`, `--input-b`, `--dump`, `--aspect-mode`, `--fps30`, `--whole-memory`, `--play-a`, `--play-b`, `--disc`, `--timeout`, `--slots`, `--keep`, `--skip-build-check`.
 Exit codes: 0 identical, 1 different, 2 wrong build, 3 not run (a run crashed or did not get far enough). Output: `autotest\det-<time>\` with `REPORT.md`, the two hash files and the runs' logs.
 It shows that memory matches, not that the picture or the sound does: Aurora and the audio mixer run outside guest memory.
 A difference names the retrace; `--dump <retrace>[,...]` writes both runs' memory images there (`NO100F_DET_DUMP`, `det_hash.h`; the kit drops that variable from your own shell), in `a\` and `b\` with the hash files, for a byte diff.
