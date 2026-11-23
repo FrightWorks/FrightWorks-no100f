@@ -217,9 +217,10 @@ Every 20 main-loop frames it runs the lines in `Play/postool.txt`, then deletes 
   - Emit sets particle velocity = asset velocity x dt; MOVE adds it every frame (no dt). So dt passed to emit must be the
     real frame time: a summed or fixed 1/30 dt doubles particle speed at 60 fps. `births` prints `speed` to check this.
 - **Particles at fps60** (`no100f_particles_update.cpp`): the target is the game at 30 fps including its rounding.
-  With fps60 off the native code must match the game's code byte for byte on live data.
+  All wrappers: the game's group update and PARS commands do the work; with fps60 off each wrapper is a plain call.
+  The fade fix hands the group update colour rates scaled by step / dt and puts them back after.
   Each PARS command's run rate and time come from one table, `CommandTimeFps60` (`no100f_particles_update.h`).
-  Fast-math would erase the rounding in `PPC_Fmadds`, so a port that needs it goes in `RECOMP_PPC_SEMANTIC_RUNTIME_SOURCES` (`wiicompiled/runtime/CMakeLists.txt`).
+  Float code that must match the game bit for bit (that rate scaling, or a port using `PPC_Fmadds`) goes in `RECOMP_PPC_SEMANTIC_RUNTIME_SOURCES` (`wiicompiled/runtime/CMakeLists.txt`): no fast-math there.
   Command 6, 20 and 27 timing has no numbers from the game, only the runtime's maths.
 - **Fireworks**: the holiday code is `fn_800AED5C`, burst emission `fn_800ADAC0`; launch sites are a fixed table of 5 plus drift, not the player's position.
   `[game] holiday = "confetti"` gives each new FIREWORKS1/2 particle the next of 8 colours; they go pale during the game's bright sky flash.

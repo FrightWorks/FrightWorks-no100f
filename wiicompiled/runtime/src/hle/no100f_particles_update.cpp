@@ -10,11 +10,19 @@
 //   command that changes velocity by an amount per second then moves particles twice as far. Here it gets half the time.
 // - Per-call steps. Some commands do a fixed thing per call or cut to a whole number, so no share of dt makes them
 //   right. Here they run once per 30 Hz step, as they do at 30 fps.
-// The commands themselves stay the game's code: the system update (0x800C68E8) is what hands them their time, and
-// CommandTimeFps60 in the header says which command gets what. Without fps60 this is the original code.
 //
-// Native in full: an override's address is excluded from translation, so the original body cannot be called.
+// All wrappers (REGISTER_NATIVE_FUNCTION_AS): the game's group update and command functions stay translated as
+// func_<addr> and always do the work; without fps60 each wrapper is a plain call.
+// - Group update: the game's function computes a channel's change as rate * dt, so the wrapper hands it rates scaled
+//   by step / dt for the particles it will fade (life not below 0): 0 between steps, 2 at a step with a steady frame
+//   time, where (2 * rate) * dt is exactly rate * step. The rates are put back right after. (With an uneven frame time
+//   the scaled product can be one rounding step off, which changes a channel only when it sits on a whole number.)
+// - Commands: the system update (0x800C68E8) and its parent runner (0x800C65C4) stay the game's code. They look a
+//   command's function up in the PARS command table (0x800C48BC, its only callers) and call it with the frame time in
+//   f1. The eight command types CommandTimeFps60 (header) treats differently are wrapped at their functions, which
+//   nothing else calls or references: each gets its time from the table, or is skipped until a 30 Hz step.
 #include <cstdint>
+#include <vector>
 #include "abi_bridge.h"
 #include "hle/no100f_particles_update.h"
 #include "hle_stubs.h"
@@ -22,144 +30,96 @@
 #include "ppc_runtime.h"
 #include "runtime_config.h"
 
-extern "C" void func_80032578(CpuContext* ctx);  // returns a particle to the free pool
-extern "C" void func_800C48BC(CpuContext* ctx);  // the function of a PARS command type, or 0
+extern "C" void func_80032918(CpuContext* ctx);  // the game's particle group update, kept translated
+// The game's PARS command functions with fps60 timing (types in brackets), kept translated.
+extern "C" void func_800C4338(CpuContext* ctx);  // [2] acceleration
+extern "C" void func_800C3274(CpuContext* ctx);  // [4] push from a point
+extern "C" void func_800C4734(CpuContext* ctx);  // [6] speed kill
+extern "C" void func_800C2ED8(CpuContext* ctx);  // [13] texture animation
+extern "C" void func_800C3B94(CpuContext* ctx);  // [15] random turn
+extern "C" void func_800C3AEC(CpuContext* ctx);  // [20] wind
+extern "C" void func_800C3938(CpuContext* ctx);  // [21] spin
+extern "C" void func_800C3650(CpuContext* ctx);  // [27] pull to the player
 
 namespace {
 constexpr uint32_t kUpdateFrameCount = 0x80270890u;  // [r13 - 0x79F0]: main loop frame counter
-
-// Particle fields
-constexpr uint32_t kParticleNext = 0x00, kParticlePrev = 0x04, kParticleLife = 0x08, kParticleColor = 0x0C,
-                   kParticleSize = 0x1C, kParticleSizeRate = 0x2C, kParticleOwner = 0x3C, kParticleColorRate = 0x40;
-// Group fields
-constexpr uint32_t kGroupHead = 0x00, kGroupDeadList = 0x04, kGroupCount = 0x08, kGroupActive = 0x0C,
-                   kGroupEnabled = 0x0E, kGroupFlags = 0x12, kGroupNext = 0x14;
-constexpr uint8_t kGroupReturnToPool = 0x2, kGroupAgeless = 0x4, kGroupLoopLife = 0x8;
-constexpr uint32_t kEmitterAssetLife = 0x64;  // emitter asset: particle life, the loop value
-// System fields
-constexpr uint32_t kSystemCommandCount = 0x14, kSystemCommands = 0x18, kSystemParent = 0x1C, kSystemGroups = 0x20;
-constexpr uint32_t kCommandSize = 8, kCommandAsset = 4;  // a command in a system's list; its asset starts with the type
+constexpr uint32_t kGroupHead = 0x00;
+constexpr uint32_t kParticleNext = 0x00, kParticleLife = 0x08, kParticleColorRate = 0x40;  // 4 floats, one a channel
 
 bool ParticlesFps60() {
     static const bool fps60 = RuntimeConfigFile::Fps60();
     return fps60;
 }
 
-// With fps60, the time of this frame's 30 Hz step (see StepClock).
+// With fps60, the time of this frame's 30 Hz step (see StepClock). The group update and the commands share it.
 float StepTimeFps60(float dt) {
     static No100fParticlesUpdate::StepClock clock;
     return clock.Step(Memory::Read32(kUpdateFrameCount), dt);
 }
 
-void UnlinkParticle(uint32_t group, uint32_t particle, uint32_t next) {
-    if (particle == Memory::Read32(group + kGroupHead)) {
-        Memory::Write32(group + kGroupHead, next);
-        if (next != 0) Memory::Write32(next + kParticlePrev, 0);
-    } else {
-        const uint32_t prev = Memory::Read32(particle + kParticlePrev);
-        if (next != 0) Memory::Write32(next + kParticlePrev, prev);
-        if (prev != 0) Memory::Write32(prev + kParticleNext, next);
+struct SavedRates {
+    uint32_t particle;
+    uint32_t rates[4];
+};
+
+void RunCommandFps60(CpuContext* ctx, uint32_t type, void (*command)(CpuContext*)) {
+    if (!ParticlesFps60()) {
+        command(ctx);
+        return;
     }
-    Memory::Write32(particle + kParticleNext, 0);
-    Memory::Write32(particle + kParticlePrev, 0);
+    const float frameTime = static_cast<float>(ctx->fpr[1].d);
+    const auto when = No100fParticlesUpdate::CommandTimeFps60(type, frameTime, StepTimeFps60(frameTime));
+    if (!when.run) return;
+    ctx->fpr[1].d = when.time;
+    command(ctx);
 }
 }  // namespace
 
 extern "C" void No100f_UpdateParticleGroup(CpuContext* ctx) {
-    const uint32_t group = ctx->gpr[3];
     const float dt = static_cast<float>(ctx->fpr[1].d);
-    const float ageStep = (Memory::Read8(group + kGroupFlags) & kGroupAgeless) != 0 ? 0.0f : dt;
-    const float fadeDt = ParticlesFps60() ? StepTimeFps60(dt) : dt;
-
-    uint32_t particle = Memory::Read32(group + kGroupHead);
-    if (particle == 0) Memory::Write8(group + kGroupActive, 0);
-    while (particle != 0) {
-        const uint32_t next = Memory::Read32(particle + kParticleNext);
-        const float life = Memory::ReadFloat32(particle + kParticleLife);
-        if (life < 0.0f) {
-            const uint8_t flags = Memory::Read8(group + kGroupFlags);
-            if ((flags & kGroupLoopLife) != 0) {
-                const uint32_t owner = Memory::Read32(particle + kParticleOwner);
-                Memory::WriteFloat32(particle + kParticleLife, Memory::ReadFloat32(owner + kEmitterAssetLife));
-            } else {
-                UnlinkParticle(group, particle, next);
-                Memory::Write32(group + kGroupCount, Memory::Read32(group + kGroupCount) - 1);
-                if ((flags & kGroupReturnToPool) != 0) {
-                    ctx->gpr[3] = particle;
-                    func_80032578(ctx);
-                } else {
-                    const uint32_t dead = Memory::Read32(group + kGroupDeadList);
-                    if (dead != 0) Memory::Write32(dead + kParticlePrev, particle);
-                    Memory::Write32(particle + kParticleNext, dead);
-                    Memory::Write32(particle + kParticlePrev, 0);
-                    Memory::Write32(group + kGroupDeadList, particle);
-                }
-            }
-        } else {
-            for (uint32_t i = 0; i < 4; ++i) {
-                const uint32_t channel = particle + kParticleColor + i;
-                const float rate = Memory::ReadFloat32(particle + kParticleColorRate + i * 4);
-                Memory::Write8(channel, No100fParticlesUpdate::FadeChannel(Memory::Read8(channel), rate, fadeDt));
-            }
-            const float size = Memory::ReadFloat32(particle + kParticleSize);
-            const float sizeRate = Memory::ReadFloat32(particle + kParticleSizeRate);
-            Memory::WriteFloat32(particle + kParticleSize, PPC_Fmadds(sizeRate, dt, size));
-            Memory::WriteFloat32(particle + kParticleLife, life - ageStep);
-        }
-        particle = next;
+    if (!ParticlesFps60() || !(dt > 0.0f)) {
+        func_80032918(ctx);
+        return;
     }
-}
-PPC_NATIVE_OVERRIDE_VOID(80032918, No100f_UpdateParticleGroup, (CpuContext* ctx), (ctx));
-
-namespace {
-// Runs a system's commands on a group: r3 = command, r4 = group, f1 = time, as the game calls them.
-void RunCommands(CpuContext* ctx, uint32_t system, uint32_t group, double dt) {
-    for (int32_t i = 0; i < static_cast<int32_t>(Memory::Read32(system + kSystemCommandCount)); ++i) {
-        const uint32_t command = Memory::Read32(system + kSystemCommands) + static_cast<uint32_t>(i) * kCommandSize;
-        if (command == 0) continue;
-        const uint32_t asset = Memory::Read32(command + kCommandAsset);
-        if (asset == 0) continue;
-        const uint32_t type = Memory::Read32(asset);
-        ctx->gpr[3] = type;
-        func_800C48BC(ctx);
-        const uint32_t function = ctx->gpr[3];
-        if (function == 0) continue;
-        double time = dt;
-        if (ParticlesFps60()) {
-            const float frameTime = static_cast<float>(dt);
-            const auto when = No100fParticlesUpdate::CommandTimeFps60(type, frameTime, StepTimeFps60(frameTime));
-            if (!when.run) continue;
-            time = when.time;
-        }
-        ctx->gpr[3] = command;
-        ctx->gpr[4] = group;
-        ctx->fpr[1].d = time;
-        InvokeIndirectCpu(function, ctx);
+    const float scale = StepTimeFps60(dt) / dt;
+    if (scale == 1.0f) {
+        func_80032918(ctx);
+        return;
     }
-}
-
-// 0x800C65C4: a system's parents' commands run first, oldest first. A parent counts if its own first group is enabled.
-void RunParentCommands(CpuContext* ctx, uint32_t system, uint32_t group, double dt) {
-    const uint32_t parent = Memory::Read32(system + kSystemParent);
-    if (parent != 0) RunParentCommands(ctx, parent, group, dt);
-    if (Memory::Read8(Memory::Read32(system + kSystemGroups) + kGroupEnabled) != 0) RunCommands(ctx, system, group, dt);
-}
-}  // namespace
-
-// The system update: r3 = system, f1 = frame time. For each group: its parents' commands, its own, then the group update.
-extern "C" void No100f_UpdateParticleSystem(CpuContext* ctx) {
-    const uint32_t system = ctx->gpr[3];
-    const double dt = ctx->fpr[1].d;
-    const uint32_t parent = Memory::Read32(system + kSystemParent);
-    for (uint32_t group = Memory::Read32(system + kSystemGroups); group != 0;
-         group = Memory::Read32(group + kGroupNext)) {
-        if (Memory::Read8(group + kGroupEnabled) != 0) {
-            if (parent != 0) RunParentCommands(ctx, parent, group, dt);
-            if (Memory::Read8(group + kGroupActive) != 0) RunCommands(ctx, system, group, dt);
+    static std::vector<SavedRates> saved;  // a stack, in case of re-entry
+    const size_t first = saved.size();
+    for (uint32_t particle = Memory::Read32(ctx->gpr[3] + kGroupHead); particle != 0;
+         particle = Memory::Read32(particle + kParticleNext)) {
+        if (Memory::ReadFloat32(particle + kParticleLife) < 0.0f) continue;  // removed or looped: not faded this time
+        SavedRates entry{particle, {}};
+        for (uint32_t i = 0; i < 4; ++i) {
+            const uint32_t rate = particle + kParticleColorRate + i * 4;
+            entry.rates[i] = Memory::Read32(rate);
+            Memory::WriteFloat32(rate, Memory::ReadFloat32(rate) * scale);
         }
-        ctx->gpr[3] = group;
-        ctx->fpr[1].d = dt;
-        No100f_UpdateParticleGroup(ctx);
+        saved.push_back(entry);
     }
+    func_80032918(ctx);
+    for (size_t n = first; n < saved.size(); ++n)
+        for (uint32_t i = 0; i < 4; ++i)
+            Memory::Write32(saved[n].particle + kParticleColorRate + i * 4, saved[n].rates[i]);
+    saved.resize(first);
 }
-PPC_NATIVE_OVERRIDE_VOID(800C68E8, No100f_UpdateParticleSystem, (CpuContext* ctx), (ctx));
+REGISTER_NATIVE_FUNCTION_AS(0x80032918, No100f_UpdateParticleGroup, "No100f_UpdateParticleGroup");
+
+extern "C" void No100f_ParsAccel(CpuContext* ctx) { RunCommandFps60(ctx, 2, func_800C4338); }
+extern "C" void No100f_ParsPush(CpuContext* ctx) { RunCommandFps60(ctx, 4, func_800C3274); }
+extern "C" void No100f_ParsSpeedKill(CpuContext* ctx) { RunCommandFps60(ctx, 6, func_800C4734); }
+extern "C" void No100f_ParsTextureAnim(CpuContext* ctx) { RunCommandFps60(ctx, 13, func_800C2ED8); }
+extern "C" void No100f_ParsRandomTurn(CpuContext* ctx) { RunCommandFps60(ctx, 15, func_800C3B94); }
+extern "C" void No100f_ParsWind(CpuContext* ctx) { RunCommandFps60(ctx, 20, func_800C3AEC); }
+extern "C" void No100f_ParsSpin(CpuContext* ctx) { RunCommandFps60(ctx, 21, func_800C3938); }
+extern "C" void No100f_ParsPull(CpuContext* ctx) { RunCommandFps60(ctx, 27, func_800C3650); }
+REGISTER_NATIVE_FUNCTION_AS(0x800C4338, No100f_ParsAccel, "No100f_ParsAccel");
+REGISTER_NATIVE_FUNCTION_AS(0x800C3274, No100f_ParsPush, "No100f_ParsPush");
+REGISTER_NATIVE_FUNCTION_AS(0x800C4734, No100f_ParsSpeedKill, "No100f_ParsSpeedKill");
+REGISTER_NATIVE_FUNCTION_AS(0x800C2ED8, No100f_ParsTextureAnim, "No100f_ParsTextureAnim");
+REGISTER_NATIVE_FUNCTION_AS(0x800C3B94, No100f_ParsRandomTurn, "No100f_ParsRandomTurn");
+REGISTER_NATIVE_FUNCTION_AS(0x800C3AEC, No100f_ParsWind, "No100f_ParsWind");
+REGISTER_NATIVE_FUNCTION_AS(0x800C3938, No100f_ParsSpin, "No100f_ParsSpin");
+REGISTER_NATIVE_FUNCTION_AS(0x800C3650, No100f_ParsPull, "No100f_ParsPull");
