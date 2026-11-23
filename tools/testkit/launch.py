@@ -251,9 +251,19 @@ def test_env(base=None, extra=None, dev_tools=True) -> dict:
 
 
 def boot_ini(disc_data, level) -> str:
-    ini = (Path(disc_data) / "files" / "sd2.ini").read_text(encoding="latin-1")
-    ini = re.sub(r"(?m)^BOOT=.*$", f"BOOT={level}", ini)
+    """The disc's sd2.ini booting straight into `level`, with the disc's own line endings (CRLF) kept: the game parses
+    the whole file into its heap, so a copy with other line endings shifts every later allocation, and Python's text
+    mode would give CRLF on Windows but LF on Linux, so the same run differed between the two (det-check)."""
+    with open(Path(disc_data) / "files" / "sd2.ini", encoding="latin-1", newline="") as f:
+        ini = f.read()
+    ini = re.sub(r"(?m)^BOOT=[^\r\n]*", f"BOOT={level}", ini)
     return re.sub(r"(?m)^ShowMenuOnBoot=1", "ShowMenuOnBoot=0", ini)
+
+
+def write_boot_ini(path, text):
+    """Writes boot_ini's text as it is (no line ending translation)."""
+    with open(path, "w", encoding="latin-1", newline="") as f:
+        f.write(text)
 
 
 # ---- the game -------------------------------------------------------------------------------------------------------
@@ -338,7 +348,7 @@ class TestGame:
             safe_rmtree(mod)
         if level:
             (mod / "files").mkdir(parents=True)
-            (mod / "files" / "sd2.ini").write_text(boot_ini(self.disc_data, level), encoding="latin-1")
+            write_boot_ini(mod / "files" / "sd2.ini", boot_ini(self.disc_data, level))
 
     def check_build(self):
         """Raises BuildMismatch unless the exe is from the commit under test; returns the message (maybe a warning)."""
