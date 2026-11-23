@@ -86,9 +86,9 @@ if (-not $SkipTranslate) {
     $env:DOTNET_ROLL_FORWARD = 'Major'
     $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
     $translator = Join-Path $wc 'translator\src\Translator.Cli\bin\Release\net10.0\Translator.Cli.dll'
-    if (-not (Test-Path -LiteralPath $translator)) {
-        Invoke-Step 'translator-build' $dotnet.FullName @('build', (Join-Path $wc 'translator\src\Translator.Cli'), '-c', 'Release') $wc
-    }
+    # Every time, not only when the DLL is missing: a checkout that already has one would otherwise keep translating with
+    # the old translator after pulling translator changes. MSBuild is incremental, so an up-to-date one costs seconds.
+    Invoke-Step 'translator-build' $dotnet.FullName @('build', (Join-Path $wc 'translator\src\Translator.Cli'), '-c', 'Release') $wc
     # The exe ships without game data: hle\scooby_dol_loader.cpp checks the player's main.dol against this hash.
     $sha = (Get-FileHash (Join-Path $root 'game\main.dol') -Algorithm SHA256).Hash.ToLower()
     # Written only when the hash changed: the file is tracked, and rewriting it with other line endings than the
