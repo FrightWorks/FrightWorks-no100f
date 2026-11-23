@@ -63,6 +63,8 @@ var relFile = new Lazy<RelFile?>(LoadRel);
 var image = new Lazy<ProgramImage>(LoadImage);
 // Branch targets outside the loaded image, reported once each (target -> first caller).
 var outOfImageTargets = new System.Collections.Concurrent.ConcurrentDictionary<uint, uint>();
+// bctr sites that are not a recognised jump table, reported once each (site -> function).
+var unrecognisedIndirectJumps = new System.Collections.Concurrent.ConcurrentDictionary<uint, uint>();
 var canonicalIrStore = new CanonicalIrStore();
 // Hoisted out of the translator factory so the base pipeline can prewarm the
 // recursive ABI cache in one stable pass, exactly like translate-mod does.
@@ -2815,11 +2817,30 @@ int PruneStaleGeneratedFiles(
 
 IEnumerable<uint> DiscoverTranslationTargets(FunctionTranslationResult result)
 {
+    ReportUnrecognisedIndirectJumps(result.EntryPoint, result.Instructions);
     return DiscoverTranslationTargetsCore(result.Instructions, result.LinearIr);
+}
+
+// A bctr the jump-table detector could not resolve is lifted to InvokeIndirectJump: fine when the target is a registered
+// function (a tail call through a pointer), but a label inside a function stops the game at run time ("Missing indirect
+// jump target"). The game has none today; a warning here shows a new one at build time instead of in someone's game.
+void ReportUnrecognisedIndirectJumps(uint entryPoint, IReadOnlyList<PpcInstruction> instructions)
+{
+    foreach (var ins in instructions)
+    {
+        if (ins.BranchTargets.Count == 0 && string.Equals(ins.Mnemonic, "bctr", StringComparison.OrdinalIgnoreCase) &&
+            unrecognisedIndirectJumps.TryAdd(ins.Address, entryPoint))
+        {
+            Console.Error.WriteLine(
+                $"[translator] warning: 0x{ins.Address:X8} in 0x{entryPoint:X8}: bctr is not a recognised jump table; " +
+                "a target that is not a registered function stops the game at run time.");
+        }
+    }
 }
 
 IEnumerable<uint> DiscoverDiscoveryTranslationTargets(FunctionDiscoveryResult result)
 {
+    ReportUnrecognisedIndirectJumps(result.EntryPoint, result.Instructions);
     foreach (var target in DiscoverTranslationTargetsCore(result.Instructions, result.LinearIr))
     {
         // Debug-stub code (MetroTRK) branches into the low-memory exception vectors, which are not

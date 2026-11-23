@@ -261,8 +261,8 @@ To build old source there, set only the paths that differ with `git restore --so
 - An override that only changes a game function's inputs or when it runs should be a wrapper: `REGISTER_NATIVE_FUNCTION_AS` takes the address over but keeps the game's function translated as `func_<address>`, which the wrapper calls (`hle_stubs.h`; example `hle/no100f_particles.cpp`).
   A `PPC_NATIVE_OVERRIDE` removes the game's function, so it has to port all of it.
   Check a wrapper or a rewritten override against `main` with the determinism check, at 30 and 60 fps.
-- `build-no100f.ps1` builds the translator only if `bin\Release\net10.0\Translator.Cli.dll` is missing.
-  Delete `bin\Release` after translator edits, or the output comes from a stale translator.
+- `build-no100f.ps1` and `build-no100f-linux.sh` rebuild the translator on every full build (incremental: a few seconds when it is up to date), so translator edits and pulled translator changes take effect.
+  Until 2026-11-22 they built it only when `Translator.Cli.dll` was missing, so a checkout built before then may have translated with an old translator.
 - An open launcher locks `Play\SDL3.dll`: the build fails at the DLL copy after the exe copy, which is harmless.
 - Kit scripts must parse in PowerShell 5.1.
   `powershell -File x.ps1 -List a,b` passes one string, so split it in the script.
