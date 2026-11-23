@@ -54,10 +54,15 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(data["video"]["display_mode"], "windowed")
 
     def test_boot_ini(self):
-        with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "files").mkdir()
-            (Path(d) / "files" / "sd2.ini").write_text("BOOT=xx\nShowMenuOnBoot=1\n", encoding="latin-1")
-            self.assertEqual(launch.boot_ini(d, "i004"), "BOOT=i004\nShowMenuOnBoot=0\n")
+        # The disc's file has CRLF; the boot copy keeps whatever the disc has, on every OS, so a run's guest memory
+        # (the game parses the whole file) is the same on Windows and Linux.
+        for eol in ("\n", "\r\n"):
+            with tempfile.TemporaryDirectory() as d:
+                (Path(d) / "files").mkdir()
+                (Path(d) / "files" / "sd2.ini").write_bytes(f"BOOT=xx{eol}ShowMenuOnBoot=1{eol}".encode("latin-1"))
+                self.assertEqual(launch.boot_ini(d, "i004"), f"BOOT=i004{eol}ShowMenuOnBoot=0{eol}")
+                launch.write_boot_ini(Path(d) / "out.ini", launch.boot_ini(d, "i004"))
+                self.assertEqual((Path(d) / "out.ini").read_bytes(), f"BOOT=i004{eol}ShowMenuOnBoot=0{eol}".encode())
 
 
 def git(cwd, *args):
