@@ -34,6 +34,9 @@ sealed class MainWindow : Window
     TextBlock discStatus = null!, dumpHelp = null!;
     PlankButton chooseDisc = null!;
     ThemedBar progress = null!, ffmpegBar = null!;
+    TextBlock ps2Status = null!;
+    PlankButton choosePs2 = null!, removePs2 = null!;
+    ThemedBar ps2Bar = null!;
     TextBlock ffmpegStatus = null!, savesNote = null!, updateStatus = null!;
     PlankButton savesDefault = null!, checkNow = null!;
     readonly Updater updater;
@@ -637,6 +640,26 @@ sealed class MainWindow : Window
             "Dump the disc you own (for example with CleanRip on a Wii) as a plain .iso or .ciso, then choose it here. " +
             "The launcher copies the game files once; the image file isn't needed afterwards."));
 
+        body.Children.Add(Title("PS2 cutscenes"));
+        ps2Status = FieldLabel("");
+        ps2Status.MaxWidth = 520;
+        body.Children.Add(ps2Status);
+        var ps2Row = Row();
+        ps2Row.MaxWidth = 520;
+        ps2Row.HorizontalAlignment = HorizontalAlignment.Left;
+        choosePs2 = new PlankButton("Choose PS2 disc image", (_, _) => ChoosePs2Disc().Watch());
+        ps2Row.Children.Add(choosePs2);
+        removePs2 = new PlankButton("Remove", (_, _) => RemovePs2Cutscenes().Watch());
+        ps2Row.Children.Add(removePs2);
+        body.Children.Add(ps2Row);
+        ps2Bar = new ThemedBar { IsVisible = false };
+        body.Children.Add(new LeftCap(480, ps2Bar));
+        body.Children.Add(Note(
+            "Optional. The PS2 version plays its story scenes in the game itself, where the GameCube shows movies. " +
+            "Choose your own PS2 disc image (Scooby-Doo! Night of 100 Frights, a plain .iso) and the launcher copies just " +
+            "those scenes (about 240 MB); the image isn't needed afterwards. The game then plays them instead of the movies."));
+        RefreshPs2();
+
         body.Children.Add(Title("Holidays"));
         body.Children.Add(HolidayBox());
         body.Children.Add(Note("Outside Mystic Manor and in the playground, the game celebrates holidays on their real dates. " +
@@ -1070,6 +1093,54 @@ sealed class MainWindow : Window
             finally { progress.IsVisible = false; chooseDisc.IsEnabled = true; RefreshDisc(); }
             if (error != null) await Dialogs.Message(this, "Extraction failed: " + error);
         }
+    }
+
+    void RefreshPs2()
+    {
+        if (ps2Status == null) return;
+        int count = Ps2Cutscenes.Count(userData);
+        ps2Status.Text = count > 0 ? $"{count} PS2 cutscenes are set up: the game plays them instead of the movies."
+                                   : "Not set up: the game shows the GameCube's movies.";
+        ps2Status.Foreground = Brush(count > 0 ? Good : Warn);
+        choosePs2.Text = count > 0 ? "Choose another PS2 disc image" : "Choose PS2 disc image";
+        removePs2.IsVisible = count > 0;
+    }
+
+    async Task ChoosePs2Disc()
+    {
+        if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the cutscenes while it runs."); return; }
+        if (!DiscState().ok) { await Dialogs.Message(this, "Set up the GameCube disc first: the PS2 cutscenes are checked against its levels."); return; }
+        var file = await ControllerDialogs.PickPath(this, "Choose your Scooby-Doo! Night of 100 Frights PS2 disc image");
+        if (file == null) return;
+        choosePs2.IsEnabled = removePs2.IsEnabled = false;
+        ps2Bar.IsVisible = true;
+        ps2Bar.Value = 0;
+        var report = new Progress<(int done, int total, string name)>(p =>
+        {
+            ps2Bar.Maximum = Math.Max(1, p.total);
+            ps2Bar.Value = Math.Min(p.done, ps2Bar.Maximum);
+            ps2Status.Text = p.name.Length > 0 ? $"Looking for cutscenes {p.done + 1}/{p.total}: {p.name}" : "Copying";
+        });
+        Ps2Cutscenes.Result? result = null;
+        string? error = null;
+        try
+        {
+            var disc = paths.PlayableDisc;
+            result = await Task.Run(() => Ps2Cutscenes.Copy(file, disc, userData, (d, t, n) => ((IProgress<(int, int, string)>)report).Report((d, t, n))));
+        }
+        catch (Exception e) { error = e.Message; }
+        finally { ps2Bar.IsVisible = false; choosePs2.IsEnabled = removePs2.IsEnabled = true; RefreshPs2(); }
+        if (error != null) await Dialogs.Message(this, "Copying the PS2 cutscenes failed: " + error);
+        else if (result is { Problem.Length: > 0 }) await Dialogs.Message(this, result.Problem);
+        else if (result != null && result.Copied < Ps2Cutscenes.Expected)
+            await Dialogs.Message(this, $"Copied {result.Copied} of the {Ps2Cutscenes.Expected} PS2 cutscenes: the others play as movies.");
+    }
+
+    async Task RemovePs2Cutscenes()
+    {
+        if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the cutscenes while it runs."); return; }
+        Ps2Cutscenes.Remove(userData);
+        RefreshPs2();
     }
 
     async Task Launch()

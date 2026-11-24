@@ -9,12 +9,14 @@ using FrightWorks.ModPatches;
 //   --disc DIR                      every level rebuilds byte for byte
 //   --export DIR WORK               adds generated assets to every level; writes the hashes and the assets for reference.py
 //   --recipe MOD --disc DIR --expect SHA [--level NAME]   builds one mod and compares the result
+//   --ps2 ISO DISC USERDATA        copies a PS2 disc's cutscenes (launcher/Ps2Cutscenes.cs) into USERDATA/ps2/cutscenes
 return args.Length > 0 && args[0] == "--export" ? DiscModes.Export(args[1], args[2])
      : args.Contains("--recipe") ? DiscModes.Recipe(args)
      : args.Length > 0 && args[0] == "--disc" ? DiscModes.RoundTrip(args[1])
+     : args.Length > 3 && args[0] == "--ps2" ? Ps2Mode.Run(args)
      : Tests.RunAll();
 
-static class Tests
+static partial class Tests
 {
     static int failed, passed;
 
@@ -35,6 +37,7 @@ static class Tests
         DiscFaults();
         Output();
         Zips();
+        Ps2CutsceneCopy();
         Console.WriteLine($"{passed} passed, {failed} failed");
         return failed == 0 ? 0 : 1;
     }
