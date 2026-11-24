@@ -18,6 +18,10 @@
 // GameCube disc has the same soundtrack as its own SNDS asset, so the player ignores these).
 // Animation payloads hold an 'SKB1' keyframe set: per time step, per bone, an index into 16-byte keys
 // {u16 time index, s16 quaternion x y z w (/32767), s16 translation x y z (* scale)}; key k and k+1 bracket the step.
+// Morph payloads (faces and mouths): {u32 n, {f32 time from the cutscene start, u32 0}[n]}, padded to a multiple of
+// 16 bytes, then 'MPH1' {u16 targets (= n), u16 vertices, u32 flags (bit 0: normals follow), f32 scale, 16 bytes},
+// then n targets of absolute vertex positions, s16 x y z per vertex (* scale), each padded to a multiple of 8 values
+// (twice that with normals). They apply to the atomic of the animated model whose vertex count matches.
 #pragma once
 
 #include <algorithm>
@@ -124,6 +128,7 @@ struct Block {
 };
 
 struct AnimationBlock {
+    uint32_t index = 0;  // which animation block of the chunk (morph blocks and the visibility table count this way)
     uint32_t modelId = 0, rootIndex = 0;
     Vec3 translate;
     Skb skb;
@@ -147,6 +152,56 @@ struct CameraBlock {
             }
         }
         return fov.back().second;
+    }
+};
+
+// A view of one morph block (no copy; valid while the bytes it points at are).
+struct MorphBlock {
+    uint32_t anim = 0;  // the animation block whose model it deforms
+    uint32_t count = 0;
+    uint16_t vertices = 0;
+    float scale = 0;
+    const uint8_t* times = nullptr;    // {f32 time, u32 0}[count]
+    const uint8_t* targets = nullptr;  // count targets of TargetValues() s16 values
+    size_t stride = 0;                 // s16 values from one target to the next
+
+    static std::optional<MorphBlock> Parse(uint32_t anim, const uint8_t* p, size_t size) {
+        if (size < 4) return std::nullopt;
+        MorphBlock m;
+        m.anim = anim;
+        m.count = Le32(p);
+        const size_t head = ((size_t(m.count) * 2 + 4) & ~size_t(3)) * 4;
+        if (m.count == 0 || m.count > 65535 || head + 0x20 > size || Le32(p + head) != kMphMagic) return std::nullopt;
+        const uint8_t* mph = p + head;
+        m.vertices = Le16(mph + 6);
+        m.scale = Lef(mph + 12);
+        m.stride = (size_t(m.vertices) * 3 + 7) & ~size_t(7);
+        if (Le32(mph + 8) & 1) m.stride *= 2;
+        if (!m.vertices || head + 0x20 + size_t(m.count) * m.stride * 2 > size) return std::nullopt;
+        m.times = p + 4;
+        m.targets = mph + 0x20;
+        return m;
+    }
+
+    float Time(uint32_t i) const { return Lef(times + 8 * i); }
+    size_t TargetValues() const { return size_t(vertices) * 3; }
+    const uint8_t* Target(uint32_t i) const { return targets + size_t(i) * stride * 2; }
+
+    // The two targets to blend at time t (from the cutscene start) and the second one's weight in 1/16384ths, as the
+    // PS2 picked them: the first key at or after t (searching from key 1, at most the last), blended from the key before.
+    void Blend(float t, uint32_t& a, uint32_t& b, int32_t& weightB) const {
+        if (count < 2) {
+            a = b = 0;
+            weightB = 0;
+            return;
+        }
+        uint32_t i = 1;
+        while (i < count - 1 && Time(i) < t) ++i;
+        a = i - 1;
+        b = i;
+        const float t0 = Time(a), t1 = Time(b);
+        const float w = t1 > t0 ? 16384.0f * (t - t0) / (t1 - t0) : 16384.0f;
+        weightB = int32_t(std::clamp(w, 0.0f, 16384.0f));
     }
 };
 
@@ -176,11 +231,23 @@ struct Chunk {
 
     std::vector<AnimationBlock> Animations() const {
         std::vector<AnimationBlock> out;
+        uint32_t index = 0;
         for (const auto& b : blocks) {
-            if (b.type != kAnimation || b.size < 16) continue;
+            if (b.type != kAnimation) continue;
+            const uint32_t i = index++;
+            if (b.size < 16) continue;
             auto skb = Skb::Parse(b.data + 16, b.size - 16);
             if (!skb) continue;
-            out.push_back({b.id, Le32(b.data), {Lef(b.data + 4), Lef(b.data + 8), Lef(b.data + 12)}, *skb});
+            out.push_back({i, b.id, Le32(b.data), {Lef(b.data + 4), Lef(b.data + 8), Lef(b.data + 12)}, *skb});
+        }
+        return out;
+    }
+
+    std::vector<MorphBlock> Morphs() const {
+        std::vector<MorphBlock> out;
+        for (const auto& b : blocks) {
+            if (b.type != kMorph) continue;
+            if (auto m = MorphBlock::Parse(b.id, b.data, b.size)) out.push_back(*m);
         }
         return out;
     }

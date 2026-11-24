@@ -74,7 +74,7 @@ std::vector<uint8_t> BuildCutscene() {
     w.Put32(headerSizeAt, uint32_t(w.b.size()));
     w.Pad(0x800);
     const size_t chunkAt = w.b.size();
-    w.F(0.0f); w.F(1.0f); w.U32(2); w.U32(0);
+    w.F(0.0f); w.F(1.0f); w.U32(3); w.U32(0);
     // animation block
     Writer a;
     a.U32(0); a.F(10.0f); a.F(0.0f); a.F(0.0f);
@@ -88,6 +88,19 @@ std::vector<uint8_t> BuildCutscene() {
     WriteSkb(c);
     w.U32(kCamera); w.U32(0); w.U32(uint32_t(c.b.size())); w.U32(0);
     w.b.insert(w.b.end(), c.b.begin(), c.b.end());
+    w.Pad(16);
+    // morph block on animation block 0: 3 keys (0, 0.5, 1 s) of 2 vertices; target k holds k * 100 + value index
+    Writer m;
+    m.U32(3);
+    for (int k = 0; k < 3; ++k) { m.F(0.5f * k); m.U32(0); }
+    m.Pad(16);
+    m.U32(kMphMagic); m.U16(3); m.U16(2); m.U32(0); m.F(0.5f);
+    for (int i = 0; i < 4; ++i) m.U32(0);
+    for (int k = 0; k < 3; ++k) {
+        for (int v = 0; v < 8; ++v) m.S16(int16_t(v < 6 ? k * 100 + v : 0));  // 6 values padded to 8
+    }
+    w.U32(kMorph); w.U32(0); w.U32(uint32_t(m.b.size())); w.U32(0);
+    w.b.insert(w.b.end(), m.b.begin(), m.b.end());
     w.Pad(16);
     w.Put32(chunkOffsAt, uint32_t(chunkAt));
     w.Put32(chunkOffsAt + 4, uint32_t(w.b.size()));
@@ -109,9 +122,10 @@ void TestSynthetic() {
 
     const size_t at = cs->chunkOffsets[0];
     const auto chunk = Chunk::Parse(bytes.data() + at, cs->chunkOffsets[1] - at);
-    Require(chunk.has_value() && chunk->blocks.size() == 2, "chunk parses");
+    Require(chunk.has_value() && chunk->blocks.size() == 3, "chunk parses");
     const auto anims = chunk->Animations();
-    Require(anims.size() == 1 && anims[0].modelId == 0xAABBCCDD && Near(anims[0].translate.x, 10.0f), "animation block");
+    Require(anims.size() == 1 && anims[0].index == 0 && anims[0].modelId == 0xAABBCCDD && Near(anims[0].translate.x, 10.0f),
+            "animation block");
     std::vector<Quat> q;
     std::vector<Vec3> t;
     anims[0].skb.Eval(0.25f, q, t);
@@ -129,11 +143,33 @@ void TestSynthetic() {
     Require(cam.has_value() && Near(cam->translate.z, 3.0f), "camera block");
     Require(Near(cam->Fov(0.5f), 50.0f) && Near(cam->Fov(2.0f), 60.0f) && Near(cam->Fov(-1.0f), 40.0f), "fov keys");
 
+    const auto morphs = chunk->Morphs();
+    Require(morphs.size() == 1 && morphs[0].anim == 0 && morphs[0].count == 3 && morphs[0].vertices == 2, "morph block");
+    Require(Near(morphs[0].scale, 0.5f) && morphs[0].stride == 8 && morphs[0].TargetValues() == 6, "morph header");
+    Require(Les16(morphs[0].Target(2)) == 200 && Les16(morphs[0].Target(2) + 10) == 205, "morph targets");
+    uint32_t ka = 9, kb = 9;
+    int32_t wb = -1;
+    morphs[0].Blend(0.25f, ka, kb, wb);
+    Require(ka == 0 && kb == 1 && wb == 8192, "morph halfway through key 0");
+    morphs[0].Blend(0.75f, ka, kb, wb);
+    Require(ka == 1 && kb == 2 && wb == 8192, "morph halfway through key 1");
+    morphs[0].Blend(3.0f, ka, kb, wb);
+    Require(ka == 1 && kb == 2 && wb == 16384, "morph clamped past the end");
+    morphs[0].Blend(-1.0f, ka, kb, wb);
+    Require(ka == 0 && kb == 1 && wb == 0, "morph clamped before the start");
+
     // Damaged input is refused, never read past.
     auto cut = bytes;
     cut.resize(0x40);
     Require(!Cutscene::ParseHeader(cut.data(), cut.size()), "short header refused");
     Require(!Chunk::Parse(bytes.data() + at, 40), "short chunk refused");
+    {
+        const Block& mb = chunk->blocks[2];
+        Require(!MorphBlock::Parse(0, mb.data, mb.size - 2), "short morph block refused");
+        std::vector<uint8_t> noMagic(mb.data, mb.data + mb.size);
+        noMagic[32] = 'X';
+        Require(!MorphBlock::Parse(0, noMagic.data(), noMagic.size()), "morph block without MPH1 refused");
+    }
     auto bad = bytes;
     bad[0] = 'X';
     Require(!Cutscene::ParseHeader(bad.data(), bad.size()), "bad magic refused");
@@ -154,7 +190,7 @@ int TestFolder(const char* dir) {
         Require(cs->chunkOffsets.back() == d.size(), "last chunk offset is the asset size");
         std::vector<Quat> q;
         std::vector<Vec3> t;
-        size_t anims = 0;
+        size_t anims = 0, morphs = 0;
         for (size_t i = 0; i < cs->ChunkCount(); ++i) {
             const auto chunk = Chunk::Parse(d.data() + cs->chunkOffsets[i], cs->chunkOffsets[i + 1] - cs->chunkOffsets[i]);
             Require(chunk.has_value() && chunk->index == i, "real chunk parses");
@@ -164,8 +200,17 @@ int TestFolder(const char* dir) {
                 for (const auto& r : q) Require(Near(r.x * r.x + r.y * r.y + r.z * r.z + r.w * r.w, 1.0f, 1e-3f), "unit rotation");
                 ++anims;
             }
+            const auto chunkAnims = chunk->Animations();
+            for (const auto& m : chunk->Morphs()) {
+                bool found = false;
+                for (const auto& a : chunkAnims) found |= a.index == m.anim;
+                Require(found, "morph block names an animation block of its chunk");
+                Require(m.count >= 2 && m.Time(0) <= chunk->end && m.Time(m.count - 1) >= chunk->start - kFrame,
+                        "morph keys inside the chunk");
+                ++morphs;
+            }
         }
-        std::cout << e.path().filename().string() << ": " << cs->ChunkCount() << " chunks, " << anims << " animation blocks\n";
+        std::cout << e.path().filename().string() << ": " << cs->ChunkCount() << " chunks, " << anims << " animation blocks, " << morphs << " morph blocks\n";
         ++files;
     }
     return files;

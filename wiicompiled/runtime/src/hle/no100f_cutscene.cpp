@@ -22,7 +22,8 @@
 //              RouteToOwnHeap).
 // Models are built with the game's loader (RenderWare objects outlive the scene, so they are destroyed here) and drawn
 // with its cull-free render call and our own matrix arrays (the game's instance pools are too small for 36-53 bone
-// cutscene rigs).
+// cutscene rigs). Faces and mouths: a morph block's two current targets go to the game's morph render (which still
+// exists on the GameCube and reads the same target layout, big-endian), with the weight the PS2 used.
 #include "abi_bridge.h"
 #include "hle/no100f_csn.h"
 #include "hle_stubs.h"
@@ -51,6 +52,8 @@ extern "C" void func_8000E910(CpuContext* ctx);  // model unload (atomic)
 extern "C" void func_8000E89C(CpuContext* ctx);  // next atomic of the model, 0 at the end
 extern "C" void func_8000E828(CpuContext* ctx);  // bone count of the model
 extern "C" void func_8000E39C(CpuContext* ctx);  // model render (atomic, matrices: [0] world, [1..] bones)
+extern "C" void func_8000EBA4(CpuContext* ctx);  // morph render (atomic, matrices, s16* targets[4], s16 weights[4],
+                                                 // normals, scale): blends the targets into the geometry and draws it
 extern "C" void func_8000E4C0(CpuContext* ctx);  // bone matrices (atomic, quaternions, translations, out)
 extern "C" void func_8002D3A0(CpuContext* ctx);  // quaternion to matrix (quaternion, out)
 extern "C" void func_80007400(CpuContext* ctx);  // camera position (RwCamera, matrix)
@@ -87,6 +90,7 @@ constexpr uint32_t kSkipButtons = 0x50000;      // A or Y
 constexpr float kSkipAfter = 4.0f;
 constexpr uint32_t kMaxBones = 64;
 constexpr uint32_t kMatrixBytes = 64;
+constexpr uint32_t kUserDataOffset = 0x80278280 - 0x6D20;  // r13 - 0x6D20: the geometry's user-data plugin offset
 
 enum : uint32_t { kEventReset = 0x0A, kEventPlay = 0x18, kEventStart = 0xBE };
 enum : uint32_t { kPlayerControlOff = 8, kPlayerInvisible = 4 };
@@ -238,15 +242,19 @@ struct Session {
     Cutscene cs;
     std::vector<uint8_t> data;
     std::vector<LoadedModel> models;
-    uint32_t scratchRaw = 0, quats = 0, trans = 0, mat = 0;  // guest scratch: 64 quats, 64 vec3, 1 matrix
+    // guest scratch: 64 quats, 64 vec3, 1 matrix, morph arguments (4 target pointers, 4 s16 weights)
+    uint32_t scratchRaw = 0, quats = 0, trans = 0, mat = 0, morphArgs = 0;
+    uint32_t morphRaw = 0, morphTargets = 0, morphBytes = 0;  // guest copy of the two targets being blended
+    std::vector<std::pair<uint32_t, bool>> morphable;         // atomic -> whether the morph render may touch it
     bool playing = false;
     float time = 0;
     size_t chunkIndex = SIZE_MAX;
     std::optional<Chunk> chunk;
     std::vector<AnimationBlock> anims;
+    std::vector<MorphBlock> morphs;
     std::optional<CameraBlock> camera;
     uint32_t sound = 0;
-    bool loggedFirstFrame = false;
+    bool loggedFirstFrame = false, loggedMorph = false;
 
     const LoadedModel* Model(uint32_t id) const {
         for (const auto& m : models) {
@@ -260,12 +268,14 @@ struct Session {
         chunkIndex = i;
         chunk = Chunk::Parse(data.data() + cs.chunkOffsets[i], cs.chunkOffsets[i + 1] - cs.chunkOffsets[i]);
         anims.clear();
+        morphs.clear();
         camera.reset();
         if (!chunk) {
             RT_LOG(RT_TAG_RUNTIME) << "[cutscene] chunk " << i << " is damaged\n";
             return false;
         }
         anims = chunk->Animations();
+        morphs = chunk->Morphs();
         camera = chunk->Camera();
         return true;
     }
@@ -283,6 +293,7 @@ void Release(CpuContext* ctx, bool unloadModels) {
         if (m.owned && m.atomic && unloadModels) Call(ctx, func_8000E910, {m.atomic});
         if (m.matricesRaw) Call(ctx, func_8002FD70, {m.matricesRaw});
     }
+    if (g->morphRaw) Call(ctx, func_8002FD70, {g->morphRaw});
     if (g->scratchRaw) Call(ctx, func_8002FD70, {g->scratchRaw});
     RT_LOG(RT_TAG_RUNTIME) << "[cutscene] released " << std::hex << g->csn << std::dec
                            << (unloadModels ? "" : " (scene gone: models left in place)") << "\n";
@@ -360,11 +371,12 @@ bool Load(CpuContext* ctx, uint32_t manager) {
         return false;
     }
     RouteToOwnHeap route;
-    s->scratchRaw = GuestAlloc(ctx, kMaxBones * (16 + 12) + kMatrixBytes + 64);
+    s->scratchRaw = GuestAlloc(ctx, kMaxBones * (16 + 12) + kMatrixBytes + 32 + 96);
     if (!s->scratchRaw) return false;
     s->quats = Align32(s->scratchRaw);
     s->trans = Align32(s->quats + kMaxBones * 16);
     s->mat = Align32(s->trans + kMaxBones * 12);
+    s->morphArgs = Align32(s->mat + kMatrixBytes);
     g = std::move(s);  // from here Release() cleans up
 
     uint32_t built = 0, resident = 0, missing = 0;
@@ -423,7 +435,7 @@ void Start(CpuContext* ctx) {
 // The world matrix and bone matrices of one animated model at the session's time; false when it can't be posed.
 bool Pose(CpuContext* ctx, size_t animIndex, const LoadedModel& m) {
     const AnimationBlock& a = g->anims[animIndex];
-    const float t = g->cs.TrackTime(g->time, int32_t(animIndex)) - g->chunk->start;
+    const float t = g->cs.TrackTime(g->time, int32_t(a.index)) - g->chunk->start;
     std::vector<Quat> q;
     std::vector<Vec3> tr;
     a.skb.Eval(t, q, tr);
@@ -465,26 +477,94 @@ bool Pose(CpuContext* ctx, size_t animIndex, const LoadedModel& m) {
     return true;
 }
 
+// The game's morph render keeps its blend state in the geometry's first user-data array ("MORPHSTATE") when there is
+// one, without checking its name; a geometry with some other user data must not go through it.
+bool Morphable(uint32_t atomic, uint32_t geometry) {
+    for (const auto& [a, ok] : g->morphable) {
+        if (a == atomic) return ok;
+    }
+    bool ok = true;
+    const uint32_t ext = geometry + Memory::Read32(kUserDataOffset);
+    const uint32_t count = Memory::Contains(ext, 8) ? Memory::Read32(ext) : 1;
+    if (count) {
+        const uint32_t arrays = Memory::Read32(ext + 4);
+        const uint32_t name = Memory::Contains(arrays, 16) ? Memory::Read32(arrays) : 0;
+        const void* p = name && Memory::Contains(name, 11) ? Memory::GetPointer(name, 11) : nullptr;
+        ok = p && std::memcmp(p, "MORPHSTATE", 11) == 0;
+    }
+    g->morphable.emplace_back(atomic, ok);
+    return ok;
+}
+
+// Draws one atomic, through the morph render when one of the chunk's morph blocks deforms it (the block names this
+// animation block and its vertex count matches the atomic's), as the PS2 did; false when no morph applied.
+bool DrawMorphed(CpuContext* ctx, const AnimationBlock& a, uint32_t atomic, uint32_t matrices) {
+    const uint32_t geometry = Memory::Read32(atomic + 0x18);
+    if (!Memory::Contains(geometry, 0x18)) return false;
+    const uint32_t vertices = Memory::Read32(geometry + 0x14);
+    for (const auto& m : g->morphs) {
+        if (m.anim != a.index || m.vertices != vertices) continue;
+        if (!Morphable(atomic, geometry)) return false;
+        uint32_t ka = 0, kb = 0;
+        int32_t wb = 0;
+        m.Blend(g->cs.TrackTime(g->time, int32_t(a.index)), ka, kb, wb);
+        const uint32_t targetBytes = Align32(uint32_t(m.TargetValues()) * 2);
+        if (targetBytes * 2 > g->morphBytes) {
+            if (g->morphRaw) Call(ctx, func_8002FD70, {g->morphRaw});
+            g->morphRaw = GuestAlloc(ctx, targetBytes * 2);
+            g->morphTargets = g->morphRaw ? Align32(g->morphRaw) : 0;
+            g->morphBytes = g->morphRaw ? targetBytes * 2 : 0;
+            if (!g->morphRaw) return false;
+        }
+        const uint32_t key[2] = {ka, kb};
+        for (int i = 0; i < 2; ++i) {
+            const uint8_t* src = m.Target(key[i]);
+            uint8_t* dst = static_cast<uint8_t*>(Memory::GetPointer(g->morphTargets + targetBytes * i, targetBytes));
+            for (size_t v = 0; v < m.TargetValues(); ++v) {
+                dst[2 * v] = src[2 * v + 1];
+                dst[2 * v + 1] = src[2 * v];
+            }
+            Memory::Write32(g->morphArgs + 4 * i, g->morphTargets + targetBytes * i);
+            Memory::Write32(g->morphArgs + 8 + 4 * i, 0);
+        }
+        Memory::Write16(g->morphArgs + 0x10, uint16_t(0x4000 - wb));
+        Memory::Write16(g->morphArgs + 0x12, uint16_t(wb));
+        Memory::Write16(g->morphArgs + 0x14, 0);
+        Memory::Write16(g->morphArgs + 0x16, 0);
+        Call(ctx, func_8000EBA4, {atomic, matrices, g->morphArgs, g->morphArgs + 0x10, 0}, {m.scale / 16384.0});
+        return true;
+    }
+    return false;
+}
+
 void Render(CpuContext* ctx) {
     if (!g->chunk) return;
     RouteToOwnHeap route;  // first draws instance the geometry
-    size_t drawn = 0;
+    size_t drawn = 0, morphed = 0;
     for (size_t i = 0; i < g->anims.size(); ++i) {
-        const LoadedModel* m = g->Model(g->anims[i].modelId);
+        const AnimationBlock& a = g->anims[i];
+        const LoadedModel* m = g->Model(a.modelId);
         if (!m || !Pose(ctx, i, *m)) continue;
         uint32_t atomic = m->atomic;
         for (uint32_t k = 0; atomic && k < 64; ++k) {
-            if (g->cs.Visible(uint32_t(i), k, g->time)) {
-                Call(ctx, func_8000E39C, {atomic, m->matrices});
+            if (g->cs.Visible(a.index, k, g->time)) {
+                if (DrawMorphed(ctx, a, atomic, m->matrices)) {
+                    ++morphed;
+                } else {
+                    Call(ctx, func_8000E39C, {atomic, m->matrices});
+                }
                 ++drawn;
             }
             atomic = Call(ctx, func_8000E89C, {atomic});
         }
     }
-    if (!g->loggedFirstFrame) {
+    if (!g->loggedFirstFrame || (morphed && !g->loggedMorph)) {
+        g->loggedMorph |= morphed != 0;
+        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << (g->loggedFirstFrame ? "first morph" : "first frame") << " at "
+                               << g->time << " s: " << g->anims.size() << " animated models, " << drawn
+                               << " atomics drawn (" << morphed << " morphed), " << g->morphs.size()
+                               << " morph blocks, camera " << (g->camera ? "yes" : "no") << "\n";
         g->loggedFirstFrame = true;
-        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] first frame: " << g->anims.size() << " animated models, " << drawn
-                               << " atomics drawn, camera " << (g->camera ? "yes" : "no") << "\n";
     }
 }
 
