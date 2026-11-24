@@ -140,7 +140,7 @@ Test code without launching the game where that can work.
 | Docs | Nothing |
 | Launcher | Layout tests; a person checks it only if it looks different |
 | Patch mods (`launcher/ModPatches/`) | `tools/hip-patch-tests`, with its `--disc` and `--export` modes if level-file code changed (`docs/mod-patches.md`) + layout tests |
-| PS2 cutscene copy (`launcher/Ps2Cutscenes.cs`) | `tools/hip-patch-tests` (synthetic disc image), and its `--ps2 ISO DISC USERDATA` mode on a real PS2 disc image (expects 13; the copies are disc data, keep them local) + layout tests |
+| PS2/Xbox cutscene copy (`launcher/Ps2Cutscenes.cs`) | `tools/hip-patch-tests` (synthetic PS2 and Xbox disc images), and its `--ps2 ISO DISC USERDATA` mode on a real PS2 or Xbox disc image (expects 13 from PS2, 14 from Xbox; the copies are disc data, keep them local) + layout tests |
 | Translator | Translator tests + smoke test |
 | Game runtime or overrides | Runtime tests + smoke test; a person checks it only if behaviour changes |
 | Graphics (Aurora) | Aurora tests + smoke test + a person checks it |
