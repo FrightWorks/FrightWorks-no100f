@@ -462,6 +462,11 @@ target_include_directories(no100f_stream_read_tests PRIVATE "${CMAKE_CURRENT_LIS
 target_compile_features(no100f_stream_read_tests PRIVATE cxx_std_17)
 add_test(NAME no100f_stream_read_tests COMMAND no100f_stream_read_tests)
 
+add_executable(no100f_csn_tests "${CMAKE_CURRENT_LIST_DIR}/tests/no100f_csn_tests.cpp")
+target_include_directories(no100f_csn_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
+target_compile_features(no100f_csn_tests PRIVATE cxx_std_17)
+add_test(NAME no100f_csn_tests COMMAND no100f_csn_tests)
+
 add_executable(no100f_confetti_tests "${CMAKE_CURRENT_LIST_DIR}/tests/no100f_confetti_tests.cpp")
 target_include_directories(no100f_confetti_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
 target_compile_features(no100f_confetti_tests PRIVATE cxx_std_17)
