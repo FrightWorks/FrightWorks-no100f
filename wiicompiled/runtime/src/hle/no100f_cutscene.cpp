@@ -253,7 +253,10 @@ struct Session {
     bool playing = false;
     float time = 0;
     std::chrono::steady_clock::time_point started;  // real time at Start, for the finish log
+    std::chrono::steady_clock::time_point lastStep;  // real time of the clock's last step
     float maxStep = 0;                               // the longest frame step the clock took
+    float caughtUp = 0;                              // clock time added for stalls the game's step left out
+    float levelFov = 0;                              // the level camera's field of view before the cutscene
     size_t chunkIndex = SIZE_MAX;
     std::optional<Chunk> chunk;
     std::vector<AnimationBlock> anims;
@@ -296,6 +299,12 @@ void Release(CpuContext* ctx, bool unloadModels) {
     RouteToOwnHeap route;
     if (g->sound) Call(ctx, func_8003CDEC, {g->sound});
     if (g->playing) Call(ctx, func_800072F4, {}, {0.0, 0.0});  // the level's own clip planes again
+    if (g->playing && g->levelFov > 0) {
+        // The level's field of view again: the camera update (0x8001EA50) applies globals + 0x110 every frame and play
+        // doesn't set it, so the cutscene's last lens stayed (a skip during a close-up left play zoomed in).
+        Memory::WriteFloat32(kCameraFov, g->levelFov);
+        if (const uint32_t rwCamera = Memory::Read32(kGlobals)) Call(ctx, func_80007394, {rwCamera}, {g->levelFov});
+    }
     for (auto& m : g->models) {
         if (m.owned && m.atomic && unloadModels) Call(ctx, func_8000E910, {m.atomic});
         if (m.matricesRaw) Call(ctx, func_8002FD70, {m.matricesRaw});
@@ -411,7 +420,8 @@ bool Load(CpuContext* ctx, uint32_t manager) {
 
 void Start(CpuContext* ctx) {
     g->playing = true;
-    g->started = std::chrono::steady_clock::now();
+    g->started = g->lastStep = std::chrono::steady_clock::now();
+    g->levelFov = Memory::ReadFloat32(kCameraFov);
     g->time = 0;
     g->SetChunk(0);
     Call(ctx, func_80048BE0, {kPlayer, kPlayerControlOff});
@@ -702,9 +712,18 @@ void UpdateImpl(CpuContext* ctx) {
         Start(ctx);
         return;
     }
+    // The game caps its step (0.1 s), but the soundtrack plays on through a stall (a pipeline build on a cutscene's
+    // first frames took 0.6 s with a fresh shader cache): a step takes the real time since the last one when that is
+    // over 50 ms longer, up to 1 s, so the clock catches up with the sound.
+    const auto now = std::chrono::steady_clock::now();
+    const float realStep = std::chrono::duration<float>(now - g->lastStep).count();
+    g->lastStep = now;
     if (dt > 0.0f && dt < 1.0f) {
-        g->time += dt;
-        g->maxStep = std::max(g->maxStep, dt);
+        // Normal frame-to-frame jitter keeps the game's step (taking the larger of the two every frame would run fast).
+        const float step = realStep - dt > 0.05f ? std::min(realStep, 1.0f) : dt;
+        g->caughtUp += step - dt;
+        g->time += step;
+        g->maxStep = std::max(g->maxStep, step);
     }
     while (g->chunk && g->time > g->chunk->end && g->chunkIndex + 1 < g->cs.ChunkCount()) g->SetChunk(g->chunkIndex + 1);
     UpdateEmitters(ctx, false);
@@ -717,7 +736,7 @@ void UpdateImpl(CpuContext* ctx) {
     if (skip || !g->chunk || g->time >= g->End()) {
         const double real = std::chrono::duration<double>(std::chrono::steady_clock::now() - g->started).count();
         RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << (skip ? "skipped" : "finished") << " at " << g->time << " s ("
-                               << real << " s real, longest step " << g->maxStep << " s)\n";
+                               << real << " s real, longest step " << g->maxStep << " s, caught up " << g->caughtUp << " s)\n";
         UpdateEmitters(ctx, true);
         Release(ctx, true);
         func_80045F08(ctx);  // the "play" handler left the end flag set: the game's update ends the cutscene
