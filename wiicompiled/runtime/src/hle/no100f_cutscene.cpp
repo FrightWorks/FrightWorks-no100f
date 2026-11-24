@@ -18,9 +18,11 @@
 //              and field of view.
 //   0x8006CA9C projectile pool render: its one caller (0x800CDE84) runs right after zRenderState(2), where the PS2
 //              drew its cutscenes; the cutscene's models are drawn first.
-// Models are built with the game's loader (RenderWare objects come from the OS heap and outlive the scene, so they are
-// destroyed here) and drawn with its cull-free render call and our own matrix arrays (the game's instance pools are too
-// small for 36-53 bone cutscene rigs).
+//   0x80104724 / 0x80104820 OSAllocFromHeap / OSFreeToHeap: route the cutscene's memory to its own heap (see
+//              RouteToOwnHeap).
+// Models are built with the game's loader (RenderWare objects outlive the scene, so they are destroyed here) and drawn
+// with its cull-free render call and our own matrix arrays (the game's instance pools are too small for 36-53 bone
+// cutscene rigs).
 #include "abi_bridge.h"
 #include "hle/no100f_csn.h"
 #include "hle_stubs.h"
@@ -63,6 +65,9 @@ extern "C" void func_8003FF84(CpuContext* ctx);  // find a loaded asset (id, siz
 extern "C" void func_8002FD90(CpuContext* ctx);  // OS heap allocation (size)
 extern "C" void func_8002FD70(CpuContext* ctx);  // OS heap free
 extern "C" void func_800C4A54(CpuContext* ctx);  // particle emitter by ID
+extern "C" void func_80104724(CpuContext* ctx);  // OSAllocFromHeap (heap, size)
+extern "C" void func_80104820(CpuContext* ctx);  // OSFreeToHeap (heap, block)
+extern "C" void func_8010491C(CpuContext* ctx);  // OSCreateHeap (start, end) -> heap or -1
 
 namespace No100fCutscenePlayer {
 
@@ -94,19 +99,76 @@ constexpr std::array<ClipWindow, 4> kClipWindows{{
     {0xA1F375F8, 0, 5000, 0.5f, 100.0f},     // cin_7
 }};
 
-// A guest call on a copy of the wrapper's context (its stack is valid for the call).
-uint32_t Call(const CpuContext* base, void (*fn)(CpuContext*), std::initializer_list<uint32_t> gprs,
+// A guest call made on the wrapper's own context (the scheduler tracks that context: a game function that blocks
+// while running on a copy can't be switched away from), with the register state put back afterwards.
+uint32_t Call(CpuContext* ctx, void (*fn)(CpuContext*), std::initializer_list<uint32_t> gprs,
               std::initializer_list<double> fprs = {}) {
-    CpuContext c = *base;
+    uint32_t gpr[32];
+    PPC_FPR fpr[32];
+    std::memcpy(gpr, ctx->gpr, sizeof gpr);
+    std::memcpy(fpr, ctx->fpr, sizeof fpr);
+    const uint32_t cr = ctx->cr, lr = ctx->lr, ctr = ctx->ctr, xer = ctx->xer;
     int r = 3;
-    for (uint32_t v : gprs) c.gpr[r++] = v;
+    for (uint32_t v : gprs) ctx->gpr[r++] = v;
     int f = 1;
-    for (double v : fprs) c.fpr[f++].d = v;
-    fn(&c);
-    return c.gpr[3];
+    for (double v : fprs) ctx->fpr[f++].d = v;
+    fn(ctx);
+    const uint32_t result = ctx->gpr[3];
+    std::memcpy(ctx->gpr, gpr, sizeof gpr);
+    std::memcpy(ctx->fpr, fpr, sizeof fpr);
+    ctx->cr = cr;
+    ctx->lr = lr;
+    ctx->ctr = ctr;
+    ctx->xer = xer;
+    return result;
 }
 
-uint32_t GuestAlloc(const CpuContext* ctx, uint32_t size) {
+// The cutscene's own guest heap. A cutscene's RenderWare objects need 1-2 MB; the OS heap the game's RenderWare
+// allocates from has about 1.1 MB free in a level (h001's cin_1 ran it dry at its 10th of 18 models, and RenderWare's
+// failure path then wrote through a null pointer into the OS globals). The PS2 had 32 MB. So while this file's own
+// guest calls run (load, draw, unload), the game's OS-heap allocations come from a second OS heap in MEM2, which the
+// runtime maps but a GameCube game never uses, and every free goes to whichever heap owns the address.
+constexpr uint32_t kHeapTable = 0x80271308;  // OS heap table pointer, heap count at +4; 12-byte entries, size < 0 = free
+constexpr uint32_t kOsHeap = 0x80270788;     // the OS heap the game allocates from
+constexpr uint32_t kOwnHeapBase = 0x92000000;
+constexpr uint32_t kOwnHeapSize = 0x01000000;
+int32_t g_ownHeap = -1;
+int g_routeDepth = 0;  // > 0 while this file's guest calls run
+
+struct RouteToOwnHeap {
+    RouteToOwnHeap() { ++g_routeDepth; }
+    ~RouteToOwnHeap() { --g_routeDepth; }
+};
+
+bool InOwnHeap(uint32_t p) { return p >= kOwnHeapBase && p < kOwnHeapBase + kOwnHeapSize; }
+
+bool EnsureOwnHeap(CpuContext* ctx) {
+    if (g_ownHeap >= 0) return true;
+    if (!Memory::Contains(kOwnHeapBase, kOwnHeapSize)) return false;
+    const uint32_t table = Memory::Read32(kHeapTable);
+    const int32_t count = int32_t(Memory::Read32(kHeapTable + 4));
+    if (count <= 0 || count > 64 || !Memory::Contains(table, uint32_t(count) * 12)) return false;
+    bool freeSlot = false;
+    for (int32_t i = 0; i < count; ++i) freeSlot |= int32_t(Memory::Read32(table + 12 * i)) < 0;
+    uint32_t start = kOwnHeapBase;
+    if (!freeSlot) {
+        // The game made its heap table exactly as big as it needed: move it to the front of our region, one longer.
+        for (int32_t i = 0; i < count * 3; ++i) Memory::Write32(kOwnHeapBase + 4 * i, Memory::Read32(table + 4 * i));
+        Memory::Write32(kOwnHeapBase + 12 * count, 0xFFFFFFFF);
+        Memory::Write32(kOwnHeapBase + 12 * count + 4, 0);
+        Memory::Write32(kOwnHeapBase + 12 * count + 8, 0);
+        Memory::Write32(kHeapTable, kOwnHeapBase);
+        Memory::Write32(kHeapTable + 4, uint32_t(count + 1));
+        start = kOwnHeapBase + 0x100;
+    }
+    const int32_t heap = int32_t(Call(ctx, func_8010491C, {start, kOwnHeapBase + kOwnHeapSize}));
+    if (heap < 0) return false;
+    g_ownHeap = heap;
+    RT_LOG(RT_TAG_RUNTIME) << "[cutscene] own heap " << heap << " at " << std::hex << start << std::dec << "\n";
+    return true;
+}
+
+uint32_t GuestAlloc(CpuContext* ctx, uint32_t size) {
     const uint32_t p = Call(ctx, func_8002FD90, {size + 32});
     return p && Memory::Contains(p, size + 32) ? p : 0;
 }
@@ -212,8 +274,9 @@ struct Session {
 
 std::unique_ptr<Session> g;
 
-void Release(const CpuContext* ctx, bool unloadModels) {
+void Release(CpuContext* ctx, bool unloadModels) {
     if (!g) return;
+    RouteToOwnHeap route;
     if (g->sound) Call(ctx, func_8003CDEC, {g->sound});
     for (auto& m : g->models) {
         if (m.owned && m.atomic && unloadModels) Call(ctx, func_8000E910, {m.atomic});
@@ -226,7 +289,7 @@ void Release(const CpuContext* ctx, bool unloadModels) {
 }
 
 // Emitter windows from the CSNM asset: start times at +0x14, end times at +0x50, emitter IDs at +0x8C (15 each).
-void UpdateEmitters(const CpuContext* ctx, bool allOff) {
+void UpdateEmitters(CpuContext* ctx, bool allOff) {
     for (uint32_t i = 0; i < 15; ++i) {
         const uint32_t id = Memory::Read32(g->asset + 0x8C + 4 * i);
         if (!id) continue;
@@ -243,7 +306,7 @@ void UpdateEmitters(const CpuContext* ctx, bool allOff) {
     }
 }
 
-void UpdateClip(const CpuContext* ctx) {
+void UpdateClip(CpuContext* ctx) {
     const uint32_t frame = uint32_t(std::max(0.0f, g->time * 30.0f));
     for (const auto& w : kClipWindows) {
         if (w.csn == g->csn && frame >= w.frame0 && frame <= w.frame1) {
@@ -254,7 +317,7 @@ void UpdateClip(const CpuContext* ctx) {
     Call(ctx, func_800072F4, {}, {0.0, 0.0});
 }
 
-bool Load(const CpuContext* ctx, uint32_t manager) {
+bool Load(CpuContext* ctx, uint32_t manager) {
     const uint32_t asset = Memory::Read32(manager + 0x10);
     if (!asset || !Memory::Contains(asset, 0xC8)) return false;
     const uint32_t csn = Memory::Read32(asset + 8);
@@ -291,6 +354,11 @@ bool Load(const CpuContext* ctx, uint32_t manager) {
     }
     s->cs = std::move(*cs);
 
+    if (!EnsureOwnHeap(ctx)) {
+        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] no room for a cutscene heap: the movie plays\n";
+        return false;
+    }
+    RouteToOwnHeap route;
     s->scratchRaw = GuestAlloc(ctx, kMaxBones * (16 + 12) + kMatrixBytes + 64);
     if (!s->scratchRaw) return false;
     s->quats = Align32(s->scratchRaw);
@@ -331,7 +399,7 @@ bool Load(const CpuContext* ctx, uint32_t manager) {
     return true;
 }
 
-void Start(const CpuContext* ctx) {
+void Start(CpuContext* ctx) {
     g->playing = true;
     g->time = 0;
     g->SetChunk(0);
@@ -352,7 +420,7 @@ void Start(const CpuContext* ctx) {
 }
 
 // The world matrix and bone matrices of one animated model at the session's time; false when it can't be posed.
-bool Pose(const CpuContext* ctx, size_t animIndex, const LoadedModel& m) {
+bool Pose(CpuContext* ctx, size_t animIndex, const LoadedModel& m) {
     const AnimationBlock& a = g->anims[animIndex];
     const float t = g->cs.TrackTime(g->time, int32_t(animIndex)) - g->chunk->start;
     std::vector<Quat> q;
@@ -396,8 +464,9 @@ bool Pose(const CpuContext* ctx, size_t animIndex, const LoadedModel& m) {
     return true;
 }
 
-void Render(const CpuContext* ctx) {
+void Render(CpuContext* ctx) {
     if (!g->chunk) return;
+    RouteToOwnHeap route;  // first draws instance the geometry
     size_t drawn = 0;
     for (size_t i = 0; i < g->anims.size(); ++i) {
         const LoadedModel* m = g->Model(g->anims[i].modelId);
@@ -418,7 +487,7 @@ void Render(const CpuContext* ctx) {
     }
 }
 
-void Camera(const CpuContext* ctx) {
+void Camera(CpuContext* ctx) {
     if (!g->camera) return;
     const float t = g->cs.TrackTime(g->time, -1);
     std::vector<Quat> q;
@@ -463,11 +532,10 @@ bool Current() {
 void EventImpl(CpuContext* ctx) {
     const uint32_t manager = ctx->gpr[4], event = ctx->gpr[5];
     if (event == kEventReset && g && g->manager == manager) Release(ctx, true);
-    const CpuContext base = *ctx;
     func_80046054(ctx);
     if (event == kEventStart && Memory::Read32(kCutsceneManager) == manager) {
-        if (g && g->manager != manager) Release(&base, false);
-        if (!g && !Load(&base, manager)) Release(&base, true);
+        if (g && g->manager != manager) Release(ctx, false);
+        if (!g && !Load(ctx, manager)) Release(ctx, true);
     }
 }
 
@@ -517,14 +585,39 @@ void MovieImpl(CpuContext* ctx) {
 
 void CameraImpl(CpuContext* ctx) {
     const bool ours = g && g->playing && ctx->gpr[3] == kGlobals && Current();
-    const CpuContext base = *ctx;
     func_8001E9DC(ctx);
-    if (ours) Camera(&base);
+    if (ours) Camera(ctx);
 }
 
 void RenderImpl(CpuContext* ctx) {
     if (g && g->playing && Current()) Render(ctx);
     func_8006CA9C(ctx);
+}
+
+// OS-heap allocations made during this file's guest calls come from the cutscene heap (the OS heap if that is full).
+void HeapAllocImpl(CpuContext* ctx) {
+    const uint32_t heap = ctx->gpr[3], size = ctx->gpr[4];
+    if (g_routeDepth > 0 && g_ownHeap >= 0 && heap == Memory::Read32(kOsHeap)) {
+        ctx->gpr[3] = uint32_t(g_ownHeap);
+        func_80104724(ctx);
+        if (ctx->gpr[3]) return;
+        ctx->gpr[3] = heap;
+        ctx->gpr[4] = size;
+    }
+    func_80104724(ctx);
+}
+
+// A block goes back to the heap it came from, whichever heap the caller names (RenderWare frees everything through the
+// OS heap's handle, at any time: a resource purge in the game's own drawing can free a cutscene model's data).
+void HeapFreeImpl(CpuContext* ctx) {
+    if (g_ownHeap >= 0) {
+        if (InOwnHeap(ctx->gpr[4])) {
+            ctx->gpr[3] = uint32_t(g_ownHeap);
+        } else if (ctx->gpr[3] == uint32_t(g_ownHeap)) {
+            ctx->gpr[3] = Memory::Read32(kOsHeap);
+        }
+    }
+    func_80104820(ctx);
 }
 
 }  // namespace No100fCutscenePlayer
@@ -534,9 +627,14 @@ extern "C" void No100f_CutsceneUpdate(CpuContext* ctx) { No100fCutscenePlayer::U
 extern "C" void No100f_CutsceneMovie(CpuContext* ctx) { No100fCutscenePlayer::MovieImpl(ctx); }
 extern "C" void No100f_CutsceneCamera(CpuContext* ctx) { No100fCutscenePlayer::CameraImpl(ctx); }
 extern "C" void No100f_CutsceneRender(CpuContext* ctx) { No100fCutscenePlayer::RenderImpl(ctx); }
+extern "C" void No100f_CutsceneHeapAlloc(CpuContext* ctx) { No100fCutscenePlayer::HeapAllocImpl(ctx); }
+extern "C" void No100f_CutsceneHeapFree(CpuContext* ctx) { No100fCutscenePlayer::HeapFreeImpl(ctx); }
 
 REGISTER_NATIVE_FUNCTION_AS(0x80046054, No100f_CutsceneEvent, "No100f_CutsceneEvent");
 REGISTER_NATIVE_FUNCTION_AS(0x80045F08, No100f_CutsceneUpdate, "No100f_CutsceneUpdate");
 REGISTER_NATIVE_FUNCTION_AS(0x800ABBA4, No100f_CutsceneMovie, "No100f_CutsceneMovie");
 REGISTER_NATIVE_FUNCTION_AS(0x8001E9DC, No100f_CutsceneCamera, "No100f_CutsceneCamera");
 REGISTER_NATIVE_FUNCTION_AS(0x8006CA9C, No100f_CutsceneRender, "No100f_CutsceneRender");
+REGISTER_NATIVE_FUNCTION_AS(0x80104724, No100f_CutsceneHeapAlloc, "No100f_CutsceneHeapAlloc");
+REGISTER_NATIVE_FUNCTION_AS(0x80104820, No100f_CutsceneHeapFree, "No100f_CutsceneHeapFree");
+
