@@ -1529,6 +1529,8 @@ int RuntimeMain(int argc, char** argv) {
         auroraConfig.allowTextureDumps = hdTextures && RuntimeConfigFile::TextureDumps(false);
         auroraConfig.extraTexturePath = haveXboxTextures ? auroraXboxTexturesPath.c_str() : nullptr;
         auroraConfig.extraTexturesOnly = !hdTextures;
+        // The game's font sheets redrawn sharp as they load, HD textures on or off ([video] sharp_font).
+        auroraConfig.sharpFont = RuntimeConfigFile::SharpFont(true);
         aurora_set_cutout_mode(RuntimeConfigFile::CutoutMode());
         // No vsync knob: aurora always configures a non-blocking present mode.
         auroraConfig.desiredBackend = BACKEND_AUTO;
