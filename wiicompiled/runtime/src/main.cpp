@@ -1531,6 +1531,8 @@ int RuntimeMain(int argc, char** argv) {
         auroraConfig.extraTexturesOnly = !hdTextures;
         // The game's font sheets redrawn sharp as they load, HD textures on or off ([video] sharp_font).
         auroraConfig.sharpFont = RuntimeConfigFile::SharpFont(true);
+        // The flat pause menu and map icons redrawn sharp where nothing replaces them ([video] sharp_icons).
+        auroraConfig.sharpIcons = RuntimeConfigFile::SharpIcons(true);
         aurora_set_cutout_mode(RuntimeConfigFile::CutoutMode());
         // No vsync knob: aurora always configures a non-blocking present mode.
         auroraConfig.desiredBackend = BACKEND_AUTO;
