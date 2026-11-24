@@ -303,6 +303,12 @@ sealed class MansionScene : Control
         return bitmap;
     }
 
+    // Draws a cached layer at its own size. The source rectangle is the layer's pixels: DrawImage(layer, rect) takes its
+    // size in DIPs as the source, read as pixels, so at 150% display scale it drew only the layer's top-left two thirds,
+    // stretched: magnified, cut off, with the painted signs of the house art showing beside the real ones (#193).
+    static void DrawLayer(DrawingContext g, RenderTargetBitmap layer, Point at) =>
+        g.DrawImage(layer, new Rect(0, 0, layer.PixelSize.Width, layer.PixelSize.Height), new Rect(at, layer.Size));
+
     void Rebuild()
     {
         cachedFor = Bounds.Size;
@@ -598,8 +604,8 @@ sealed class MansionScene : Control
         double flash = Flash();
         var all = new Rect(Bounds.Size);
 
-        g.DrawImage(sky!, new Rect(sky!.Size));
-        foreach (var c in clouds) g.DrawImage(c.Art, new Rect(new Point((int)c.X, (int)c.Y), c.Art.Size));
+        DrawLayer(g, sky!, default);
+        foreach (var c in clouds) DrawLayer(g, c.Art, new Point((int)c.X, (int)c.Y));
         if (flash > 0)
         {
             g.FillRectangle(Skin.Brush(Skin.Argb((int)(120 * flash), 196, 186, 255)), all);
@@ -617,7 +623,7 @@ sealed class MansionScene : Control
         foreach (var w in windows) DrawWindow(g, w, t);
 
         var houseRect = new Rect(new Point((int)o.X, (int)o.Y), house!.Size);
-        g.DrawImage(house, houseRect);
+        DrawLayer(g, house, houseRect.Position);
         if (flash > 0.02)
         {
             // The lightning lights the house: a pale silhouette of it over it.
@@ -637,14 +643,14 @@ sealed class MansionScene : Control
                 g.DrawGeometry(null, new Pen(Skin.Brush(Skin.WithAlpha(glowColor, a)), Math.Max(6, 16 * s), lineJoin: PenLineJoin.Round),
                                Skin.Polygon(SignPoints(sg, lit ? 1.045 : 1)));
             }
-            if (lit) g.DrawImage(sg.Hover!, new Rect(sg.HoverAt, sg.Hover!.Size));
-            else g.DrawImage(sg.Normal!, new Rect(sg.NormalAt, sg.Normal!.Size));
+            if (lit) DrawLayer(g, sg.Hover!, sg.HoverAt);
+            else DrawLayer(g, sg.Normal!, sg.NormalAt);
             if (focused)
                 g.DrawGeometry(null, new Pen(Skin.Brush(Skin.Cream), Math.Max(1, 2 * s), new DashStyle(new double[] { 2, 2 }, 0)),
                                Skin.Polygon(SignPoints(sg, 1.045)));
         }
 
-        g.DrawImage(title!, new Rect(new Point(18, 12), title!.Size));
+        DrawLayer(g, title!, new Point(18, 12));
         DrawFooter(g);
     }
 
