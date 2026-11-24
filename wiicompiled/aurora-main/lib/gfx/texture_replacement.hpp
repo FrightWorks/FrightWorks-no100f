@@ -10,7 +10,9 @@ void initialize() noexcept;
 void shutdown() noexcept;
 void register_tlut(const GXTlutObj* obj, const void* data, GXTlutFmt format, uint16_t entries) noexcept;
 void load_tlut(const GXTlutObj* obj, uint32_t idx) noexcept;
-std::optional<TextureHandle> find_replacement(const GXTexObj_& obj) noexcept;
+// `tlut`: the palette a palette texture is drawn with (resolve_static_palette_texture); with it, the game's font
+// sheets are redrawn sharp ([video] sharp_font, sharp_font.hpp) even when texture replacement is off.
+std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlutObj_* tlut = nullptr) noexcept;
 std::string build_texture_replacement_name(const GXTexObj_& obj) noexcept;
 // Dev menu (F8): whether the replacement with this file name (no extension) has been drawn since start.
 bool replacement_used(std::string_view name) noexcept;

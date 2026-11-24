@@ -55,6 +55,7 @@ struct RuntimeUserConfig {
     std::optional<bool> textureReplacements;
     std::optional<int> cutoutMode;  // [video] cutout_mode, see CutoutMode()
     std::optional<bool> textureDumps;
+    std::optional<bool> sharpFont;  // [video] sharp_font, see SharpFont()
     std::optional<bool> showFps;
     std::optional<bool> skipIntro;
     std::optional<bool> fps60;
@@ -394,7 +395,11 @@ inline void EnsureConfigFile() {
               "# unmatched texture to Cache/texture_dumps under the name a\n"
               "# replacement would need. Both are read once, at startup.\n"
               "texture_replacements = true\n"
-              "texture_dumps = false\n\n"
+              "texture_dumps = false\n"
+              "# Redraw the game's menu and caption lettering at a high resolution\n"
+              "# with clean edges, made from the game's own font as it loads.\n"
+              "# Works with texture_replacements on or off.\n"
+              "sharp_font = true\n\n"
               "[game]\n"
               "# Holiday events in the hubs (fireworks, Halloween bats, ...): \"auto\" = by today's date,\n"
               "# \"off\" = never, \"confetti\" = fireworks with the colours mixed through each burst,\n"
@@ -620,6 +625,7 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
             if (*value == kModes[i]) config.cutoutMode = i;
     }
     config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
+    config.sharpFont = FindConfigValue<bool>(document, "video", "sharp_font");
 
     auto readVolume = [&](std::string_view key) -> std::optional<float> {
         auto value = FindConfigFloat(document, "audio", key);
@@ -1349,6 +1355,12 @@ inline bool TextureDumps(bool fallback = false) {
     return Get().textureDumps.value_or(fallback);
 }
 
+// [video] sharp_font: aurora redraws the game's font sheets at a high resolution as they load
+// (aurora-main/lib/gfx/sharp_font.cpp), ahead of the built-in HD pack. Read once, at startup.
+inline bool SharpFont(bool fallback = true) {
+    return Get().sharpFont.value_or(fallback);
+}
+
 inline std::string GraphicsApi(std::string fallback = "auto") {
     return Get().graphicsApi.value_or(std::move(fallback));
 }
@@ -1583,6 +1595,9 @@ inline void LogLoadedConfig() {
             }
             if (config.textureDumps) {
                 std::cout << " texture_dumps=" << (*config.textureDumps ? "true" : "false");
+            }
+            if (config.sharpFont) {
+                std::cout << " sharp_font=" << (*config.sharpFont ? "true" : "false");
             }
             if (config.audioVolume) {
                 std::cout << " audio_volume=" << *config.audioVolume;

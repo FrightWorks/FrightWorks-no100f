@@ -324,6 +324,8 @@ To build old source there, set only the paths that differ with `git restore --so
   Motion blur on CPU-animated meshes gives in-between images their share of vertex motion, with vertex history from the nearest copy.
 - Cut-outs: `[video] cutout_mode`, default two passes.
   Fringes are deferred and flushed before non-depth-writing and z-ALWAYS draws (#46).
+- Sharp font: `[video] sharp_font`, default on (`gfx/sharp_font.cpp`). The game builds its font sheets in memory from `font.HIP` (256x256, 4-bit palette); each one is redrawn 6x as it loads (Lanczos-enlarged alpha cut at one half, one-pixel soft edge, mips), so no image is shipped.
+  Sheets are matched by size, format and the hash of the palette range they use, taken from the palette passed to `find_replacement` (works with texture replacement off). It wins over the built-in HD pack and the extra folder (the pack's font is an AI upscale with lumpy edges); the player's own folder and mods still win over it.
 - The scene stage (`gfx/scene_stage.cpp`) is where effects on the solid scene go (ambient occlusion, lighting), before the see-through world draws and the HUD; effects on the final picture go at present, like motion blur.
   The game never marks that point: in a frame it draws the solid world (in several groups around its mist and glow copies of a 710x512 corner), then one see-through tail (the world's second, blended pass, particles, glow), then the HUD.
   So the stage is the two-pass cut-out modes' tail: the pass splits when the tail is flushed (or at the next copy or the frame's end), after the fringes; with more than one flush, the last one.

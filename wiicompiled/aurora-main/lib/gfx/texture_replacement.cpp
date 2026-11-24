@@ -4,6 +4,7 @@
 #include "../gx/gx.hpp"
 #include "../webgpu/gpu.hpp"
 #include "dds_io.hpp"
+#include "sharp_font.hpp"
 #include "texture_convert.hpp"
 
 #include <absl/container/flat_hash_map.h>
@@ -16,6 +17,7 @@
 #include <array>
 #include <atomic>
 #include <charconv>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -71,6 +73,7 @@ struct CachedReplacement {
 struct ReplacementIndexEntry {
   std::filesystem::path path;
   bool buttonIcons = false;  // the button prompt atlas, put together from button_icons (compose_button_icons)
+  bool builtIn = false;      // from the game's own texture_replacements or the extra folder: the sharp font wins over it
 };
 
 absl::flat_hash_map<RuntimeTextureKey, ReplacementIndexEntry> s_replacementIndex;
@@ -698,7 +701,9 @@ void build_index() noexcept {
       continue;
     }
 
-    s_replacementIndex.try_emplace(*parsed, path);
+    const bool builtIn = root == extraPath ||
+                         (!resourcesPath.empty() && root == resourcesPath / "texture_replacements");
+    s_replacementIndex.try_emplace(*parsed, ReplacementIndexEntry{.path = path, .builtIn = builtIn});
   }
 
   Log.info("Indexed {} texture replacements from {} folder(s) ({})", s_replacementIndex.size(), roots.size(),
@@ -742,8 +747,8 @@ const gfx::TextureHandle* find_cached_replacement(const RuntimeTextureKey& key) 
   return &cached->second.handle;
 }
 
-gfx::TextureHandle load_replacement_texture(const RuntimeTextureKey& key, const ReplacementIndexEntry& entry) noexcept {
-  const auto replacement = load_replacement(entry);
+gfx::TextureHandle upload_replacement(const RuntimeTextureKey& key,
+                                      const std::optional<ConvertedTexture>& replacement) noexcept {
   if (!replacement.has_value()) {
     s_failedKeys.insert(key);
     return {};
@@ -778,6 +783,41 @@ gfx::TextureHandle load_replacement_texture(const RuntimeTextureKey& key, const 
   handle->isReplacement = true;
   gfx::write_texture(*handle, replacement->data);
   return handle;
+}
+
+gfx::TextureHandle load_replacement_texture(const RuntimeTextureKey& key, const ReplacementIndexEntry& entry) noexcept {
+  return upload_replacement(key, load_replacement(entry));
+}
+
+// Sharp font: XXH64 of the palette entries the sheet's indices use, from the palette it is drawn with (the same hash
+// compute_referenced_tlut_hash takes from the mirrors, which only exist while texture replacement is on).
+std::optional<uint64_t> drawn_tlut_hash(const GXTexObj_& obj, const GXTlutObj_& tlut) noexcept {
+  const uint32_t textureSize = texture_base_level_size(obj);
+  const auto* textureData = static_cast<const uint8_t*>(obj.data);
+  if (obj.format() != GX_TF_C4 || textureData == nullptr || textureSize == 0 || tlut.data == nullptr) {
+    return std::nullopt;
+  }
+  uint32_t minIndex = 15;
+  uint32_t maxIndex = 0;
+  for (uint32_t i = 0; i < textureSize; ++i) {
+    minIndex = std::min({minIndex, textureData[i] & 0xfu, static_cast<uint32_t>(textureData[i] >> 4)});
+    maxIndex = std::max({maxIndex, textureData[i] & 0xfu, static_cast<uint32_t>(textureData[i] >> 4)});
+  }
+  if (minIndex > maxIndex || maxIndex >= tlut.numEntries) {
+    return std::nullopt;
+  }
+  return XXH64(static_cast<const uint8_t*>(tlut.data) + 2 * minIndex, 2 * (maxIndex + 1 - minIndex), 0);
+}
+
+std::optional<ConvertedTexture> sharpen_font_sheet(const GXTexObj_& obj, const GXTlutObj_& tlut) noexcept {
+  const auto sheet = convert_texture_palette(obj.format(), obj.width(), obj.height(), 1,
+                                             {static_cast<const uint8_t*>(obj.data), texture_base_level_size(obj)},
+                                             tlut.format, tlut.numEntries,
+                                             {static_cast<const uint8_t*>(tlut.data), static_cast<size_t>(tlut.numEntries) * 2});
+  if (sheet.data.empty()) {
+    return std::nullopt;
+  }
+  return sharp_font::sharpen(sheet);
 }
 
 void cache_replacement(const RuntimeTextureKey& key, const gfx::TextureHandle& handle) noexcept {
@@ -1020,16 +1060,28 @@ void load_tlut(const GXTlutObj* obj, uint32_t idx) noexcept {
   s_loadedTluts[idx] = {};
 }
 
-std::optional<TextureHandle> find_replacement(const GXTexObj_& obj) noexcept {
+std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlutObj_* tlut) noexcept {
   ZoneScoped;
 
-  if (!g_config.allowTextureReplacements && s_appliedButtonIcons.family < 0) {
+  const bool sharpCandidate = g_config.sharpFont && tlut != nullptr && obj.format() == GX_TF_C4 &&
+                              obj.width() == 256 && obj.height() == 256;
+  if (!g_config.allowTextureReplacements && s_appliedButtonIcons.family < 0 && !sharpCandidate) {
     return std::nullopt;
   }
 
-  const RuntimeTextureKey key = build_runtime_key(obj);
+  RuntimeTextureKey key = build_runtime_key(obj);
   const auto* path = find_replacement_path(key);
-  if (path == nullptr) {
+  // Sharp font: one of the game's font sheets, unless the player's own texture folder or a mod replaces it (the
+  // built-in HD pack and the extra folder don't win: the pack's font is an AI upscale with lumpy edges).
+  bool sharp = false;
+  if (sharpCandidate && (path == nullptr || path->builtIn)) {
+    if (const auto hash = drawn_tlut_hash(obj, *tlut);
+        hash.has_value() && sharp_font::is_font_sheet(obj.width(), obj.height(), obj.format(), *hash)) {
+      key.tlutHash = *hash;
+      sharp = true;
+    }
+  }
+  if (path == nullptr && !sharp) {
     if (g_config.allowTextureReplacements) report_missing_key(key, obj);
     return std::nullopt;
   }
@@ -1046,7 +1098,15 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj) noexcept {
     return std::nullopt;
   }
 
-  auto handle = load_replacement_texture(key, *path);
+  gfx::TextureHandle handle;
+  if (sharp) {
+    const auto start = std::chrono::steady_clock::now();
+    handle = upload_replacement(key, sharpen_font_sheet(obj, *tlut));
+    Log.info("Sharp font: {} {} in {} ms", format_replacement_filename(key), handle ? "redrawn" : "failed",
+             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
+  } else {
+    handle = load_replacement_texture(key, *path);
+  }
   if (!handle) {
     return std::nullopt;
   }

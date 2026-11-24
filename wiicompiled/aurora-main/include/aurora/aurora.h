@@ -113,6 +113,9 @@ typedef struct {
   // extraTexturesOnly it is the only folder indexed (the HD pack and the user's own are off). Null for none.
   const char* extraTexturePath;
   bool extraTexturesOnly;
+  // Redraw the game's font sheets at a high resolution as they load (lib/gfx/sharp_font.hpp), ahead of the built-in
+  // HD pack; works with texture replacement off.
+  bool sharpFont;
   bool disableCopyFilter;
   // When false, Aurora centers the first window. When true, windowPosX/Y are restored verbatim,
   // including negative coordinates on monitors left of or above the primary display.
