@@ -15,7 +15,7 @@ Open **FrightWorks** and press **Play**. The first time, it asks for your disc i
 ## Updates
 
 The installed game (and the AppImage) looks for a new version when the launcher starts and asks before updating;
-**Extras > Updates** turns that off or checks right away. Updates keep your saves and settings. The zip can't update
+**Extras > About** turns that off or checks right away. Updates keep your saves and settings. The zip can't update
 itself: its launcher tells you when a release is out, and you unzip the new one over the old folder.
 
 ## Where your files are
@@ -82,7 +82,7 @@ Make it executable (`chmod +x FrightWorks.AppImage`) and run it. It needs a Vulk
 
 ## Developer tools
 
-**Extras > Developer tools** turns on:
+**Extras > Game > Developer tools** turns on:
 
 - the **F8** dev menu: go to any level, saved spots, free camera, god mode, power-ups on/off, texture finder;
 - **F3** video recording (needs [ffmpeg](https://ffmpeg.org); the launcher offers to download it);

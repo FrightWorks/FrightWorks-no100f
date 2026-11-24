@@ -62,7 +62,7 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
 | **F10** (or the controller's **Back**/**Select**) | Settings |
 | **F11** | Fullscreen |
 | **F2** / **F3** | Screenshot / video (video needs Developer tools) |
-| **F8** | Dev menu (needs **Extras > Developer tools**) |
+| **F8** | Dev menu (needs **Extras > Game > Developer tools**) |
 | **F1** | Opens this page |
 
 More in the [player's guide](docs/playing.md): file locations, updates, Linux, controllers, moving from an earlier
