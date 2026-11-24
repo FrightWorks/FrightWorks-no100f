@@ -37,8 +37,9 @@ PS2 or Xbox disc image to bring in features from those versions.
   using your own disc, so no game data is shared
 - Optional live story cutscenes from the PS2 or Xbox version instead of the GameCube's movies: choose your own PS2 or Xbox
   disc image on the launcher's **Extras** page and it copies just those scenes (the Xbox disc also has the ending). From
-  an Xbox disc it also takes the textures, which the Xbox kept without the GameCube's compression: the game uses them
-  wherever the HD pack has none, and for every texture with HD textures off
+  an Xbox disc it also takes the textures and the sound, which the Xbox kept without the GameCube's compression: the game
+  uses the textures wherever the HD pack has none (every texture with HD textures off), and plays the music, voices and
+  sound effects without the GameCube's hiss (about 470 MB)
 - The game's holiday events follow the real date, or pick a holiday, confetti fireworks or none of them on the launcher's **Extras** page
 
 ![Scooby watching confetti fireworks over Mystic Manor](docs/screenshots/confetti-fireworks.gif)

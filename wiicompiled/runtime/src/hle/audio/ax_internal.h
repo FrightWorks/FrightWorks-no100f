@@ -3,6 +3,7 @@
 // AX/DSP HLE internals shared within this directory; ax_dsp.h is the public surface.
 // Hot accessors stay header-inline because the shipped build links runtime shards without LTO.
 
+#include "hle/audio/xbox_audio.h"
 #include "isa/big_endian.h"
 #include "memory.h"
 
@@ -622,6 +623,7 @@ public:
         uint16_t raw = CurrentRawSample();
         uint16_t decode = (m_format >> 2) & 3u;
         int16_t value = 0;
+        int16_t played = 0;  // what comes out: the decoded sample, or the player's Xbox sample (hle/audio/xbox_audio.h)
         uint8_t step = 2;
 
         if (decode == 0) {
@@ -634,7 +636,8 @@ public:
             const int32_t decoded = scale * nibble + ((0x400 + coef1 * m_yn1 + coef2 * m_yn2) >> 11);
             value = ClampAdpcmS16(decoded);
             m_yn2 = m_yn1;
-            m_yn1 = value;
+            m_yn1 = value;  // the predictor follows the ADPCM either way
+            played = kGameCubeAx ? XboxAudio::Sample(m_current & 0x3fffffffu, value) : value;
             ++m_current;
             if ((m_end & 0xf) == 0 && m_current == m_end) {
                 m_current = m_start + 1;
@@ -657,6 +660,7 @@ public:
                                          ((coef2 * m_yn2) >> gain_shift));
             m_yn2 = m_yn1;
             m_yn1 = value;
+            played = value;
             if (decode != 1) {
                 ++m_current;
             }
@@ -693,7 +697,7 @@ public:
         m_pb->adpcm.yn1 = m_yn1;
         m_pb->adpcm.yn2 = m_yn2;
         m_pb->adpcm.pred_scale = m_pred_scale;
-        return value;
+        return played;
     }
 
     static uint8_t ReadAram8(uint32_t addr) {
