@@ -93,7 +93,6 @@ constexpr uint32_t kPlayer = kGlobals + 0x1F8;   // the player entity sits insid
 constexpr uint32_t kCameraMatrix = kGlobals + 0xC0;
 constexpr uint32_t kCameraFov = kGlobals + 0x110;
 constexpr uint32_t kPad0 = kGlobals + 0x1F0;
-constexpr uint32_t kFrameTime = 0x80270438;
 constexpr uint32_t kSkippable = 0x80270AB0;     // the handler copies the cutscene's "can skip" flag here
 constexpr uint32_t kMovieCallReturn = 0x8004613C;
 constexpr uint32_t kSkipButtons = 0x50000;      // A or Y
@@ -678,6 +677,10 @@ void EventImpl(CpuContext* ctx) {
 
 void UpdateImpl(CpuContext* ctx) {
     const uint32_t manager = ctx->gpr[3];
+    // The frame's time step, as the scene update (0x800CE7B8) passes it in f1 (its f31; the game's own copy is at
+    // r13 - 0x7314). The cutscene clock runs on it, as the PS2's xCutscene_Update(dt) did, so it keeps pace with the
+    // soundtrack at 30 and 60 fps.
+    const float dt = static_cast<float>(ctx->fpr[1].d);
     if (g && g->manager != manager) Release(ctx, false);
     if (!g) {
         func_80045F08(ctx);
@@ -694,7 +697,7 @@ void UpdateImpl(CpuContext* ctx) {
         Start(ctx);
         return;
     }
-    g->time += Memory::ReadFloat32(kFrameTime);
+    if (dt > 0.0f && dt < 1.0f) g->time += dt;
     while (g->chunk && g->time > g->chunk->end && g->chunkIndex + 1 < g->cs.ChunkCount()) g->SetChunk(g->chunkIndex + 1);
     UpdateEmitters(ctx, false);
     UpdateClip(ctx);
