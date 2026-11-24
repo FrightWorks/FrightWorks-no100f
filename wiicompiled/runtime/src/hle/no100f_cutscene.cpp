@@ -30,6 +30,7 @@
 #include "runtime_log.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -583,10 +584,15 @@ void MovieImpl(CpuContext* ctx) {
     func_800ABBA4(ctx);
 }
 
+std::atomic<uint32_t> g_startRequest{0};  // dev menu "csn NAME": a manager to send the start event to
+
 void CameraImpl(CpuContext* ctx) {
     const bool ours = g && g->playing && ctx->gpr[3] == kGlobals && Current();
     func_8001E9DC(ctx);
     if (ours) Camera(ctx);
+    if (const uint32_t manager = g_startRequest.exchange(0); manager && !g && !Memory::Read32(kCutsceneManager)) {
+        Call(ctx, func_80048BE0, {manager, kEventStart});
+    }
 }
 
 void RenderImpl(CpuContext* ctx) {
@@ -629,6 +635,7 @@ extern "C" void No100f_CutsceneCamera(CpuContext* ctx) { No100fCutscenePlayer::C
 extern "C" void No100f_CutsceneRender(CpuContext* ctx) { No100fCutscenePlayer::RenderImpl(ctx); }
 extern "C" void No100f_CutsceneHeapAlloc(CpuContext* ctx) { No100fCutscenePlayer::HeapAllocImpl(ctx); }
 extern "C" void No100f_CutsceneHeapFree(CpuContext* ctx) { No100fCutscenePlayer::HeapFreeImpl(ctx); }
+extern "C" void No100f_CutsceneRequestStart(uint32_t manager) { No100fCutscenePlayer::g_startRequest = manager; }
 
 REGISTER_NATIVE_FUNCTION_AS(0x80046054, No100f_CutsceneEvent, "No100f_CutsceneEvent");
 REGISTER_NATIVE_FUNCTION_AS(0x80045F08, No100f_CutsceneUpdate, "No100f_CutsceneUpdate");

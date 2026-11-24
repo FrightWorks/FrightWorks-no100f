@@ -68,6 +68,7 @@ extern "C" void func_80048B2C(CpuContext* ctx);
 extern "C" void func_800D5150(CpuContext* ctx);
 extern "C" void func_8004C968(CpuContext* ctx);
 extern "C" void func_8005A0A8(CpuContext* ctx);
+extern "C" void No100f_CutsceneRequestStart(uint32_t manager);  // hle/no100f_cutscene.cpp
 
 namespace no100f_devmenu {
 namespace {
@@ -1421,6 +1422,8 @@ void DrawDiagnostics() {
 //   cammove DX DY DZ    free camera moves this far every frame (world units; 0 0 0 stops)
 //   cutscene            "cutscene yes|no control yes|no": recorded cutscene playing (devmenu_press.txt skips it), player
 //                       has control (no during cutscenes and in-world camera pans)
+//   csn [NAME]          list this scene's cutscenes / start one (e.g. cin_4): a PS2 cutscene plays when the level
+//                       has it (hle/no100f_cutscene.cpp), otherwise the movie
 //   perf                draw calls of the last frame + present timing (fps, average/p95 frame time)
 //   mvview MODE [SCALE] motion vectors view: 0 off, 1 motion only, 2 over the picture; SCALE = pixels per frame for
 //                       full color (turns the motion vectors on while it shows)
@@ -1676,6 +1679,34 @@ void PollCommandFile() {
                               IsGuestPtr(frame) ? ReadF(frame + 0x30) : 0.f, IsGuestPtr(frame) ? ReadF(frame + 0x34) : 0.f,
                               IsGuestPtr(frame) ? ReadF(frame + 0x38) : 0.f);
                 g_status += b;
+            }
+        } else if (cmd == "csn") {
+            // Cutscene managers are found by the CSN they name (asset +0x10, its +8 = xStrHash of the cutscene name).
+            static const char* const kNames[] = {"cin_1", "cin_2", "cin_3", "cin_4", "cin_5", "cin_6", "cin_7",
+                                                 "cin_8", "cin_9", "cin_10", "cin_sh_barrel", "cin_mm_scare",
+                                                 "cin_mm_post_death"};
+            auto hash = [](const std::string& s) {
+                uint32_t h = 0;
+                for (char c : s) h = h * 131 + uint32_t(std::toupper(static_cast<unsigned char>(c)));
+                return h;
+            };
+            const uint32_t scene = CurrentScenePtr();
+            const uint32_t list = scene ? Read32Or0(scene + 0x78) : 0, count = scene ? Read32Or0(scene + 0x74) : 0;
+            uint32_t found = 0;
+            g_status = "cutscenes here:";
+            for (uint32_t i = 0; IsGuestPtr(list) && i < count && i < 4000; ++i) {
+                const uint32_t base = Read32Or0(list + i * 4), asset = Read32Or0(base + 0x10);
+                if (!IsGuestPtr(asset)) continue;
+                const uint32_t csn = Read32Or0(asset + 8);
+                for (const char* n : kNames) {
+                    if (hash(n) != csn) continue;
+                    g_status += std::string(" ") + n;
+                    if (Lower(arg) == n) found = base;
+                }
+            }
+            if (!arg.empty()) {
+                if (found) No100f_CutsceneRequestStart(found);
+                g_status = found ? "csn " + Lower(arg) + " started" : "csn: no " + arg + " here (" + g_status + ")";
             }
         } else if (cmd == "tp") {
             Spot s;
