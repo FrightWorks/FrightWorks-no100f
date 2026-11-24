@@ -116,6 +116,9 @@ typedef struct {
   // Redraw the game's font sheets at a high resolution as they load (lib/gfx/sharp_font.hpp), ahead of the built-in
   // HD pack; works with texture replacement off.
   bool sharpFont;
+  // Redraw the flat pause menu and map icons at a high resolution as they load (lib/gfx/sharp_font.hpp), only where
+  // no replacement file exists: the HD pack keeps its icons.
+  bool sharpIcons;
   bool disableCopyFilter;
   // When false, Aurora centers the first window. When true, windowPosX/Y are restored verbatim,
   // including negative coordinates on monitors left of or above the primary display.

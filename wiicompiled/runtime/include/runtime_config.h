@@ -56,6 +56,7 @@ struct RuntimeUserConfig {
     std::optional<int> cutoutMode;  // [video] cutout_mode, see CutoutMode()
     std::optional<bool> textureDumps;
     std::optional<bool> sharpFont;  // [video] sharp_font, see SharpFont()
+    std::optional<bool> sharpIcons;  // [video] sharp_icons, see SharpIcons()
     std::optional<bool> showFps;
     std::optional<bool> skipIntro;
     std::optional<bool> fps60;
@@ -399,7 +400,10 @@ inline void EnsureConfigFile() {
               "# Redraw the game's menu and caption lettering at a high resolution\n"
               "# with clean edges, made from the game's own font as it loads.\n"
               "# Works with texture_replacements on or off.\n"
-              "sharp_font = true\n\n"
+              "sharp_font = true\n"
+              "# Redraw the flat pause menu and map icons at a high resolution with\n"
+              "# clean outlines, where texture_replacements has no picture for them.\n"
+              "sharp_icons = true\n\n"
               "[game]\n"
               "# Holiday events in the hubs (fireworks, Halloween bats, ...): \"auto\" = by today's date,\n"
               "# \"off\" = never, \"confetti\" = fireworks with the colours mixed through each burst,\n"
@@ -626,6 +630,7 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
     }
     config.textureDumps = FindConfigValue<bool>(document, "video", "texture_dumps");
     config.sharpFont = FindConfigValue<bool>(document, "video", "sharp_font");
+    config.sharpIcons = FindConfigValue<bool>(document, "video", "sharp_icons");
 
     auto readVolume = [&](std::string_view key) -> std::optional<float> {
         auto value = FindConfigFloat(document, "audio", key);
@@ -1361,6 +1366,12 @@ inline bool SharpFont(bool fallback = true) {
     return Get().sharpFont.value_or(fallback);
 }
 
+// [video] sharp_icons: aurora redraws the flat pause menu and map icons at a high resolution as they load
+// (aurora-main/lib/gfx/sharp_font.cpp), only where no replacement file exists. Read once, at startup.
+inline bool SharpIcons(bool fallback = true) {
+    return Get().sharpIcons.value_or(fallback);
+}
+
 inline std::string GraphicsApi(std::string fallback = "auto") {
     return Get().graphicsApi.value_or(std::move(fallback));
 }
@@ -1598,6 +1609,9 @@ inline void LogLoadedConfig() {
             }
             if (config.sharpFont) {
                 std::cout << " sharp_font=" << (*config.sharpFont ? "true" : "false");
+            }
+            if (config.sharpIcons) {
+                std::cout << " sharp_icons=" << (*config.sharpIcons ? "true" : "false");
             }
             if (config.audioVolume) {
                 std::cout << " audio_volume=" << *config.audioVolume;

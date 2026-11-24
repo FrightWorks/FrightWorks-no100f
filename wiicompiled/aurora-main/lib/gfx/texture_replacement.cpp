@@ -820,6 +820,15 @@ std::optional<ConvertedTexture> sharpen_font_sheet(const GXTexObj_& obj, const G
   return sharp_font::sharpen(sheet);
 }
 
+std::optional<ConvertedTexture> sharpen_flat_icon(const GXTexObj_& obj) noexcept {
+  const auto icon = convert_texture(obj.format(), obj.width(), obj.height(), 1,
+                                    {static_cast<const uint8_t*>(obj.data), texture_base_level_size(obj)});
+  if (icon.data.empty()) {
+    return std::nullopt;
+  }
+  return sharp_font::sharpen_flat(icon);
+}
+
 void cache_replacement(const RuntimeTextureKey& key, const gfx::TextureHandle& handle) noexcept {
   const uint64_t replacementBytes =
       calc_texture_size(handle->format, handle->size.width, handle->size.height, handle->mipCount);
@@ -1065,7 +1074,9 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
 
   const bool sharpCandidate = g_config.sharpFont && tlut != nullptr && obj.format() == GX_TF_C4 &&
                               obj.width() == 256 && obj.height() == 256;
-  if (!g_config.allowTextureReplacements && s_appliedButtonIcons.family < 0 && !sharpCandidate) {
+  const bool iconCandidate = g_config.sharpIcons && tlut == nullptr &&
+                             sharp_font::may_be_flat_icon(obj.width(), obj.height(), obj.format());
+  if (!g_config.allowTextureReplacements && s_appliedButtonIcons.family < 0 && !sharpCandidate && !iconCandidate) {
     return std::nullopt;
   }
 
@@ -1081,7 +1092,10 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
       sharp = true;
     }
   }
-  if (path == nullptr && !sharp) {
+  // Sharp icons: only where no replacement file exists (HD textures off, or a texture the pack doesn't have).
+  const bool icon = !sharp && path == nullptr && iconCandidate &&
+                    sharp_font::is_flat_icon(obj.width(), obj.height(), obj.format(), key.textureHash);
+  if (path == nullptr && !sharp && !icon) {
     if (g_config.allowTextureReplacements) report_missing_key(key, obj);
     return std::nullopt;
   }
@@ -1099,10 +1113,11 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
   }
 
   gfx::TextureHandle handle;
-  if (sharp) {
+  if (sharp || icon) {
     const auto start = std::chrono::steady_clock::now();
-    handle = upload_replacement(key, sharpen_font_sheet(obj, *tlut));
-    Log.info("Sharp font: {} {} in {} ms", format_replacement_filename(key), handle ? "redrawn" : "failed",
+    handle = upload_replacement(key, sharp ? sharpen_font_sheet(obj, *tlut) : sharpen_flat_icon(obj));
+    Log.info("Sharp {}: {} {} in {} ms", sharp ? "font" : "icon", format_replacement_filename(key),
+             handle ? "redrawn" : "failed",
              std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
   } else {
     handle = load_replacement_texture(key, *path);
