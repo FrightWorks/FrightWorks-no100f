@@ -658,7 +658,9 @@ sealed class MainWindow : Window
             "Optional. The PS2 and Xbox versions play their story scenes in the game itself, where the GameCube shows movies. " +
             "Choose your own PS2 or Xbox disc image (Scooby-Doo! Night of 100 Frights, a plain .iso) and the launcher copies " +
             "just those scenes (about 240 MB; the Xbox disc also has the ending, about 320 MB in all); the image isn't needed " +
-            "afterwards. The game then plays them instead of the movies."));
+            "afterwards. The game then plays them instead of the movies. From an Xbox disc it also takes the textures, which " +
+            "the Xbox stored without the GameCube's compression (about 22 MB): the game uses them wherever the HD pack has no " +
+            "texture, and for all of them with HD textures off."));
         RefreshPs2();
 
         body.Children.Add(Title("Holidays"));
@@ -1099,12 +1101,13 @@ sealed class MainWindow : Window
     void RefreshPs2()
     {
         if (ps2Status == null) return;
-        int count = Ps2Cutscenes.Count(userData);
-        ps2Status.Text = count > 0 ? $"{count} cutscenes are set up: the game plays them instead of the movies."
-                                   : "Not set up: the game shows the GameCube's movies.";
-        ps2Status.Foreground = Brush(count > 0 ? Good : Warn);
-        choosePs2.Text = count > 0 ? "Choose another PS2 or Xbox disc image" : "Choose PS2 or Xbox disc image";
-        removePs2.IsVisible = count > 0;
+        int count = Ps2Cutscenes.Count(userData), textures = XboxTextures.Count(userData);
+        ps2Status.Text = (count > 0 ? $"{count} cutscenes are set up: the game plays them instead of the movies."
+                                    : "Not set up: the game shows the GameCube's movies.")
+                         + (textures > 0 ? $" {textures} Xbox textures are set up." : "");
+        ps2Status.Foreground = Brush(count > 0 || textures > 0 ? Good : Warn);
+        choosePs2.Text = count > 0 || textures > 0 ? "Choose another PS2 or Xbox disc image" : "Choose PS2 or Xbox disc image";
+        removePs2.IsVisible = count > 0 || textures > 0;
     }
 
     async Task ChoosePs2Disc()
@@ -1128,6 +1131,20 @@ sealed class MainWindow : Window
         {
             var disc = paths.PlayableDisc;
             result = await Task.Run(() => Ps2Cutscenes.Copy(file, disc, userData, (d, t, n) => ((IProgress<(int, int, string)>)report).Report((d, t, n))));
+            if (result is { Problem.Length: 0, Expected: Ps2Cutscenes.ExpectedXbox })
+            {
+                var textureReport = new Progress<(int done, int total, string name)>(p =>
+                {
+                    ps2Bar.Maximum = Math.Max(1, p.total);
+                    ps2Bar.Value = Math.Min(p.done, ps2Bar.Maximum);
+                    ps2Status.Text = p.name.Length > 0 ? $"Taking the Xbox textures {p.done + 1}/{p.total}: {p.name}" : "Copying";
+                });
+                await Task.Run(() =>
+                {
+                    using var image = Ps2Cutscenes.OpenImage(file);
+                    XboxTextures.Copy(image, disc, userData, (d, t, n) => ((IProgress<(int, int, string)>)textureReport).Report((d, t, n)));
+                });
+            }
         }
         catch (Exception e) { error = e.Message; }
         finally { ps2Bar.IsVisible = false; choosePs2.IsEnabled = removePs2.IsEnabled = true; RefreshPs2(); }
@@ -1141,6 +1158,7 @@ sealed class MainWindow : Window
     {
         if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the cutscenes while it runs."); return; }
         Ps2Cutscenes.Remove(userData);
+        XboxTextures.Remove(userData);
         RefreshPs2();
     }
 

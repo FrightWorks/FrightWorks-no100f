@@ -141,6 +141,7 @@ Test code without launching the game where that can work.
 | Launcher | Layout tests; a person checks it only if it looks different |
 | Patch mods (`launcher/ModPatches/`) | `tools/hip-patch-tests`, with its `--disc` and `--export` modes if level-file code changed (`docs/mod-patches.md`) + layout tests |
 | PS2/Xbox cutscene copy (`launcher/Ps2Cutscenes.cs`) | `tools/hip-patch-tests` (synthetic PS2 and Xbox disc images), and its `--ps2 ISO DISC USERDATA` mode on a real PS2 or Xbox disc image (expects 13 from PS2, 14 from Xbox; the copies are disc data, keep them local) + layout tests |
+| Xbox texture copy (`launcher/XboxTextures.cs`) | `tools/hip-patch-tests` (synthetic textures and disc image), and its `--xbox-textures ISO DISC USERDATA` mode on a real Xbox disc image (1862 from the USA disc; disc data, keep it local) |
 | Translator | Translator tests + smoke test |
 | Game runtime or overrides | Runtime tests + smoke test; a person checks it only if behaviour changes |
 | Graphics (Aurora) | Aurora tests + smoke test + a person checks it |
@@ -384,6 +385,7 @@ To build old source there, set only the paths that differ with `git restore --so
   The installer's program folder is deleted on uninstall.
 - `[paths] saves_dir` overrides the saves folder.
 - The shipped HD pack and `button_icons` sit in `data\` beside the exe in both modes: Aurora's second texture root, after the user's own.
+  The player's Xbox textures (`<UserData>\xbox\textures`, `launcher/XboxTextures.cs`) come last (`extraTexturePath`), and alone with HD textures off.
 - The first installed start offers to import from a folder directly inside Documents whose `Config.toml` is this game's, or from old zip folders (also Extras > import; `launcher/DataImport.cs`, `DataPaths.cs`, `runtime_config.h`).
 - Old saves are converted by `old_save_convert.h`, called from `card_gc.cpp` before `CARDInit`, with a backup at `Saves\MemoryCard-old\<same path>.bak` (CTest `recomp_old_save_convert_tests`).
 - F2 also copies the shot to the clipboard; clicking an F2/F3 popup that names a file opens Explorer on it.

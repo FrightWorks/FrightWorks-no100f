@@ -136,9 +136,9 @@ static class Ps2Cutscenes
     }
 
     // A file on a disc image: where its bytes start (a sector for ISO 9660, a byte offset for XDVDFS) and its size.
-    sealed record DiscEntry(string Name, long Lba, long Size);
+    internal sealed record DiscEntry(string Name, long Lba, long Size);
 
-    interface IDiscImage : IDisposable
+    internal interface IDiscImage : IDisposable
     {
         List<DiscEntry> Files();
         byte[] Read(DiscEntry e);
@@ -146,7 +146,7 @@ static class Ps2Cutscenes
 
     // A PS2 image is ISO 9660; an Xbox image is XDVDFS (a trimmed .iso, or a full dump of the disc). XDVDFS is tried first:
     // Xbox images can also carry an empty ISO 9660 volume (seen on the USA disc's image).
-    static IDiscImage OpenImage(string path)
+    internal static IDiscImage OpenImage(string path)
     {
         if (Xdvdfs.Open(path) is { } xbox) return xbox;
         try { return new Iso9660(path); }
@@ -247,7 +247,7 @@ static class Ps2Cutscenes
     // game partition, which starts at 0 in a trimmed image and further in on a full dump of the disc. Each directory is
     // a binary tree of 4-byte-aligned entries: left and right child (in 4-byte units from the directory's start, 0 =
     // none), first sector, size, attributes (0x10 = directory), name length, name. 0xFF pads the rest of a sector.
-    sealed class Xdvdfs : IDiscImage
+    internal sealed class Xdvdfs : IDiscImage
     {
         static readonly long[] PartitionStarts = { 0, 0x18300000, 0xFD90000, 0x2080000 };  // trimmed, XGD1, XGD2, XGD3
         const int Sector = 2048;

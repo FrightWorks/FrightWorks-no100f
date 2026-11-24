@@ -109,6 +109,10 @@ typedef struct {
   bool pauseOnFocusLost;
   bool allowTextureReplacements;
   bool allowTextureDumps;
+  // A texture folder indexed after all the others (the player's Xbox textures), so every other folder wins. With
+  // extraTexturesOnly it is the only folder indexed (the HD pack and the user's own are off). Null for none.
+  const char* extraTexturePath;
+  bool extraTexturesOnly;
   bool disableCopyFilter;
   // When false, Aurora centers the first window. When true, windowPosX/Y are restored verbatim,
   // including negative coordinates on monitors left of or above the primary display.

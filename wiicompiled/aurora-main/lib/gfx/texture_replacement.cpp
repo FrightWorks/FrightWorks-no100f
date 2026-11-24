@@ -640,7 +640,10 @@ void build_index() noexcept {
   // Texture mods: <UserData>/mods/<name>/textures (skipped when the mod folder holds a file
   // named "disabled"). The user's own folder is indexed first and try_emplace keeps the first entry, so
   // it wins over mods; among mods the alphabetically later one wins, like their disc file overrides.
-  // The game's own texture_replacements (the built-in HD pack) come last, so anything of the user's wins.
+  // The game's own texture_replacements (the built-in HD pack) come after them, so anything of the user's wins, and
+  // the extra folder (the player's Xbox textures) comes last, or alone with extraTexturesOnly.
+  const auto extraPath = g_config.extraTexturePath != nullptr ? fs_path_from_string(g_config.extraTexturePath)
+                                                               : std::filesystem::path{};
   std::vector<std::filesystem::path> roots{s_replacementRoot};
   std::vector<std::filesystem::path> mods;
   for (const auto& entry : std::filesystem::directory_iterator(userPath / "mods", ec)) {
@@ -653,6 +656,12 @@ void build_index() noexcept {
   roots.insert(roots.end(), mods.begin(), mods.end());
   if (!resourcesPath.empty() && std::filesystem::is_directory(resourcesPath / "texture_replacements", ec)) {
     roots.push_back(resourcesPath / "texture_replacements");
+  }
+  if (g_config.extraTexturesOnly) {
+    roots.clear();
+  }
+  if (!extraPath.empty() && std::filesystem::is_directory(extraPath, ec)) {
+    roots.push_back(extraPath);
   }
   ec.clear();
   for (const auto& root : roots)
@@ -692,7 +701,9 @@ void build_index() noexcept {
     s_replacementIndex.try_emplace(*parsed, path);
   }
 
-  Log.info("Indexed {} texture replacements from {} folder(s) (texture_replacements + mods + the game's own)", s_replacementIndex.size(), roots.size());
+  Log.info("Indexed {} texture replacements from {} folder(s) ({})", s_replacementIndex.size(), roots.size(),
+           g_config.extraTexturesOnly ? "the extra folder alone"
+                                      : "texture_replacements + mods + the game's own + the extra folder");
 }
 
 const ReplacementIndexEntry* find_replacement_path(const RuntimeTextureKey& key) noexcept {
