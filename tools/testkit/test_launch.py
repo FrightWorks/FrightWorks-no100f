@@ -258,7 +258,7 @@ class TestGameTest(FakeGameCase):
         self.assertTrue((g.play / "FrightWorks Game.exe").is_file())
         self.assertNotEqual(g.play.resolve(), self.src.resolve())
         self.assertTrue(launch.is_link(g.play / "button_icons"))
-        self.assertTrue(launch.is_link(g.play / "texture_replacements"))
+        self.assertTrue(launch.is_link(g.play / "texture_replacements" / "ScoobyHD"))
         cfg = (g.play / "UserData" / "Config.toml").read_text()
         self.assertIn("rumble = false", cfg)
         self.assertIn("texture_replacements = true", cfg)
@@ -270,6 +270,18 @@ class TestGameTest(FakeGameCase):
     def test_hd_off_links_no_pack(self):
         g = self.game(hd=False)
         self.assertFalse(os.path.lexists(g.play / "texture_replacements"))
+
+    def test_hd_links_the_repo_pack_when_no_build_staged_one(self):
+        # No build stages the pack since 2026-11-24: hd runs link texture_pack/ScoobyHD (get-hd-pack.py) instead.
+        launch.safe_rmtree(self.src / "texture_replacements")
+        repo = Path(self.tmp.name) / "repo"
+        (repo / "texture_pack" / "ScoobyHD").mkdir(parents=True)
+        (repo / "texture_pack" / "ScoobyHD" / "r.png").write_bytes(b"png")
+        g = self.game(hd=True, repo=repo)
+        self.assertTrue(launch.is_link(g.play / "texture_replacements" / "ScoobyHD"))
+        self.assertTrue((g.play / "texture_replacements" / "ScoobyHD" / "r.png").exists())
+        g.cleanup()
+        self.assertTrue((repo / "texture_pack" / "ScoobyHD" / "r.png").exists())  # the source survives
 
     def test_set_boot_none_removes_the_boot_mod_and_keeps_saves(self):
         g = self.game()

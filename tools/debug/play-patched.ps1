@@ -5,7 +5,7 @@
 #   ... play-patched.ps1 -SkipTranslate        # faster: only if the last build was from this branch (see AGENTS.md)
 #   ... play-patched.ps1 -Keep                 # leave the patches applied (to work on them; re-export afterwards)
 #   ... play-patched.ps1 -CleanBuild           # after the game closes, rebuild Play\ without the patches
-#   ... play-patched.ps1 -HdTextures           # with the HD texture pack (texture_pack\ScoobyHD, as the release ships it)
+#   ... play-patched.ps1 -HdTextures           # with the HD texture pack (texture_pack\ScoobyHD, fetched by get-hd-pack.py)
 #
 # Steps: git apply each tools\debug\patches\<name>.patch, build, start Play\FrightWorks Game.exe, wait for it to
 # exit, then git apply -R the patches this run applied. A patch that was already applied is left as found. A patch whose

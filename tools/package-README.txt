@@ -24,7 +24,7 @@ Coming from an earlier FrightWorks zip or from Scooby-Doo: Refrightened? Unzip F
 On first start the launcher offers to copy your saves, settings, controls, mods and game files over; the old folder
 is left as it is.
 
-Credits: HD texture pack by dogerki (forums.dolphin-emu.org/Thread-scooby-doo-night-of-100-frights-hd-texture-pack-ai). Button prompts: Kenney Input Prompts (CC0).
+Credits: HD texture pack (optional download in the launcher) by dogerki (forums.dolphin-emu.org/Thread-scooby-doo-night-of-100-frights-hd-texture-pack-ai). Button prompts: Kenney Input Prompts (CC0).
 Launcher lettering: Luckiest Guy by Astigmatic (Apache 2.0).
 Launcher font: Inter by Rasmus Andersson (SIL Open Font License 1.1). Launcher built with Avalonia, SkiaSharp (Skia), HarfBuzz and ANGLE (MIT / BSD-3-Clause);
 full licence texts and the other components: wiicompiled/THIRD-PARTY-NOTICES.md in github.com/FrightWorks/FrightWorks-no100f.

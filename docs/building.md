@@ -13,10 +13,9 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1
 powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 -Zip          # or -Installer (Velopack)
 ```
 
-The game builds to `Play\`; packages go to `dist\`. The first build downloads dogerki's HD texture pack (604 MB, from
-the [Internet Archive](https://archive.org/details/dolphin-scooby-doo-night-of-100-frights-hd-texture-pack)) into
-`texture_pack\ScoobyHD` (not in git) and adds the HD Creeper frames from `tools\hd-pack-additions`. Every build copies
-the pack and the button prompt icons into `Play\`; the icons need Python and ImageMagick.
+The game builds to `Play\`; packages go to `dist\`. Every build copies the button prompt icons into `Play\`; they
+need Python and ImageMagick. No build includes an HD texture pack: players download one in the launcher (**Extras > HD
+texture packs**) into `UserData\texture_packs`.
 
 ## Linux
 

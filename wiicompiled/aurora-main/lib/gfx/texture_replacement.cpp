@@ -619,8 +619,8 @@ static void index_button_icons(const std::filesystem::path& resourcesPath) noexc
 
 void build_index() noexcept {
   auto userPath = fs_path_from_string(g_config.userPath);
-  // Files the game ships (button_icons, the built-in HD pack in texture_replacements) sit beside it, not in the user's
-  // folder: an installed game's program folder is replaced on every update.
+  // Files the game ships (button_icons; texture_replacements, where only the debug kit links a pack) sit beside it, not
+  // in the user's folder: an installed game's program folder is replaced on every update.
   const auto resourcesPath = g_config.resourcesPath != nullptr ? fs_path_from_string(g_config.resourcesPath)
                                                                : std::filesystem::path{};
   index_button_icons(resourcesPath);
@@ -1157,7 +1157,7 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
   RuntimeTextureKey key = build_runtime_key(obj);
   const auto* path = find_replacement_path(key);
   // Sharp font: one of the game's font sheets, unless the player's own texture folder or a mod replaces it (the
-  // built-in HD pack and the extra folder don't win: the pack's font is an AI upscale with lumpy edges).
+  // downloaded HD packs and the extra folder don't win: the pack's font is an AI upscale with lumpy edges).
   bool sharp = false;
   if (sharpCandidate && (path == nullptr || path->builtIn)) {
     if (const auto hash = drawn_tlut_hash(obj, *tlut);

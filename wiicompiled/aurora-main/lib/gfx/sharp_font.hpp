@@ -11,7 +11,7 @@
 // Font ([video] sharp_font): the game builds its font sheets in memory from font.HIP (white letters on clear, 4-bit
 // palette, 256x256) and draws its menu and caption lettering from them, so it goes soft at today's resolutions. Each
 // sheet's alpha is enlarged with a Lanczos filter and cut at the halfway line (the letter outline the original
-// anti-aliasing implies), with a one-pixel soft edge. Ahead of the built-in HD pack, whose AI-upscaled font has lumpy
+// anti-aliasing implies), with a one-pixel soft edge. Ahead of the downloaded HD packs, whose AI-upscaled font has lumpy
 // edges.
 //
 // Icons ([video] sharp_icons): flat-colour pause menu and map icons (room markers, X markers, tags, key, warp swirl).
