@@ -4,7 +4,7 @@
 # caller names: the package is built from committed state, never from a working copy.
 #   entry.sh [--shell | --run '<command>'] [package-linux.sh arguments]
 # Environment: HOST_SHA (commit), HOST_BRANCH (its branch name, or empty when detached), FRIGHTWORKS_JOBS (optional).
-# Mounts: /host-git (the repository's .git, read only), /ro/Disc, /ro/texture_pack, /ro/game (read only, from the main
+# Mounts: /host-git (the repository's .git, read only), /ro/Disc, /ro/game (read only, from the main
 # checkout), /out (the feed folder).
 set -euo pipefail
 
@@ -27,18 +27,14 @@ git submodule status >/dev/null 2>&1 || true
 echo "Building commit $(git rev-parse --short=12 HEAD) ($(git log -1 --format=%s)), branch ${HOST_BRANCH:-detached}"
 echo "Tags on it: $(git tag --points-at HEAD | tr '\n' ' ')"
 
-# The user's disc and the game's main.dol come from the main checkout, mounted read only. The HD pack is copied: the build
-# adds the Creeper frames (tools/hd-pack-additions) to texture_pack/ScoobyHD, which must not touch the original.
+# The user's disc and the game's main.dol come from the main checkout, mounted read only. No HD pack: no build ships one
+# (2026-11-24).
 # The folders the build writes (toolchain, Play, wiicompiled/generated and native-build-linux, dist) are this volume's own.
-# Without a texture_pack mount the build downloads the pack into the volume; without a game mount main.dol is taken from the
-# disc.
+# Without a game mount main.dol is taken from the disc.
 [[ -e /ro/Disc/DATA/sys/boot.bin ]] || { echo "/ro/Disc/DATA is not mounted." >&2; exit 2; }
 ln -sfn /ro/Disc "$src/Disc"
 [[ -L "$src/game" ]] && rm "$src/game"
 if [[ -e /ro/game ]]; then ln -sfn /ro/game "$src/game"; else mkdir -p "$src/game"; fi
-[[ -L "$src/texture_pack" ]] && rm "$src/texture_pack"
-mkdir -p "$src/texture_pack"
-if [[ -e /ro/texture_pack ]]; then rsync -a /ro/texture_pack/ "$src/texture_pack/"; fi
 
 if [[ -z "${FRIGHTWORKS_JOBS:-}" ]]; then
     # About 1.5 GB of RAM per job for the compiler, at most one per core, at most 16.

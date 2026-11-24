@@ -10,7 +10,8 @@
 #    the game and launcher build folders. It is kept between runs, so the second run reuses the toolchain and the
 #    compiled code. -Clean removes the volume first (a build from nothing). Remove it by hand when done:
 #    docker volume rm frightworks-linux-build
-#  - read only mounts from the main checkout: Disc\ (the extracted disc), texture_pack\ and game\ (main.dol).
+#  - read only mounts from the main checkout: Disc\ (the extracted disc) and game\ (main.dol). No texture_pack\: no build
+#    ships an HD pack (2026-11-24).
 #  - -Feed (default dist\installer-linux): the finished AppImage, packages and releases.linux.json. Old files in it are
 #    kept (the delta needs the previous package), so clear test builds out of it before a release.
 # -Run '<bash command>' runs that in the clone (at the commit, with the toolchain and build folders) instead of packaging, for
@@ -23,7 +24,7 @@
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$image = 'frightworks-linux-package:2'  # bump with a change to tools\linux-package\Dockerfile or entry.sh
+$image = 'frightworks-linux-package:3'  # bump with a change to tools\linux-package\Dockerfile or entry.sh
 
 & docker info --format '{{.ServerVersion}}' *> $null
 if ($LASTEXITCODE -ne 0) { throw 'Docker is not running. Start Docker Desktop and run this again.' }
@@ -37,9 +38,9 @@ if ($branch -eq 'HEAD') { $branch = '' }
 $gitDir = (git -C $root rev-parse --path-format=absolute --git-common-dir).Trim()
 $mainRoot = Split-Path -Parent $gitDir
 
-# Disc, texture_pack and game: a plain clone has them as ordinary folders, a git worktree as links to the main checkout's
-# (mount what the link points at; the main checkout is found from git, not from a fixed path). A missing texture_pack or
-# game is fine: the container's build downloads the HD pack and takes main.dol from the disc. The disc is required.
+# Disc and game: a plain clone has them as ordinary folders, a git worktree as links to the main checkout's (mount what
+# the link points at; the main checkout is found from git, not from a fixed path). A missing game is fine: the
+# container's build takes main.dol from the disc. The disc is required.
 function Resolve-Mount([string]$name) {
     foreach ($base in $root, $mainRoot) {
         $item = Get-Item -LiteralPath (Join-Path $base $name) -Force -ErrorAction SilentlyContinue
@@ -49,7 +50,7 @@ function Resolve-Mount([string]$name) {
     }
     return $null
 }
-$disc = Resolve-Mount 'Disc'; $pack = Resolve-Mount 'texture_pack'; $game = Resolve-Mount 'game'
+$disc = Resolve-Mount 'Disc'; $game = Resolve-Mount 'game'
 if (-not $disc -or -not (Test-Path -LiteralPath (Join-Path $disc 'DATA\sys\boot.bin'))) {
     throw 'No extracted disc in Disc\DATA. Extract your disc first (docs/building.md), like the Windows build needs.'
 }
@@ -63,7 +64,6 @@ if ($LASTEXITCODE -ne 0) { throw 'docker build failed' }
 if ($Clean) { & docker volume rm -f $Volume | Out-Null }
 
 $dockerArgs = @('run', '--rm', '-i', '-v', "${Volume}:/work", '-v', "${gitDir}:/host-git:ro", '-v', "${disc}:/ro/Disc:ro")
-if ($pack) { $dockerArgs += @('-v', "${pack}:/ro/texture_pack:ro") }
 if ($game) { $dockerArgs += @('-v', "${game}:/ro/game:ro") }
 $dockerArgs += @('-v', "${Feed}:/out", '-e', "HOST_SHA=$sha", '-e', "HOST_BRANCH=$branch")
 if ($Jobs -gt 0) { $dockerArgs += @('-e', "FRIGHTWORKS_JOBS=$Jobs") }

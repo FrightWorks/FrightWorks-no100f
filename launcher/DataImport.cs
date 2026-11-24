@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
@@ -16,8 +16,8 @@ static class DataImport
 {
     static readonly string[] GameExes = { DataPaths.GameExe, "Scooby-Doo Refrightened.exe", "Scooby-Doo Re-Masked.exe" };
     const string Mark = "imported.txt", OldMark = "imported-from-refrightened.txt";  // in UserData: asked once
-    // Rebuilt by the game or shipped with it.
-    static readonly string[] Skip = { "Logs", "Cache", "button_icons", "Disc", Path.Combine("texture_replacements", "ScoobyHD") };
+    // Rebuilt by the game, shipped with it (or once shipped: Refrightened's HD pack), or a half-done pack download.
+    static readonly string[] Skip = { "Logs", "Cache", "button_icons", "Disc", Path.Combine("texture_replacements", "ScoobyHD"), "texture_packs.download" };
 
     internal sealed record Source(string Name, string UserData, string? Disc);
 

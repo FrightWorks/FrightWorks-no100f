@@ -77,7 +77,8 @@ $rumbleOld = $null; $rumbleSet = $false
 try {
     if ($HdTextures) {
         $pack = Join-Path $root 'texture_pack\ScoobyHD'
-        if (-not (Test-Path $pack)) { throw "no HD texture pack at $pack" }
+        if (-not (Test-Path $pack)) { & python (Join-Path $root 'tools\debug\get-hd-pack.py') | Out-Host }
+        if (-not (Test-Path $pack)) { throw "no HD texture pack at $pack (tools\debug\get-hd-pack.py fetches it)" }
         if (-not (Test-Path $packLink)) {
             New-Item -ItemType Directory -Force (Split-Path $packLink) | Out-Null
             New-Item -ItemType Junction -Path $packLink -Target $pack | Out-Null

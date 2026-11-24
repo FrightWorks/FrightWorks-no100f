@@ -95,7 +95,7 @@ def job_h001(job, attempt):
     raw = job.out / "logs" / f"h001-{attempt}.raw"
     raw.parent.mkdir(parents=True, exist_ok=True)
     game = job.new_game(attempt, boot="h001", hd=True, extra_env={"AUDIO_RAW_DUMP": str(raw)})
-    pack = game.src_play / "texture_replacements" / "ScoobyHD"
+    pack = game.hd_pack
     job.passed("HD probe written", f"{checks.write_hd_probe(game.play, pack)} pack textures registered")
     common_start(job, game, "h001", attempt)
     time.sleep(1.5)  # the game updates the drawn list every 30 frames
@@ -122,7 +122,7 @@ def job_h001(job, attempt):
 
 def job_i004(job, attempt):
     game = job.new_game(attempt, boot="i004", hd=False)
-    pack = game.src_play / "texture_replacements" / "ScoobyHD"
+    pack = game.hd_pack
     try:
         checks.write_hd_probe(game.play, pack)
         probe = True

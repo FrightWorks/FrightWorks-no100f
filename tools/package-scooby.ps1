@@ -1,5 +1,6 @@
 # Assembles dist\FrightWorks: one exe on top (the launcher, named "FrightWorks.exe"), README.txt, and
-# data\ with the game's runtime files. No disc data in the package (but the HD pack fix reads the repo's Disc\DATA).
+# data\ with the game's runtime files. No disc data and no HD texture pack in the package (packs are an opt-in launcher
+# download, launcher\TexturePacks.cs).
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 [-Build] [-Zip]
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 -Installer [-Version <v>] [-Feed <dir>] [-NoDownload]
 # -Build first rebuilds the game (build-no100f.ps1, without -SkipTools: the pinned dependencies are brought up to date
@@ -33,8 +34,7 @@ function Stage([string]$to, [switch]$Installed) {
     foreach ($f in $files) {
         if (Test-Path "$root\Play\$f") { Copy-Item "$root\Play\$f" "$to\data" -Force }
     }
-    # Built-in HD texture pack (texture_pack\ScoobyHD, kept out of git) and the button prompt icons: the same files
-    # every Play\ build gets, beside the game (program files, not the player's).
+    # The button prompt icons: the same files every Play\ build gets, beside the game (program files, not the player's).
     & "$PSScriptRoot\stage-assets.ps1" -GameDir "$to\data" -Required
 }
 

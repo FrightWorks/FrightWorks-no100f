@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -96,7 +96,7 @@ sealed class MainWindow : Window
         };
         // Connected controllers: shown on Settings > Controls; an Xbox pad asks for the layout once.
         padTimer.Tick += (_, _) => RefreshGamepads().Watch();
-        Closed += (_, _) => { padTimer.Stop(); navigation.Dispose(); gamepads.Dispose(); ffmpegCancel?.Cancel(); };
+        Closed += (_, _) => { padTimer.Stop(); navigation.Dispose(); gamepads.Dispose(); ffmpegCancel?.Cancel(); packCancel?.Cancel(); };
         Opened += (_, _) =>
         {
             if (shotDir != null) { Dispatcher.UIThread.Post(() => TakeShots(shotDir), DispatcherPriority.Background); return; }
@@ -640,6 +640,8 @@ sealed class MainWindow : Window
             "Dump the disc you own (for example with CleanRip on a Wii) as a plain .iso or .ciso, then choose it here. " +
             "The launcher copies the game files once; the image file isn't needed afterwards."));
 
+        BuildTexturePacks(body);
+
         body.Children.Add(Title("PS2 and Xbox cutscenes"));
         ps2Status = FieldLabel("");
         ps2Status.MaxWidth = 520;
@@ -660,7 +662,7 @@ sealed class MainWindow : Window
             "just those scenes (about 240 MB; the Xbox disc also has the ending, about 320 MB in all); the image isn't needed " +
             "afterwards. The game then plays them instead of the movies. From an Xbox disc it also takes the textures and the " +
             "sound, which the Xbox stored without the GameCube's compression (about 22 MB and 470 MB): the game uses the " +
-            "textures wherever the HD pack has none (all of them with HD textures off), and plays the music, voices and " +
+            "textures wherever a texture pack has none (all of them with HD textures off), and plays the music, voices and " +
             "sound effects without the GameCube's hiss."));
         RefreshPs2();
 
@@ -730,7 +732,7 @@ sealed class MainWindow : Window
         body.Children.Add(Title("About"));
         var version = typeof(MainWindow).Assembly.GetName().Version;
         body.Children.Add(Note("FrightWorks " + (version == null ? "" : "v" + version.ToString(3) + " ") + "by Loneranger419 with the help of BitsofBitsofBits and Junkaholic55, based on Scooby-Doo: Refrightened by JosiahG. Built on WiiCompiled (GPLv3) " +
-                               "and Aurora (MIT). HD texture pack by dogerki. Button prompts by Kenney (CC0). Lettering in " +
+                               "and Aurora (MIT). Scooby-HD texture pack (optional download) by dogerki. Button prompts by Kenney (CC0). Lettering in " +
                                "Luckiest Guy by Astigmatic and in-game menu text in Roboto by Christian Robertson (both Apache 2.0)" +
                                "; the launcher bundles Inter by Rasmus Andersson (SIL Open Font License), which it uses for text on Linux. " +
                                "Scooby-Doo is a trademark of Hanna-Barbera / Warner Bros.; this is an unofficial fan project."));
@@ -1036,6 +1038,123 @@ sealed class MainWindow : Window
         }
         RefreshFfmpeg(offerDownload: false);
         if (error != null) await Dialogs.Message(this, "Downloading ffmpeg failed: " + error);
+    }
+
+    // ----- HD texture packs (TexturePacks.cs): opt-in downloads, one at a time -----
+    CancellationTokenSource? packCancel;
+    readonly List<Action> packRefresh = new();
+
+    void BuildTexturePacks(StackPanel body)
+    {
+        body.Children.Add(Title("HD texture packs"));
+        body.Children.Add(Note(
+            "Optional. These packs redraw the game's textures in high resolution. Fans made them from the game's own " +
+            "textures, so they don't come with FrightWorks: the launcher downloads a pack only when you choose it. Your own " +
+            "texture_replacements folder and mods win over them; Settings > HD textures turns them all off. Changes apply " +
+            "the next time the game starts."));
+        foreach (var pack in TexturePacks.All) body.Children.Add(PackBlock(pack));
+    }
+
+    Control PackBlock(TexturePacks.Pack pack)
+    {
+        var block = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 6, 0, 6) };
+        block.Children.Add(FieldLabel($"{pack.Name}, by {pack.Credit}"));
+        block.Children.Add(Note(pack.About));
+        var status = Note("");
+        block.Children.Add(status);
+        bool filling = false;
+        var use = new CheckBox { Content = "Use it", Foreground = Brush(Cream), Cursor = new Cursor(StandardCursorType.Hand), Margin = new Thickness(0, 6, 16, 6) };
+        PlankButton download = null!, remove = null!, cancel = null!;
+        var bar = new ThemedBar { IsVisible = false, Maximum = 1000 };
+
+        void Refresh()
+        {
+            bool installed = TexturePacks.Installed(userData, pack), on = TexturePacks.Enabled(userData, pack);
+            bool mine = packCancel != null && cancel.IsVisible, busy = packCancel != null;
+            filling = true;
+            use.IsChecked = on;
+            filling = false;
+            use.IsVisible = installed && !mine;
+            remove.IsVisible = installed && !mine;
+            download.IsVisible = !installed && !mine;
+            download.IsEnabled = !busy;
+            if (mine) return;
+            status.Text = !installed ? "Not downloaded." : on ? "Downloaded: the game uses it." : "Downloaded, switched off.";
+            status.Foreground = Brush(installed && on ? Good : CreamDim);
+        }
+
+        async Task Download()
+        {
+            if (packCancel != null) return;
+            packCancel = new CancellationTokenSource();
+            cancel.IsVisible = true;
+            bar.IsVisible = true;
+            bar.Value = 0;
+            status.Foreground = Brush(CreamDim);
+            status.Text = $"Downloading {pack.Name}...";
+            foreach (var r in packRefresh) r();
+            var token = packCancel.Token;
+            var report = new Progress<(long done, long total)>(p =>
+            {
+                if (token.IsCancellationRequested) return;
+                bar.Value = p.total > 0 ? (int)(p.done * 1000 / p.total) : 0;
+                status.Text = p.total > 0 && p.done >= p.total ? $"Unpacking {pack.Name}..."
+                    : p.total > 0 ? $"Downloading {pack.Name}: {p.done >> 20} of {p.total >> 20} MB" : $"Downloading {pack.Name}: {p.done >> 20} MB";
+            });
+            string? error = null;
+            bool cancelled = false;
+            try
+            {
+                await TexturePacks.Download(userData, pack, report, token);
+                // A pack the player just chose should show: HD textures on (it may have been off for the Xbox textures).
+                var c = new GameConfig(configPath);
+                if (c.Get("video", "texture_replacements") == "false") { c.Set("video", "texture_replacements", "true"); c.Save(); }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { cancelled = true; }
+            catch (Exception e) { error = e.Message; }
+            finally
+            {
+                packCancel.Dispose();
+                packCancel = null;
+                cancel.IsVisible = false;
+                bar.IsVisible = false;
+            }
+            if (!IsVisible) return;  // the launcher closed
+            foreach (var r in packRefresh) r();
+            if (cancelled) status.Text = "Download cancelled.";
+            if (error != null) await Dialogs.Message(this, $"Downloading {pack.Name} failed: {error}");
+        }
+
+        download = new PlankButton($"Download (about {pack.ApproxBytes >> 20} MB)", (_, _) => Download().Watch());
+        remove = new PlankButton("Remove", (_, _) => RemovePack().Watch());
+        cancel = new PlankButton("Cancel", (_, _) => packCancel?.Cancel()) { IsVisible = false };
+
+        async Task RemovePack()
+        {
+            if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the pack while it runs."); return; }
+            if (!await Dialogs.YesNo(this, $"Remove {pack.Name}? It can be downloaded again any time.")) return;
+            try { TexturePacks.Remove(userData, pack); }
+            catch (Exception e) { await Dialogs.Message(this, $"Removing {pack.Name} failed: {e.Message}"); }
+            Refresh();
+        }
+
+        use.IsCheckedChanged += (_, _) =>
+        {
+            if (filling) return;
+            try { TexturePacks.SetEnabled(userData, pack, use.IsChecked == true); }
+            catch (Exception) { }
+            Refresh();
+        };
+        var row = Row();
+        row.Children.Add(use);
+        row.Children.Add(download);
+        row.Children.Add(remove);
+        row.Children.Add(cancel);
+        block.Children.Add(row);
+        block.Children.Add(new LeftCap(480, bar));
+        packRefresh.Add(Refresh);
+        Refresh();
+        return block;
     }
 
     // ----- The disc and starting the game -----

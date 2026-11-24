@@ -13,6 +13,7 @@
 #include <tracy/Tracy.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <array>
 #include <atomic>
@@ -643,8 +644,11 @@ void build_index() noexcept {
   // Texture mods: <UserData>/mods/<name>/textures (skipped when the mod folder holds a file
   // named "disabled"). The user's own folder is indexed first and try_emplace keeps the first entry, so
   // it wins over mods; among mods the alphabetically later one wins, like their disc file overrides.
-  // The game's own texture_replacements (the built-in HD pack) come after them, so anything of the user's wins, and
-  // the extra folder (the player's Xbox textures) comes last, or alone with extraTexturesOnly.
+  // Texture packs the launcher downloaded when the player chose them: <UserData>/texture_packs/<NN-name> (skipped with
+  // a "disabled" file), after the mods so anything of the user's wins. The launcher's folder names start with a
+  // priority, and the lower name wins (indexed first). Then the game's own texture_replacements: no build ships a pack
+  // there any more (2026-11-24), only the debug kit links one in. The extra folder (the player's Xbox textures) comes
+  // last, or alone with extraTexturesOnly.
   const auto extraPath = g_config.extraTexturePath != nullptr ? fs_path_from_string(g_config.extraTexturePath)
                                                                : std::filesystem::path{};
   std::vector<std::filesystem::path> roots{s_replacementRoot};
@@ -657,17 +661,34 @@ void build_index() noexcept {
   }
   std::sort(mods.begin(), mods.end(), std::greater<>());
   roots.insert(roots.end(), mods.begin(), mods.end());
+  ec.clear();
+  std::vector<std::filesystem::path> packs;
+  for (const auto& entry : std::filesystem::directory_iterator(userPath / "texture_packs", ec)) {
+    if (entry.is_directory(ec) && !std::filesystem::exists(entry.path() / "disabled", ec)) {
+      packs.push_back(entry.path());
+    }
+  }
+  std::sort(packs.begin(), packs.end());
+  const size_t firstPack = roots.size();
+  roots.insert(roots.end(), packs.begin(), packs.end());
   if (!resourcesPath.empty() && std::filesystem::is_directory(resourcesPath / "texture_replacements", ec)) {
     roots.push_back(resourcesPath / "texture_replacements");
   }
+  // Downloaded packs, the game's own folder and the extra folder are "built in": the sharp font wins over them.
+  std::vector<bool> builtInRoot(roots.size(), false);
+  for (size_t i = firstPack; i < roots.size(); ++i) builtInRoot[i] = true;
   if (g_config.extraTexturesOnly) {
     roots.clear();
+    builtInRoot.clear();
   }
   if (!extraPath.empty() && std::filesystem::is_directory(extraPath, ec)) {
     roots.push_back(extraPath);
+    builtInRoot.push_back(true);
   }
   ec.clear();
-  for (const auto& root : roots)
+  for (size_t rootIndex = 0; rootIndex < roots.size(); ++rootIndex) {
+  const auto& root = roots[rootIndex];
+  const bool builtIn = builtInRoot[rootIndex];
   for (std::filesystem::recursive_directory_iterator it(
            root,
            std::filesystem::directory_options::skip_permission_denied |
@@ -701,14 +722,18 @@ void build_index() noexcept {
       continue;
     }
 
-    const bool builtIn = root == extraPath ||
-                         (!resourcesPath.empty() && root == resourcesPath / "texture_replacements");
     s_replacementIndex.try_emplace(*parsed, ReplacementIndexEntry{.path = path, .builtIn = builtIn});
+  }
   }
 
   Log.info("Indexed {} texture replacements from {} folder(s) ({})", s_replacementIndex.size(), roots.size(),
            g_config.extraTexturesOnly ? "the extra folder alone"
-                                      : "texture_replacements + mods + the game's own + the extra folder");
+                                      : "texture_replacements + mods + texture packs + the game's own + the extra folder");
+  if (!g_config.extraTexturesOnly) {
+    for (const auto& pack : packs) {
+      Log.info("Texture pack: {}", fs_path_to_string(pack.filename()));
+    }
+  }
 }
 
 const ReplacementIndexEntry* find_replacement_path(const RuntimeTextureKey& key) noexcept {
@@ -827,6 +852,55 @@ std::optional<ConvertedTexture> sharpen_flat_icon(const GXTexObj_& obj) noexcept
     return std::nullopt;
   }
   return sharp_font::sharpen_flat(icon);
+}
+
+// Smuggler's Cove sign (sign_smugglers, h001, issue #107): dogerki's HD pack has it as an RGB PNG without alpha, but the
+// original cuts out the two small ship's sails on the sign's roof with alpha; without it they draw as two opaque
+// planks. The alpha comes from the game's own texture as it loads: a bilinear enlargement to the pack's size (pixel
+// centres aligned), its edge narrowed by a smoothstep from 40% to 60% (the original's 3-bit alpha would leave a haze of
+// the wood colour round the sails). The colours are not touched. Only a pack file with no alpha at all is changed.
+// Until 2026-11-24 this was tools/hd-pack-fixes.py, run on the pack the build shipped.
+constexpr uint64_t kSmugglersSignHash = 0x665c7b880e4081e9;
+
+void add_original_alpha(ConvertedTexture& hd, const GXTexObj_& obj) noexcept {
+  const uint32_t ow = obj.width(), oh = obj.height();
+  if (hd.format != wgpu::TextureFormat::RGBA8Unorm || hd.mips != 1 || ow == 0 || oh == 0 || hd.width % ow != 0 ||
+      hd.height % oh != 0 || hd.width / ow != hd.height / oh || hd.data.size() < size_t{hd.width} * hd.height * 4) {
+    return;
+  }
+  uint8_t* px = hd.data.data();
+  const size_t count = size_t{hd.width} * hd.height;
+  for (size_t i = 0; i < count; ++i) {
+    if (px[i * 4 + 3] != 255) return;  // the pack file has its own alpha: leave it
+  }
+  const auto original = convert_texture(obj.format(), ow, oh, 1,
+                                        {static_cast<const uint8_t*>(obj.data), texture_base_level_size(obj)});
+  if (original.format != wgpu::TextureFormat::RGBA8Unorm || original.data.size() < size_t{ow} * oh * 4) return;
+  const uint8_t* src = original.data.data();
+  const float scale = static_cast<float>(hd.width / ow);
+  const auto tap = [scale](uint32_t i, uint32_t n, uint32_t& lo, uint32_t& hi, float& f) {
+    const float pos = (static_cast<float>(i) + 0.5f) / scale - 0.5f;
+    const float fl = std::floor(pos);
+    f = pos - fl;
+    const auto clampIndex = [n](float v) { return static_cast<uint32_t>(std::clamp(v, 0.f, static_cast<float>(n - 1))); };
+    lo = clampIndex(fl);
+    hi = clampIndex(fl + 1.f);
+  };
+  for (uint32_t y = 0; y < hd.height; ++y) {
+    uint32_t y0, y1;
+    float fy;
+    tap(y, oh, y0, y1, fy);
+    for (uint32_t x = 0; x < hd.width; ++x) {
+      uint32_t x0, x1;
+      float fx;
+      tap(x, ow, x0, x1, fx);
+      const auto a = [&](uint32_t sx, uint32_t sy) { return static_cast<float>(src[(size_t{sy} * ow + sx) * 4 + 3]); };
+      const float v = (a(x0, y0) * (1 - fx) + a(x1, y0) * fx) * (1 - fy) + (a(x0, y1) * (1 - fx) + a(x1, y1) * fx) * fy;
+      const float t = std::clamp((v - 102.f) / 51.f, 0.f, 1.f);
+      px[(size_t{y} * hd.width + x) * 4 + 3] = static_cast<uint8_t>(std::lround(t * t * (3.f - 2.f * t) * 255.f));
+    }
+  }
+  Log.info("Smuggler's Cove sign: alpha from the original added to the pack's {}x{} texture", hd.width, hd.height);
 }
 
 void cache_replacement(const RuntimeTextureKey& key, const gfx::TextureHandle& handle) noexcept {
@@ -1119,6 +1193,10 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
     Log.info("Sharp {}: {} {} in {} ms", sharp ? "font" : "icon", format_replacement_filename(key),
              handle ? "redrawn" : "failed",
              std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
+  } else if (key.textureHash == kSmugglersSignHash && path->builtIn) {
+    auto hd = load_replacement(*path);
+    if (hd.has_value()) add_original_alpha(*hd, obj);
+    handle = upload_replacement(key, hd);
   } else {
     handle = load_replacement_texture(key, *path);
   }

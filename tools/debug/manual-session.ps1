@@ -62,6 +62,31 @@ $userData = Join-Path $play 'UserData'
 $userConfig = Join-Path $userData 'Config.toml'
 $backupDir = Join-Path $root 'tools\debug\local\user-setup'
 $backupMark = Join-Path $backupDir 'saved.txt'  # written last: no mark = no complete copy
+# -HdTextures: no build stages an HD pack beside the game any more (2026-11-24; players download one in the launcher), so
+# dogerki's pack is linked there for the run from texture_pack\ScoobyHD (git-ignored; get-hd-pack.py fetches it once).
+# stop/restore remove the link, never the pack.
+$hdPack = Join-Path $root 'texture_pack\ScoobyHD'
+$hdLink = Join-Path $play 'texture_replacements\ScoobyHD'
+
+function Add-HdPackLink {
+    if (-not (Test-Path -LiteralPath $hdPack)) {
+        . (Join-Path $root 'tools\invoke-python.ps1')
+        Invoke-PythonScript (Join-Path $PSScriptRoot 'get-hd-pack.py')
+        if (-not (Test-Path -LiteralPath $hdPack)) { throw "no HD texture pack at $hdPack" }
+    }
+    if (-not (Test-Path -LiteralPath $hdLink)) {
+        New-Item -ItemType Directory -Force (Split-Path $hdLink) | Out-Null
+        New-Item -ItemType Junction -Path $hdLink -Target $hdPack | Out-Null
+        Write-Host "hd: linked $hdPack beside the game for this run"
+    }
+}
+
+function Remove-HdPackLink {
+    if ((Test-Path -LiteralPath $hdLink) -and
+        ((Get-Item -LiteralPath $hdLink -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        cmd /c rmdir "$hdLink" | Out-Null  # the link only
+    }
+}
 
 # The user's Config.toml + controller files -> tools\debug\local\user-setup\ (kept if a copy is already there).
 function Save-UserSetup {
@@ -89,6 +114,7 @@ function Save-UserSetup {
 # Puts the saved copy back (files the test made that weren't there before are deleted) and removes zz-manual.
 function Restore-UserSetup {
     Remove-Item -Recurse -Force -LiteralPath (Join-Path $userData 'mods\zz-manual') -ErrorAction SilentlyContinue
+    Remove-HdPackLink
     if (-not (Test-Path -LiteralPath $backupMark)) {
         Write-Host 'setup: nothing saved to restore'
         return
@@ -167,6 +193,7 @@ function Write-PlayConfig([string]$bootLevel, [bool]$unlockAllPowerups) {
 
     $dvd = ($disc -replace '\\', '/')
     $hd = if ($HdTextures) { 'true' } else { 'false' }
+    if ($HdTextures) { Add-HdPackLink }
     $muted = if ($Sound) { 'false' } else { 'true' }
     @"
 [paths]

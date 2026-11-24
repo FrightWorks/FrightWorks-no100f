@@ -1,4 +1,4 @@
-namespace FrightWorks;
+﻿namespace FrightWorks;
 
 // Where the game and the player's files are. Keep in step with the game (wiicompiled/runtime/include/runtime_config.h:
 // PortableRootDirectory, ApplicationDataDirectory, SavesDirectory, CaptureDirectory):
@@ -105,11 +105,12 @@ sealed class DataPaths
         }
     }
 
-    // Before 2026-11 the zip had the HD pack and the button icons in UserData, where the old copy would win over the new
-    // one beside the game: remove them once the game's own are there. A link is only unlinked.
+    // Before 2026-11 the zip had the button icons in UserData, where the old copy would win over the new one beside the
+    // game: remove it once the game's own are there. A link is only unlinked. (The zip had the HD pack there too; no build
+    // ships one since 2026-11-24, so an old copy there is left alone: the player keeps it.)
     public void RemoveOldShippedCopies()
     {
-        foreach (var rel in new[] { Path.Combine("texture_replacements", "ScoobyHD"), "button_icons" })
+        foreach (var rel in new[] { "button_icons" })
         {
             var old = Path.Combine(UserData, rel);
             try
