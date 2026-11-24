@@ -5,8 +5,8 @@ translated ahead of time to C++ with [WiiCompiled](https://github.com/patchzyy/W
 program, so there is no CPU emulator; the console's graphics, audio and system calls are reimplemented underneath.
 
 FrightWorks continues [Scooby-Doo: Refrightened](https://github.com/josiahg2502-glitch/Scooby-Doo-Refrightened) by JosiahG,
-from which it split off on October 31, 2026. This repository is the GameCube version; ports of the other console versions
-may follow.
+from which it split off on October 31, 2026. This repository is the GameCube version; later versions may optionally use your own
+PS2 or Xbox disc image to bring in features from those versions.
 
 [![Listed on PlayPorted](https://playported.com/badge.svg)](https://playported.com/ports/1163-scooby-doo-night-of-100-frights/)
 
@@ -73,8 +73,9 @@ FrightWorks needs the GameCube USA disc, version 1.01: Game ID **GIHE78**, revis
 - **Checksum:** a plain `.iso` of the right disc is 1,459,978,240 bytes with SHA-1
   `cf5638fd61a7862e07066fb290381bdfc77d1f37` (MD5 `6dca7f5ed6b400c8216526107e83f3cd`, CRC-32 `b29a2a47`), the same as
   Redump's. A `.ciso` hashes differently even though it works.
-- **Other versions:** USA version 1.00, the European (PAL) release and the PS2 and Xbox versions aren't supported. The
-  other GameCube versions might be later; there are no plans for PS2 or Xbox.
+- **Other versions:** you play with the GameCube USA version 1.01 disc. USA version 1.00 and the European (PAL)
+  GameCube release aren't supported yet but might be later. The PS2 and Xbox versions can't be played with FrightWorks,
+  but a later version may optionally read your own PS2 or Xbox disc image to bring in features from those versions.
 
 **Linux (beta).** The release also has `FrightWorks.AppImage` (x86_64, built to run on any Linux with glibc 2.34 or
 newer: Ubuntu 22.04 and newer, Debian 12, Fedora, Arch, SteamOS). Make it executable (`chmod +x FrightWorks.AppImage`) and run it; it asks
