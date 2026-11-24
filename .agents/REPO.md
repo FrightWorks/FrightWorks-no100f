@@ -53,6 +53,7 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 | `launcher/` | Launcher (C#, Avalonia 12, Windows and Linux) |
 | `tools/`, `tools/debug/` | Build scripts; debug kit, listed in `tools/debug/README.md` |
 | `docs/testing.md` | How to build, test and debug |
+| `docs/playing.md`, `disc.md`, `ps2-xbox-extras.md`, `building.md`, `launcher-art.md` | Player and builder pages linked from the README (keep the README short: details go here) |
 | `Disc/`, `Play/`, `autotest/`, `tools/debug/local/` | Git-ignored: disc files, build output, work data, machine-local files |
 
 ## Rules

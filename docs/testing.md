@@ -116,7 +116,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   feed is `releases.win.json`), and old files in the feed folder are kept for the delta, so clear test builds out first.
   The first build in a fresh volume takes a few minutes on a many-core PC (the translator and the compiler run in
   parallel, at most 16 jobs; `-Jobs` lowers that), the Docker image about as long once. On a Linux machine with the
-  packages from the README (plus `squashfs-tools`, `zstd` and `patchelf`) run `tools/package-linux.sh --build` directly;
+  packages from [building.md](building.md) (plus `squashfs-tools`, `zstd` and `patchelf`) run `tools/package-linux.sh --build` directly;
   the container's recipe is `tools/linux-package/Dockerfile`, with the base image pinned by digest.
   Next to the game the package ships `libSDL3.so.0` (for the launcher's controller detection), `libpng16.so.16` and
   `libz.so.1` (the ones the game was built with). Everything else comes from the system: glibc 2.34 or newer, libstdc++
