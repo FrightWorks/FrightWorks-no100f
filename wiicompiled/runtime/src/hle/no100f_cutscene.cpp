@@ -457,12 +457,13 @@ bool Pose(CpuContext* ctx, size_t animIndex, const LoadedModel& m) {
         Call(ctx, func_8000E4C0, {m.atomic, g->quats, g->trans, m.matrices + kMatrixBytes});
         return true;
     }
-    // A rigid prop: one rotation, the inverse of the key's (as the bone path and the camera use it).
+    // A rigid prop: the key's rotation as it is, through xQuatToMat, as the PS2's csCalcAnimMatrices did (the GC
+    // xQuatToMat 0x8002D3A0 builds the same matrix as the PS2's). Inverting it turned swinging props the wrong way.
     if (q.empty()) return false;
     Memory::WriteFloat32(g->quats, q[0].x);
     Memory::WriteFloat32(g->quats + 4, q[0].y);
     Memory::WriteFloat32(g->quats + 8, q[0].z);
-    Memory::WriteFloat32(g->quats + 12, -q[0].w);
+    Memory::WriteFloat32(g->quats + 12, q[0].w);
     Call(ctx, func_8002D3A0, {g->quats, m.matrices});
     Memory::Write32(m.matrices + 0x0C, 3);
     Memory::WriteFloat32(m.matrices + 0x30, tr[0].x + a.translate.x);
