@@ -1422,8 +1422,8 @@ void DrawDiagnostics() {
 //   cammove DX DY DZ    free camera moves this far every frame (world units; 0 0 0 stops)
 //   cutscene            "cutscene yes|no control yes|no": recorded cutscene playing (devmenu_press.txt skips it), player
 //                       has control (no during cutscenes and in-world camera pans)
-//   csn [NAME]          list this scene's cutscenes / start one (e.g. cin_4): a PS2 cutscene plays when the level
-//                       has it (hle/no100f_cutscene.cpp), otherwise the movie
+//   csn [NAME]          list this scene's cutscenes / start one (e.g. cin_4): the PS2 cutscene plays when the
+//                       launcher has copied it from a PS2 disc (hle/no100f_cutscene.cpp), otherwise the movie
 //   perf                draw calls of the last frame + present timing (fps, average/p95 frame time)
 //   mvview MODE [SCALE] motion vectors view: 0 off, 1 motion only, 2 over the picture; SCALE = pixels per frame for
 //                       full color (turns the motion vectors on while it shows)

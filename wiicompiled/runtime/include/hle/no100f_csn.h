@@ -1,8 +1,7 @@
 // NO100F live cutscenes: reader and evaluator for the PS2 version's CSN cutscene assets.
 //
-// Our own code, written from the data format (documented in tools/debug/game/ps2_cutscenes.py and the CSN notes);
-// no game code. Everything here works on host memory and has no runtime dependencies, so the CTest
-// (tests/no100f_csn_tests.cpp) covers it without the game.
+// Our own code, written from the data format (documented below); no game code. Everything here works on host memory
+// and has no runtime dependencies, so the CTest (tests/no100f_csn_tests.cpp) covers it without the game.
 //
 // A CSN is little-endian throughout:
 //   header (0x50): 'CTSN', asset ID, model count, chunk count, three buffer sizes, header size, visibility count and

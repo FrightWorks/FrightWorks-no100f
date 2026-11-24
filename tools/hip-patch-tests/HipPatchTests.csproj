@@ -10,5 +10,7 @@
   <ItemGroup>
     <!-- The launcher's patch code on its own, with no window: runs anywhere dotnet does. ModPatchPanel is the window's part. -->
     <Compile Include="..\..\launcher\ModPatches\*.cs" Exclude="..\..\launcher\ModPatches\ModPatchPanel.cs" LinkBase="ModPatches" />
+    <!-- The PS2 cutscene copy (also no window code). -->
+    <Compile Include="..\..\launcher\Ps2Cutscenes.cs" Link="Ps2Cutscenes.cs" />
   </ItemGroup>
 </Project>

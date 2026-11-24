@@ -2,9 +2,9 @@
 //
 // The GameCube game kept every cutscene manager (CSNM), the cutscene_toc and the soundtracks, but plays a movie for
 // each one: its CSN assets are gone and so is the code that played them. The player supplies the CSN assets from their
-// own PS2 disc (tools/debug/game/ps2_cutscenes.py puts them back into the levels), and this file plays them with our
-// own code (format and evaluator: hle/no100f_csn.h), drawing through the game's model functions. When a level has no
-// CSN for a cutscene, nothing here acts and the game plays its movie as before.
+// own PS2 disc (the launcher copies them into <UserData>/ps2/cutscenes, launcher/Ps2Cutscenes.cs), and this file plays
+// them with our own code (format and evaluator: hle/no100f_csn.h), drawing through the game's model functions. When
+// there is no CSN for a cutscene, nothing here acts and the game plays its movie as before.
 //
 // Wrappers (REGISTER_NATIVE_FUNCTION_AS; the game's functions stay translated as func_<address>):
 //   0x80046054 cutscene manager event callback (r4 manager, r5 event): after the game's start event (0xBE), load the
@@ -18,6 +18,11 @@
 //              and field of view.
 //   0x8006CA9C projectile pool render: its one caller (0x800CDE84) runs right after zRenderState(2), where the PS2
 //              drew its cutscenes; the cutscene's models are drawn first.
+//   0x80014A20 shadow render: its one caller (0x800CE2D8, render state 3) is right before the scene draws its
+//              depth-sorted list, where the PS2 added a cutscene's see-through atomics; they are drawn after it, far
+//              to near (the GameCube's list can't take them: its entries call guest code).
+//   0x800CFD14 / 0x800CEF98 scene exit / scene reset: a cutscene still playing is let go first, while the level's
+//              textures its models use are still there (players can't pause during one; the dev menu can leave).
 //   0x80104724 / 0x80104820 OSAllocFromHeap / OSFreeToHeap: route the cutscene's memory to its own heap (see
 //              RouteToOwnHeap).
 // Models are built with the game's loader (RenderWare objects outlive the scene, so they are destroyed here) and drawn
@@ -28,19 +33,21 @@
 #include "hle/no100f_csn.h"
 #include "hle_stubs.h"
 #include "memory.h"
+#include "runtime_config.h"
 #include "runtime_log.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
-
-extern "C" const char* DVDResolveHostPathForTest(const char* dvdPath);
 
 extern "C" void func_80046054(CpuContext* ctx);  // cutscene manager event callback
 extern "C" void func_80045F08(CpuContext* ctx);  // cutscene manager update
@@ -64,8 +71,11 @@ extern "C" void func_8003CDEC(CpuContext* ctx);  // sound stop (handle)
 extern "C" void func_8003D318(CpuContext* ctx);  // stop all sounds
 extern "C" void func_80048B2C(CpuContext* ctx);  // entity event (from, to, event)
 extern "C" void func_80048BE0(CpuContext* ctx);  // entity event (to, event)
-extern "C" void func_8003F920(CpuContext* ctx);  // HIP path of the package holding an asset ID
 extern "C" void func_8003FF84(CpuContext* ctx);  // find a loaded asset (id, size out)
+extern "C" void func_80014A20(CpuContext* ctx);  // shadow render
+extern "C" void func_800CFD14(CpuContext* ctx);  // scene exit
+extern "C" void func_800CEF98(CpuContext* ctx);  // scene reset
+extern "C" void func_80160B10(CpuContext* ctx);  // RenderWare render state set (state, value)
 extern "C" void func_8002FD90(CpuContext* ctx);  // OS heap allocation (size)
 extern "C" void func_8002FD70(CpuContext* ctx);  // OS heap free
 extern "C" void func_800C4A54(CpuContext* ctx);  // particle emitter by ID
@@ -103,6 +113,10 @@ constexpr std::array<ClipWindow, 4> kClipWindows{{
     {0xA1F375F4, 0, 4000, 1.0f, 200.0f},     // cin_3
     {0xA1F375F8, 0, 5000, 0.5f, 100.0f},     // cin_7
 }};
+
+// Models the PS2 drew with back faces culled (the rest are two-sided).
+constexpr std::array<uint32_t, 4> kCullBackModels{0x5C67A73F, 0x14A6D84B, 0x0BCFC105, 0x82DED3F8};
+enum : uint32_t { kRenderStateCullMode = 0x14, kCullNone = 1, kCullBack = 2 };
 
 // A guest call made on the wrapper's own context (the scheduler tracks that context: a game function that blocks
 // while running on a copy can't be switched away from), with the register state put back afterwards.
@@ -193,41 +207,28 @@ void WriteMatrix(uint32_t at, const float rows[3][3], const Vec3& pos) {
     Memory::Write32(at + 0x3C, 0);
 }
 
-// Finds an asset's offset and size in a HIP file on the host (big-endian chunks: HIPA PACK DICT{ATOC{AINF AHDR..}}).
-bool FindHipAsset(const std::string& path, uint32_t id, uint32_t& offset, uint32_t& size) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
-    auto be32 = [](const uint8_t* p) { return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | p[3]; };
-    uint8_t head[8];
-    uint64_t pos = 0;
-    auto readHead = [&](uint64_t at) {
-        in.seekg(std::streamoff(at));
-        return bool(in.read(reinterpret_cast<char*>(head), 8));
-    };
-    if (!readHead(0) || std::memcmp(head, "HIPA", 4) != 0) return false;
-    pos = 8;
-    while (readHead(pos)) {
-        const uint32_t len = be32(head + 4);
-        if (std::memcmp(head, "DICT", 4) == 0) {
-            std::vector<uint8_t> dict(len);
-            if (!in.read(reinterpret_cast<char*>(dict.data()), len)) return false;
-            if (len < 8 || std::memcmp(dict.data(), "ATOC", 4) != 0) return false;
-            const size_t atocEnd = std::min<size_t>(8 + be32(dict.data() + 4), len);
-            size_t o = 8;
-            while (o + 8 <= atocEnd) {
-                const uint32_t clen = be32(dict.data() + o + 4);
-                if (std::memcmp(dict.data() + o, "AHDR", 4) == 0 && o + 8 + 16 <= atocEnd && be32(dict.data() + o + 8) == id) {
-                    offset = be32(dict.data() + o + 16);
-                    size = be32(dict.data() + o + 20);
-                    return true;
-                }
-                o += 8 + clen;
-            }
-            return false;
+// The cutscenes copied from the player's PS2 disc: <UserData>/ps2/cutscenes/*.csn, found by the asset ID in each one's
+// header. Read once, on the first cutscene (the launcher doesn't change them while the game runs).
+std::filesystem::path CsnFile(uint32_t id) {
+    static std::vector<std::pair<uint32_t, std::filesystem::path>> index;
+    static bool scanned = false;
+    if (!scanned) {
+        scanned = true;
+        std::error_code ec;
+        const auto dir = RuntimeConfigFile::ApplicationDataDirectory() / "ps2" / "cutscenes";
+        for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+            if (!e.is_regular_file(ec) || e.path().extension() != ".csn") continue;
+            std::ifstream in(e.path(), std::ios::binary);
+            uint8_t head[8];
+            if (in.read(reinterpret_cast<char*>(head), 8) && Le32(head) == kMagic) index.emplace_back(Le32(head + 4), e.path());
         }
-        pos += 8 + len;
+        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << index.size() << " PS2 cutscenes in "
+                               << RuntimeConfigFile::PathToUtf8(dir) << "\n";
     }
-    return false;
+    for (const auto& [csn, path] : index) {
+        if (csn == id) return path;
+    }
+    return {};
 }
 
 struct LoadedModel {
@@ -246,6 +247,9 @@ struct Session {
     uint32_t scratchRaw = 0, quats = 0, trans = 0, mat = 0, morphArgs = 0;
     uint32_t morphRaw = 0, morphTargets = 0, morphBytes = 0;  // guest copy of the two targets being blended
     std::vector<std::pair<uint32_t, bool>> morphable;         // atomic -> whether the morph render may touch it
+    std::vector<std::pair<uint32_t, bool>> translucent;       // atomic -> drawn with the depth-sorted see-through ones
+    struct Deferred { size_t anim; uint32_t atomic; float distance; };
+    std::vector<Deferred> deferred;                           // this frame's see-through atomics, drawn after shadows
     bool playing = false;
     float time = 0;
     size_t chunkIndex = SIZE_MAX;
@@ -289,6 +293,7 @@ void Release(CpuContext* ctx, bool unloadModels) {
     if (!g) return;
     RouteToOwnHeap route;
     if (g->sound) Call(ctx, func_8003CDEC, {g->sound});
+    if (g->playing) Call(ctx, func_800072F4, {}, {0.0, 0.0});  // the level's own clip planes again
     for (auto& m : g->models) {
         if (m.owned && m.atomic && unloadModels) Call(ctx, func_8000E910, {m.atomic});
         if (m.matricesRaw) Call(ctx, func_8002FD70, {m.matricesRaw});
@@ -333,35 +338,25 @@ bool Load(CpuContext* ctx, uint32_t manager) {
     const uint32_t asset = Memory::Read32(manager + 0x10);
     if (!asset || !Memory::Contains(asset, 0xC8)) return false;
     const uint32_t csn = Memory::Read32(asset + 8);
-    const uint32_t hipName = Call(ctx, func_8003F920, {csn});
-    if (!hipName || !Memory::Contains(hipName, 1)) return false;  // no CSN in the loaded levels: the movie plays
-    std::string dvdPath(reinterpret_cast<const char*>(Memory::GetPointer(hipName, 1)),
-                        strnlen(reinterpret_cast<const char*>(Memory::GetPointer(hipName, 1)), 256));
-    std::string trimmed = dvdPath;
-    for (auto& c : trimmed) if (c == '\\') c = '/';
-    while (!trimmed.empty() && trimmed[0] == '/') trimmed.erase(0, 1);
-    const char* host = DVDResolveHostPathForTest(trimmed.c_str());
-    if (!host) host = DVDResolveHostPathForTest(dvdPath.c_str());
-    if (!host) {
-        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << std::hex << csn << std::dec << ": can't find level file '" << dvdPath << "'\n";
-        return false;
-    }
-    uint32_t offset = 0, size = 0;
-    if (!FindHipAsset(host, csn, offset, size) || size < 0x50) return false;  // not injected: the movie plays
+    const std::filesystem::path file = CsnFile(csn);
+    if (file.empty()) return false;  // no PS2 cutscene for this one: the movie plays
+    const std::string host = RuntimeConfigFile::PathToUtf8(file);
 
     auto s = std::make_unique<Session>();
     s->manager = manager;
     s->csn = csn;
     s->asset = asset;
-    s->data.resize(size);
     {
-        std::ifstream in(host, std::ios::binary);
-        in.seekg(offset);
+        std::ifstream in(file, std::ios::binary | std::ios::ate);
+        const std::streamoff size = in ? std::streamoff(in.tellg()) : 0;
+        if (size < 0x50 || size > (64 << 20)) return false;
+        s->data.resize(size_t(size));
+        in.seekg(0);
         if (!in.read(reinterpret_cast<char*>(s->data.data()), size)) return false;
     }
     auto cs = Cutscene::ParseHeader(s->data.data(), s->data.size());
-    if (!cs || cs->id != csn || cs->ChunkCount() == 0 || cs->chunkOffsets.back() > size) {
-        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << std::hex << csn << std::dec << ": damaged CSN in " << host << "\n";
+    if (!cs || cs->id != csn || cs->ChunkCount() == 0 || cs->chunkOffsets.back() > s->data.size()) {
+        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << std::hex << csn << std::dec << ": damaged CSN " << host << "\n";
         return false;
     }
     s->cs = std::move(*cs);
@@ -537,35 +532,96 @@ bool DrawMorphed(CpuContext* ctx, const AnimationBlock& a, uint32_t atomic, uint
     return false;
 }
 
+// Whether the PS2 drew this atomic with the scene's depth-sorted see-through objects: its first material's texture is
+// "tv_close" or any material isn't fully opaque.
+bool Translucent(uint32_t atomic) {
+    for (const auto& [a, yes] : g->translucent) {
+        if (a == atomic) return yes;
+    }
+    bool yes = false;
+    const uint32_t geometry = Memory::Read32(atomic + 0x18);
+    if (Memory::Contains(geometry, 0x28)) {
+        const uint32_t materials = Memory::Read32(geometry + 0x20), count = Memory::Read32(geometry + 0x24);
+        for (uint32_t i = 0; i < count && i < 256 && Memory::Contains(materials + 4 * i, 4); ++i) {
+            const uint32_t material = Memory::Read32(materials + 4 * i);
+            if (!Memory::Contains(material, 8)) continue;
+            if (i == 0) {
+                const uint32_t texture = Memory::Read32(material);
+                if (texture && Memory::Contains(texture + 0x10, 32)) {
+                    const char* name = reinterpret_cast<const char*>(Memory::GetPointer(texture + 0x10, 32));
+                    char lower[33] = {};
+                    for (int c = 0; c < 32 && name[c]; ++c) lower[c] = char(std::tolower(static_cast<unsigned char>(name[c])));
+                    yes |= std::strcmp(lower, "tv_close") == 0;
+                }
+            }
+            yes |= Memory::Read8(material + 7) != 0xFF;
+        }
+    }
+    g->translucent.emplace_back(atomic, yes);
+    return yes;
+}
+
+void DrawAtomic(CpuContext* ctx, const AnimationBlock& a, uint32_t atomic, uint32_t matrices, size_t& morphed) {
+    if (DrawMorphed(ctx, a, atomic, matrices)) {
+        ++morphed;
+    } else {
+        Call(ctx, func_8000E39C, {atomic, matrices});
+    }
+}
+
 void Render(CpuContext* ctx) {
+    g->deferred.clear();
     if (!g->chunk) return;
     RouteToOwnHeap route;  // first draws instance the geometry
     size_t drawn = 0, morphed = 0;
+    const float camX = Memory::ReadFloat32(kCameraMatrix + 0x30), camY = Memory::ReadFloat32(kCameraMatrix + 0x34),
+                camZ = Memory::ReadFloat32(kCameraMatrix + 0x38);
     for (size_t i = 0; i < g->anims.size(); ++i) {
         const AnimationBlock& a = g->anims[i];
         const LoadedModel* m = g->Model(a.modelId);
         if (!m || !Pose(ctx, i, *m)) continue;
+        const bool cullBack = std::find(kCullBackModels.begin(), kCullBackModels.end(), a.modelId) != kCullBackModels.end();
+        if (cullBack) Call(ctx, func_80160B10, {kRenderStateCullMode, kCullBack});
+        const float dx = Memory::ReadFloat32(m->matrices + 0x30) - camX, dy = Memory::ReadFloat32(m->matrices + 0x34) - camY,
+                    dz = Memory::ReadFloat32(m->matrices + 0x38) - camZ;
         uint32_t atomic = m->atomic;
         for (uint32_t k = 0; atomic && k < 64; ++k) {
             if (g->cs.Visible(a.index, k, g->time)) {
-                if (DrawMorphed(ctx, a, atomic, m->matrices)) {
-                    ++morphed;
+                if (Translucent(atomic)) {
+                    g->deferred.push_back({i, atomic, std::sqrt(dx * dx + dy * dy + dz * dz)});
                 } else {
-                    Call(ctx, func_8000E39C, {atomic, m->matrices});
+                    DrawAtomic(ctx, a, atomic, m->matrices, morphed);
                 }
                 ++drawn;
             }
             atomic = Call(ctx, func_8000E89C, {atomic});
         }
+        if (cullBack) Call(ctx, func_80160B10, {kRenderStateCullMode, kCullNone});
     }
     if (!g->loggedFirstFrame || (morphed && !g->loggedMorph)) {
         g->loggedMorph |= morphed != 0;
         RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << (g->loggedFirstFrame ? "first morph" : "first frame") << " at "
                                << g->time << " s: " << g->anims.size() << " animated models, " << drawn
-                               << " atomics drawn (" << morphed << " morphed), " << g->morphs.size()
-                               << " morph blocks, camera " << (g->camera ? "yes" : "no") << "\n";
+                               << " atomics drawn (" << morphed << " morphed, " << g->deferred.size()
+                               << " see-through), " << g->morphs.size() << " morph blocks, camera "
+                               << (g->camera ? "yes" : "no") << "\n";
         g->loggedFirstFrame = true;
     }
+}
+
+// The see-through atomics, far to near, where the PS2's depth-sorted list drew them (after the shadows, in their state).
+void RenderDeferred(CpuContext* ctx) {
+    if (g->deferred.empty() || !g->chunk) return;
+    std::stable_sort(g->deferred.begin(), g->deferred.end(),
+                     [](const Session::Deferred& x, const Session::Deferred& y) { return x.distance > y.distance; });
+    RouteToOwnHeap route;
+    size_t morphed = 0;
+    for (const auto& d : g->deferred) {
+        if (d.anim >= g->anims.size()) continue;
+        const AnimationBlock& a = g->anims[d.anim];
+        if (const LoadedModel* m = g->Model(a.modelId)) DrawAtomic(ctx, a, d.atomic, m->matrices, morphed);
+    }
+    g->deferred.clear();
 }
 
 void Camera(CpuContext* ctx) {
@@ -680,6 +736,21 @@ void RenderImpl(CpuContext* ctx) {
     func_8006CA9C(ctx);
 }
 
+void ShadowImpl(CpuContext* ctx) {
+    func_80014A20(ctx);
+    if (g && g->playing && Current()) RenderDeferred(ctx);
+}
+
+// Scene exit and reset: let a cutscene go while the level (whose textures its models use) is still loaded.
+void SceneEndImpl(CpuContext* ctx, void (*original)(CpuContext*), const char* what) {
+    if (g) {
+        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << what << " during " << std::hex << g->csn << std::dec << "\n";
+        if (g->playing) UpdateEmitters(ctx, true);
+        Release(ctx, true);
+    }
+    original(ctx);
+}
+
 // OS-heap allocations made during this file's guest calls come from the cutscene heap (the OS heap if that is full).
 void HeapAllocImpl(CpuContext* ctx) {
     const uint32_t heap = ctx->gpr[3], size = ctx->gpr[4];
@@ -713,6 +784,13 @@ extern "C" void No100f_CutsceneUpdate(CpuContext* ctx) { No100fCutscenePlayer::U
 extern "C" void No100f_CutsceneMovie(CpuContext* ctx) { No100fCutscenePlayer::MovieImpl(ctx); }
 extern "C" void No100f_CutsceneCamera(CpuContext* ctx) { No100fCutscenePlayer::CameraImpl(ctx); }
 extern "C" void No100f_CutsceneRender(CpuContext* ctx) { No100fCutscenePlayer::RenderImpl(ctx); }
+extern "C" void No100f_CutsceneShadow(CpuContext* ctx) { No100fCutscenePlayer::ShadowImpl(ctx); }
+extern "C" void No100f_CutsceneSceneExit(CpuContext* ctx) {
+    No100fCutscenePlayer::SceneEndImpl(ctx, func_800CFD14, "scene exit");
+}
+extern "C" void No100f_CutsceneSceneReset(CpuContext* ctx) {
+    No100fCutscenePlayer::SceneEndImpl(ctx, func_800CEF98, "scene reset");
+}
 extern "C" void No100f_CutsceneHeapAlloc(CpuContext* ctx) { No100fCutscenePlayer::HeapAllocImpl(ctx); }
 extern "C" void No100f_CutsceneHeapFree(CpuContext* ctx) { No100fCutscenePlayer::HeapFreeImpl(ctx); }
 extern "C" void No100f_CutsceneRequestStart(uint32_t manager) { No100fCutscenePlayer::g_startRequest = manager; }
@@ -722,6 +800,9 @@ REGISTER_NATIVE_FUNCTION_AS(0x80045F08, No100f_CutsceneUpdate, "No100f_CutsceneU
 REGISTER_NATIVE_FUNCTION_AS(0x800ABBA4, No100f_CutsceneMovie, "No100f_CutsceneMovie");
 REGISTER_NATIVE_FUNCTION_AS(0x8001E9DC, No100f_CutsceneCamera, "No100f_CutsceneCamera");
 REGISTER_NATIVE_FUNCTION_AS(0x8006CA9C, No100f_CutsceneRender, "No100f_CutsceneRender");
+REGISTER_NATIVE_FUNCTION_AS(0x80014A20, No100f_CutsceneShadow, "No100f_CutsceneShadow");
+REGISTER_NATIVE_FUNCTION_AS(0x800CFD14, No100f_CutsceneSceneExit, "No100f_CutsceneSceneExit");
+REGISTER_NATIVE_FUNCTION_AS(0x800CEF98, No100f_CutsceneSceneReset, "No100f_CutsceneSceneReset");
 REGISTER_NATIVE_FUNCTION_AS(0x80104724, No100f_CutsceneHeapAlloc, "No100f_CutsceneHeapAlloc");
 REGISTER_NATIVE_FUNCTION_AS(0x80104820, No100f_CutsceneHeapFree, "No100f_CutsceneHeapFree");
 
