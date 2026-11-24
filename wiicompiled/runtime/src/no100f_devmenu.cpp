@@ -1683,7 +1683,7 @@ void PollCommandFile() {
         } else if (cmd == "csn") {
             // Cutscene managers are found by the CSN they name (asset +0x10, its +8 = xStrHash of the cutscene name).
             static const char* const kNames[] = {"cin_1", "cin_2", "cin_3", "cin_4", "cin_5", "cin_6", "cin_7",
-                                                 "cin_8", "cin_9", "cin_10", "cin_sh_barrel", "cin_mm_scare",
+                                                 "cin_8", "cin_9", "cin_10", "cin_11", "cin_sh_barrel", "cin_mm_scare",
                                                  "cin_mm_post_death"};
             auto hash = [](const std::string& s) {
                 uint32_t h = 0;

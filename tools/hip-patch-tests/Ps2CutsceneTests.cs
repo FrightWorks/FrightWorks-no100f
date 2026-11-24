@@ -4,7 +4,7 @@ using FrightWorks;
 using FrightWorks.ModPatches;
 using HipPatchTests;
 
-// The launcher's PS2 cutscene copy (launcher/Ps2Cutscenes.cs) on a PS2 disc image and a GameCube disc made in code.
+// The launcher's cutscene copy (launcher/Ps2Cutscenes.cs) on PS2 and Xbox disc images and a GameCube disc made in code.
 static partial class Tests
 {
     static void Ps2CutsceneCopy()
@@ -39,6 +39,7 @@ static partial class Tests
             var r = Ps2Cutscenes.Copy(iso, gcDisc, userData);
             var copy = Path.Combine(Ps2Cutscenes.Dir(userData), "cin_1.csn");
             Check("PS2: only the cutscene whose ID and header match is copied", r.Copied == 1 && r.Problem == "", $"{r.Copied} '{r.Problem}'");
+            Check("PS2: expects the PS2 disc's 13", r.Expected == Ps2Cutscenes.ExpectedPs2, $"{r.Expected}");
             Check("PS2: the copy is byte for byte", File.Exists(copy) && File.ReadAllBytes(copy).AsSpan().SequenceEqual(cin1));
             Check("PS2: count", Ps2Cutscenes.Count(userData) == 1);
             Check("PS2: no staging folder left", !Directory.Exists(Ps2Cutscenes.Dir(userData) + ".new"));
@@ -68,6 +69,26 @@ static partial class Tests
             try { Ps2Cutscenes.Copy(cut, gcDisc, userData); }
             catch (InvalidDataException) { threw = true; }
             Check("PS2: a cut-short image fails without touching the copy", threw && File.Exists(copy) && !Directory.Exists(Ps2Cutscenes.Dir(userData) + ".new"));
+
+            // Xbox: the same level in an XDVDFS image, trimmed (partition at 0) and as a full dump (partition further in).
+            foreach (var (what, start) in new[] { ("trimmed", 0L), ("full dump", 0x18300000L) })
+            {
+                Ps2Cutscenes.Remove(userData);
+                var xbox = Path.Combine(root, $"xbox-{start:X}.iso");
+                var xboxImage = Xiso(start, ("fmv", "cin1.xmv", new byte[3000]), ("h0", "h002.HIP", other), ("h0", "h001.HIP", ps2Level));  // h001 last: the cut-short image cuts it
+                File.WriteAllBytes(xbox, xboxImage);
+                r = Ps2Cutscenes.Copy(xbox, gcDisc, userData);
+                Check($"Xbox ({what}): the matching cutscene is copied byte for byte",
+                      r.Copied == 1 && r.Problem == "" && File.Exists(copy) && File.ReadAllBytes(copy).AsSpan().SequenceEqual(cin1), $"{r.Copied} '{r.Problem}'");
+                Check($"Xbox ({what}): expects the Xbox disc's 14", r.Expected == Ps2Cutscenes.ExpectedXbox, $"{r.Expected}");
+                if (start != 0) continue;
+                var xboxCut = Path.Combine(root, "xbox-cut.iso");
+                File.WriteAllBytes(xboxCut, xboxImage[..(xboxImage.Length - 4096)]);
+                threw = false;
+                try { Ps2Cutscenes.Copy(xboxCut, gcDisc, userData); }
+                catch (InvalidDataException) { threw = true; }
+                Check("Xbox: a cut-short image fails without touching the copy", threw && File.Exists(copy) && !Directory.Exists(Ps2Cutscenes.Dir(userData) + ".new"));
+            }
 
             Ps2Cutscenes.Remove(userData);
             Check("PS2: remove", Ps2Cutscenes.Count(userData) == 0);
@@ -127,6 +148,50 @@ static partial class Tests
         return image;
     }
 
+    // An XDVDFS (Xbox) image with its game partition at start: volume descriptor at the partition's sector 32, root
+    // directory at 33, one directory per folder after it, then the files (and a decoy ISO 9660 descriptor at sector 16). Each directory is a tree whose entries all
+    // hang off the right child of the one before (a valid, if unbalanced, tree), padded with 0xFF to whole sectors.
+    static byte[] Xiso(long start, params (string Folder, string Name, byte[] Data)[] files)
+    {
+        const int S = 2048;
+        var folders = files.Select(f => f.Folder).Distinct().ToList();
+        int next = 34 + folders.Count;
+        var placed = files.Select(f => { int at = next; next += (f.Data.Length + S - 1) / S; return (f.Folder, f.Name, f.Data, At: at); }).ToList();
+        var image = new byte[start + (long)next * S];
+        byte[] Directory(IEnumerable<(string Name, int Sector, int Size, bool Dir)> entries)
+        {
+            var list = entries.ToList();
+            var d = new List<byte>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                var n = Encoding.ASCII.GetBytes(list[i].Name);
+                int length = (14 + n.Length + 3) / 4 * 4;
+                var e = Enumerable.Repeat((byte)0xFF, length).ToArray();
+                BinaryPrimitives.WriteUInt16LittleEndian(e.AsSpan(0), 0);
+                BinaryPrimitives.WriteUInt16LittleEndian(e.AsSpan(2), (ushort)(i + 1 < list.Count ? (d.Count + length) / 4 : 0));
+                BinaryPrimitives.WriteUInt32LittleEndian(e.AsSpan(4), (uint)list[i].Sector);
+                BinaryPrimitives.WriteUInt32LittleEndian(e.AsSpan(8), (uint)list[i].Size);
+                e[12] = (byte)(list[i].Dir ? 0x10 : 0x20);
+                e[13] = (byte)n.Length;
+                n.CopyTo(e, 14);
+                d.AddRange(e);
+            }
+            while (d.Count % S != 0) d.Add(0xFF);
+            return d.ToArray();
+        }
+        long At(int sector) => start + (long)sector * S;
+        image[16 * S] = 1;  // an empty ISO 9660 volume at the start of the image, as real Xbox images can have
+        "CD001"u8.CopyTo(image.AsSpan(16 * S + 1));
+        "MICROSOFT*XBOX*MEDIA"u8.CopyTo(image.AsSpan((int)At(32)));
+        BinaryPrimitives.WriteUInt32LittleEndian(image.AsSpan((int)At(32) + 20), 33);
+        BinaryPrimitives.WriteUInt32LittleEndian(image.AsSpan((int)At(32) + 24), S);
+        Directory(folders.Select((f, i) => (f, 34 + i, S, true))).CopyTo(image, At(33));
+        for (int i = 0; i < folders.Count; i++)
+            Directory(placed.Where(p => p.Folder == folders[i]).Select(p => (p.Name, p.At, p.Data.Length, false))).CopyTo(image, At(34 + i));
+        foreach (var p in placed) p.Data.CopyTo(image, At(p.At));
+        return image;
+    }
+
     // The same image as raw CD sectors (mode 2 form 1: 24 bytes of sync and headers, 2048 of data, 280 of error codes).
     static byte[] Raw2352(byte[] image)
     {
@@ -143,7 +208,8 @@ static partial class Tests
 
 static class Ps2Mode
 {
-    // --ps2 ISO DISC USERDATA: copies a real disc's cutscenes into USERDATA/ps2/cutscenes (the player's data: keep it local).
+    // --ps2 ISO DISC USERDATA: copies a real PS2 or Xbox disc's cutscenes into USERDATA/ps2/cutscenes (the player's data:
+    // keep it local).
     public static int Run(string[] args)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -152,6 +218,7 @@ static class Ps2Mode
         Console.WriteLine(r.Problem.Length > 0 ? "PROBLEM: " + r.Problem : $"copied {r.Copied} cutscenes in {sw.Elapsed.TotalSeconds:F1} s");
         foreach (var f in Directory.Exists(Ps2Cutscenes.Dir(args[3])) ? Directory.GetFiles(Ps2Cutscenes.Dir(args[3])) : Array.Empty<string>())
             Console.WriteLine($"  {Path.GetFileName(f)} {new FileInfo(f).Length / 1024} KB");
-        return r.Problem.Length == 0 && r.Copied == Ps2Cutscenes.Expected ? 0 : 1;
+        Console.WriteLine($"expected {r.Expected}");
+        return r.Problem.Length == 0 && r.Copied == r.Expected ? 0 : 1;
     }
 }

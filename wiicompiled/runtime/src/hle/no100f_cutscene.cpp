@@ -207,7 +207,7 @@ void WriteMatrix(uint32_t at, const float rows[3][3], const Vec3& pos) {
     Memory::Write32(at + 0x3C, 0);
 }
 
-// The cutscenes copied from the player's PS2 disc: <UserData>/ps2/cutscenes/*.csn, found by the asset ID in each one's
+// The cutscenes copied from the player's PS2 or Xbox disc: <UserData>/ps2/cutscenes/*.csn, found by the asset ID in each one's
 // header. Read once, on the first cutscene (the launcher doesn't change them while the game runs).
 std::filesystem::path CsnFile(uint32_t id) {
     static std::vector<std::pair<uint32_t, std::filesystem::path>> index;
@@ -360,7 +360,12 @@ bool Load(CpuContext* ctx, uint32_t manager) {
     {
         std::ifstream in(file, std::ios::binary | std::ios::ate);
         const std::streamoff size = in ? std::streamoff(in.tellg()) : 0;
-        if (size < 0x50 || size > (64 << 20)) return false;
+        // The biggest is cin_11, the ending (Xbox disc only): 83.5 MB, nearly all keyframes, kept on the host.
+        if (size < 0x50 || size > (160 << 20)) {
+            RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << std::hex << csn << std::dec << ": can't read " << host << " ("
+                                   << size << " bytes): the movie plays\n";
+            return false;
+        }
         s->data.resize(size_t(size));
         in.seekg(0);
         if (!in.read(reinterpret_cast<char*>(s->data.data()), size)) return false;

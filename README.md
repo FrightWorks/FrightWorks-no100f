@@ -35,8 +35,8 @@ PS2 or Xbox disc image to bring in features from those versions.
 - GameCube memory-card saves
 - Option to skip the intro movies; mods that replace game files or textures, or that [add things to a level](docs/mod-patches.md)
   using your own disc, so no game data is shared
-- Optional live story cutscenes from the PS2 version instead of the GameCube's movies: choose your own PS2 disc image on
-  the launcher's **Extras** page and it copies just those scenes
+- Optional live story cutscenes from the PS2 or Xbox version instead of the GameCube's movies: choose your own PS2 or Xbox
+  disc image on the launcher's **Extras** page and it copies just those scenes (the Xbox disc also has the ending)
 - The game's holiday events follow the real date, or pick a holiday, confetti fireworks or none of them on the launcher's **Extras** page
 
 ![Scooby watching confetti fireworks over Mystic Manor](docs/screenshots/confetti-fireworks.gif)
