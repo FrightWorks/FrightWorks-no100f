@@ -48,7 +48,7 @@ are left unchanged.
 ## Playing
 
 Requires Windows 10/11 (64-bit) and **Night of 100 Frights, GameCube USA v1.01 (GIHE78, revision 1)** as `.iso`,
-`.gcm` or `.ciso`.
+`.gcm` or `.ciso` ([which disc version do I have?](#which-disc-version-do-i-have)).
 
 1. From the [latest release](https://github.com/FrightWorks/FrightWorks-no100f/releases/latest), run
    `FrightWorks-win-Setup.exe` (installs for your Windows user, no admin rights; Start menu and desktop shortcuts), or
@@ -56,6 +56,25 @@ Requires Windows 10/11 (64-bit) and **Night of 100 Frights, GameCube USA v1.01 (
 2. Open **FrightWorks** and press **Play**. The first time, it asks for your disc image (**Extras**).
 
 Windows may warn that the setup is from an unknown publisher (it isn't code-signed): **More info** > **Run anyway**.
+
+### Which disc version do I have?
+
+FrightWorks needs the GameCube USA disc, version 1.01: Game ID **GIHE78**, revision **1** (Redump lists it as
+"Scooby-Doo! Night of 100 Frights (USA) (Rev 1)").
+
+- **The launcher checks it for you.** When you choose a disc image, it tells you if the file isn't a GameCube image, is a
+  different game or region (another Game ID, such as the European `GIHP78`), or is version 1.00 (revision 0).
+- **To check before you choose it:** in [Dolphin](https://dolphin-emu.org), right-click the game > **Properties** >
+  **Info** shows the **Game ID** (`GIHE78`) and **Revision** (`1`).
+- **Formats:** a plain `.iso` or `.gcm`, or a `.ciso`. Compressed `.rvz`, `.gcz` and `.wia` images, NKit images
+  (`.nkit.iso`, `.nkit.gcz`) and Wii images don't work. Dolphin turns an `.rvz` into a plain image: right-click the game
+  \> **Convert File...** > **Format: ISO**. It can't do that for NKit images: rebuild those with the NKit tool you made
+  them with.
+- **Checksum:** a plain `.iso` of the right disc is 1,459,978,240 bytes with SHA-1
+  `cf5638fd61a7862e07066fb290381bdfc77d1f37` (MD5 `6dca7f5ed6b400c8216526107e83f3cd`, CRC-32 `b29a2a47`), the same as
+  Redump's. A `.ciso` hashes differently even though it works.
+- **Other versions:** USA version 1.00, the European (PAL) release and the PS2 and Xbox versions aren't supported. The
+  other GameCube versions might be later; there are no plans for PS2 or Xbox.
 
 **Linux (beta).** The release also has `FrightWorks.AppImage` (x86_64, built to run on any Linux with glibc 2.34 or
 newer: Ubuntu 22.04 and newer, Debian 12, Fedora, Arch, SteamOS). Make it executable (`chmod +x FrightWorks.AppImage`) and run it; it asks
