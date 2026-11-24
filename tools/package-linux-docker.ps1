@@ -51,7 +51,7 @@ function Resolve-Mount([string]$name) {
 }
 $disc = Resolve-Mount 'Disc'; $pack = Resolve-Mount 'texture_pack'; $game = Resolve-Mount 'game'
 if (-not $disc -or -not (Test-Path -LiteralPath (Join-Path $disc 'DATA\sys\boot.bin'))) {
-    throw 'No extracted disc in Disc\DATA. Extract your disc first (README: Building), like the Windows build needs.'
+    throw 'No extracted disc in Disc\DATA. Extract your disc first (docs/building.md), like the Windows build needs.'
 }
 
 if (-not $Feed) { $Feed = Join-Path $root 'dist\installer-linux' }
