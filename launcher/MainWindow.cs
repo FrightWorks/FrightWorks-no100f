@@ -300,8 +300,8 @@ sealed class MainWindow : Window
     // The game picks the fullscreen monitor itself on Windows only ([video] fullscreen_display); elsewhere the row is left out.
     internal static bool MonitorChoice => OperatingSystem.IsWindows();
 
-    // Display: the screen and picture shape. Graphics: textures, anti-aliasing and the experimental effects (F10's
-    // Smoothness > Frame interpolation, Picture > Motion blur and Ink outlines, Experimental > Ambient occlusion and Bloom).
+    // Display: the screen and picture shape. Graphics: textures, anti-aliasing and the experimental effects, in the same
+    // order as F10 > Video > Experimental.
     void BuildDisplay(StackPanel display, StackPanel graphics)
     {
         var cfg = new GameConfig(configPath);
