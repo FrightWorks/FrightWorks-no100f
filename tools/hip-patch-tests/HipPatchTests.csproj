@@ -13,5 +13,6 @@
     <!-- The PS2 cutscene copy (also no window code). -->
     <Compile Include="..\..\launcher\Ps2Cutscenes.cs" Link="Ps2Cutscenes.cs" />
     <Compile Include="..\..\launcher\XboxTextures.cs" Link="XboxTextures.cs" />
+    <Compile Include="..\..\launcher\XboxAudio.cs" Link="XboxAudio.cs" />
   </ItemGroup>
 </Project>

@@ -172,4 +172,16 @@ static class XboxTexturesMode
         Console.WriteLine($"wrote {n} textures in {sw.Elapsed.TotalSeconds:F1} s");
         return n > 0 ? 0 : 1;
     }
+
+    // --xbox-audio ISO DISC USERDATA: writes a real Xbox disc's sound into USERDATA/xbox/audio (the player's data: keep it local).
+    public static int RunAudio(string[] args)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int n;
+        using (var disc = Ps2Cutscenes.OpenImage(args[1]))
+            n = XboxAudio.Copy(disc, args[2], args[3], (done, total, name) => { if (name.Length > 0) Console.Write($"\r{done}/{total} {name}    "); });
+        Console.WriteLine();
+        Console.WriteLine($"wrote {n} sounds in {sw.Elapsed.TotalSeconds:F1} s");
+        return n > 0 ? 0 : 1;
+    }
 }

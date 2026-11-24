@@ -891,6 +891,9 @@ private:
                         Hilo(pb.src.ratio_hi, pb.src.ratio_lo), pb.vol_env.cur_volume, pb.vol_env.cur_volume_delta, pb.mixer_control,
                         pb.mixer.main_left.volume, pb.mixer.main_right.volume, pb.mixer.auxA_left.volume, pb.mixer.auxA_right.volume,
                         pb.mixer.auxB_left.volume, pb.mixer.auxB_right.volume, pb.lpf.on);
+        XboxAudio::PrepareVoice(Hilo(pb.audio_addr.cur_addr_hi, pb.audio_addr.cur_addr_lo) & 0x3fffffffu,
+                                Hilo(pb.audio_addr.loop_addr_hi, pb.audio_addr.loop_addr_lo) & 0x3fffffffu,
+                                pb.is_stream == 1, pb.audio_addr.sample_format);
         AcceleratorT<AXPBGc> accel;
         accel.Setup(&pb);
         std::array<int16_t, 32> samples{};

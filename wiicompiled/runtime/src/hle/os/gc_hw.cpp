@@ -3,6 +3,7 @@
 //  - ARAM, the 16 MB audio/auxiliary RAM. The engine uses it as virtual memory (engine.ini GCVMSARAMSize) and
 //    for streamed audio. Here it is a host buffer; AR DMA and ARQ requests copy at once and queue their
 //    completion callback on the DVD drain, like the AR interrupt would.
+#include "hle/audio/xbox_audio.h"
 #include "hle_stubs.h"
 #include "memory.h"
 #include "runtime_log.h"
@@ -49,6 +50,7 @@ bool AramCopy(uint32_t type, uint32_t mainAddr, uint32_t aramAddr, uint32_t leng
     uint8_t* main = static_cast<uint8_t*>(Memory::GetPointer(mainAddr, length));
     if (type == 0) {
         std::memcpy(Aram().data() + aramAddr, main, length);
+        XboxAudio::OnAramWrite(aramAddr, length);  // the player's Xbox sound: what is in ARAM now
     } else {
         std::memcpy(main, Aram().data() + aramAddr, length);
         GxNotifyGuestRamDmaWrite(mainAddr, length);

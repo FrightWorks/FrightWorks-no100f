@@ -142,6 +142,7 @@ Test code without launching the game where that can work.
 | Patch mods (`launcher/ModPatches/`) | `tools/hip-patch-tests`, with its `--disc` and `--export` modes if level-file code changed (`docs/mod-patches.md`) + layout tests |
 | PS2/Xbox cutscene copy (`launcher/Ps2Cutscenes.cs`) | `tools/hip-patch-tests` (synthetic PS2 and Xbox disc images), and its `--ps2 ISO DISC USERDATA` mode on a real PS2 or Xbox disc image (expects 13 from PS2, 14 from Xbox; the copies are disc data, keep them local) + layout tests |
 | Xbox texture copy (`launcher/XboxTextures.cs`) | `tools/hip-patch-tests` (synthetic textures and disc image), and its `--xbox-textures ISO DISC USERDATA` mode on a real Xbox disc image (1862 from the USA disc; disc data, keep it local) |
+| Xbox sound (`launcher/XboxAudio.cs`, `hle/audio/xbox_audio.cpp`) | `tools/hip-patch-tests` (synthetic sounds and disc image), its `--xbox-audio ISO DISC USERDATA` mode on a real Xbox disc image (997 sounds, 470 MB from the USA disc; disc data, keep it local), then a game run with `XBOX_AUDIO_LOG=1`: the share of ADPCM samples swapped and how close the Xbox samples are to the ADPCM ones (about 40-50 dB; near 0 dB means misaligned) |
 | Translator | Translator tests + smoke test |
 | Game runtime or overrides | Runtime tests + smoke test; a person checks it only if behaviour changes |
 | Graphics (Aurora) | Aurora tests + smoke test + a person checks it |
@@ -373,6 +374,7 @@ To build old source there, set only the paths that differ with `git restore --so
 - Volume sliders work through a native override of MIXAdjustFader (#86, `music_attenuation.cpp`).
   Known limits: resident dialog counts as SFX, Bink audio is master only.
 - Volume categories, the AX address fix and the stuck-music cause are in the `audio-debug` skill.
+- The player's Xbox sound (`<UserData>\xbox\audio`, `launcher/XboxAudio.cs`): the same sounds as 16-bit PCM. `hle/audio/xbox_audio.cpp` recognises the GameCube ADPCM the game copies into ARAM (`AramCopy` in `gc_hw.cpp`: stream chunks by hash; resident sounds when a voice starts) and `AcceleratorT::ReadSample` returns the Xbox sample for each decoded ADPCM sample there, while the ADPCM predictor keeps running. The game's own loading, streaming and timing don't change. 32 sounds that are shorter on the Xbox (another recording) stay the GameCube's.
 - Stream voices' DVD read callback is wrapped to fix the game's end-of-track check: the wrapper clears the stale value on a stream's first chunk, then the game's callback runs (`hle/no100f_stream_read.h`, issue 14).
 - Timing-sensitive bugs: dev menu `scene` warps skip what a player does before the warp, so a clean run from them doesn't clear a bug reported from normal play. Reproduce it with the reporter's route, using timed presses rather than mashing: menus drop presses that arrive too early.
 
