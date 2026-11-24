@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cctype>
 #include <cstdint>
 #include <cmath>
@@ -251,6 +252,8 @@ struct Session {
     std::vector<Deferred> deferred;                           // this frame's see-through atomics, drawn after shadows
     bool playing = false;
     float time = 0;
+    std::chrono::steady_clock::time_point started;  // real time at Start, for the finish log
+    float maxStep = 0;                               // the longest frame step the clock took
     size_t chunkIndex = SIZE_MAX;
     std::optional<Chunk> chunk;
     std::vector<AnimationBlock> anims;
@@ -408,6 +411,7 @@ bool Load(CpuContext* ctx, uint32_t manager) {
 
 void Start(CpuContext* ctx) {
     g->playing = true;
+    g->started = std::chrono::steady_clock::now();
     g->time = 0;
     g->SetChunk(0);
     Call(ctx, func_80048BE0, {kPlayer, kPlayerControlOff});
@@ -698,7 +702,10 @@ void UpdateImpl(CpuContext* ctx) {
         Start(ctx);
         return;
     }
-    if (dt > 0.0f && dt < 1.0f) g->time += dt;
+    if (dt > 0.0f && dt < 1.0f) {
+        g->time += dt;
+        g->maxStep = std::max(g->maxStep, dt);
+    }
     while (g->chunk && g->time > g->chunk->end && g->chunkIndex + 1 < g->cs.ChunkCount()) g->SetChunk(g->chunkIndex + 1);
     UpdateEmitters(ctx, false);
     UpdateClip(ctx);
@@ -708,7 +715,9 @@ void UpdateImpl(CpuContext* ctx) {
         skip = pad && Memory::Contains(pad + 0x30, 4) && (Memory::Read32(pad + 0x30) & kSkipButtons);
     }
     if (skip || !g->chunk || g->time >= g->End()) {
-        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << (skip ? "skipped" : "finished") << " at " << g->time << " s\n";
+        const double real = std::chrono::duration<double>(std::chrono::steady_clock::now() - g->started).count();
+        RT_LOG(RT_TAG_RUNTIME) << "[cutscene] " << (skip ? "skipped" : "finished") << " at " << g->time << " s ("
+                               << real << " s real, longest step " << g->maxStep << " s)\n";
         UpdateEmitters(ctx, true);
         Release(ctx, true);
         func_80045F08(ctx);  // the "play" handler left the end flag set: the game's update ends the cutscene
