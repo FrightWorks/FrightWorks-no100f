@@ -10,10 +10,12 @@ using FrightWorks.ModPatches;
 //   --export DIR WORK               adds generated assets to every level; writes the hashes and the assets for reference.py
 //   --recipe MOD --disc DIR --expect SHA [--level NAME]   builds one mod and compares the result
 //   --ps2 ISO DISC USERDATA        copies a PS2 or Xbox disc's cutscenes (launcher/Ps2Cutscenes.cs) into USERDATA/ps2/cutscenes
+//   --xbox-textures ISO DISC USERDATA  writes an Xbox disc's textures (launcher/XboxTextures.cs) into USERDATA/xbox/textures
 return args.Length > 0 && args[0] == "--export" ? DiscModes.Export(args[1], args[2])
      : args.Contains("--recipe") ? DiscModes.Recipe(args)
      : args.Length > 0 && args[0] == "--disc" ? DiscModes.RoundTrip(args[1])
      : args.Length > 3 && args[0] == "--ps2" ? Ps2Mode.Run(args)
+     : args.Length > 3 && args[0] == "--xbox-textures" ? XboxTexturesMode.Run(args)
      : Tests.RunAll();
 
 static partial class Tests
@@ -38,6 +40,7 @@ static partial class Tests
         Output();
         Zips();
         Ps2CutsceneCopy();
+        XboxTextureCopy();
         Console.WriteLine($"{passed} passed, {failed} failed");
         return failed == 0 ? 0 : 1;
     }

@@ -929,6 +929,9 @@ AuroraInfo initialize(int argc, char* argv[], const AuroraConfig& config) {
   } else {
     g_config.resourcesPath = strdup(g_config.resourcesPath);
   }
+  if (g_config.extraTexturePath != nullptr) {
+    g_config.extraTexturePath = strdup(g_config.extraTexturePath);
+  }
   if (g_config.pipelineCachePath == nullptr) {
     g_config.pipelineCachePath = g_config.cachePath;
   } else {
