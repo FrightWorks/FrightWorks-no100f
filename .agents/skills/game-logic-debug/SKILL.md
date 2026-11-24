@@ -56,7 +56,7 @@ powershell -ExecutionPolicy Bypass -File tools\debug\manual-session.ps1 stop   #
 
 ## Dev menu (`no100f_devmenu.cpp`; `tools/debug/patches/devmenu.patch` for older branches)
 
-Built into the game, active with `[game] dev_tools = true` (launcher Extras > Developer tools) or `NO100F_DEV_TOOLS=1`
+Built into the game, active with `[game] dev_tools = true` (launcher Extras > Game > Developer tools) or `NO100F_DEV_TOOLS=1`
 (set by the kit's scripts). Run: `powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1` builds and
 starts the game with it on; on a branch from before it was built in, it applies the patch and takes it out of the
 source when the game closes (`-SkipTranslate` only if the last build was this branch;

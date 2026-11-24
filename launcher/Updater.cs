@@ -8,7 +8,7 @@ namespace FrightWorks;
 // New versions. The installed game (Velopack, from the installer) updates itself from the project's GitHub Releases:
 // the launcher asks at start (MainForm), downloads the full or delta package and restarts into the new version. The
 // zip can't update itself: it only says a newer release is out and opens its page. A dev tree never checks.
-// Config.toml [launcher]: check_updates = false turns the check at start off (Extras > Updates); skip_update = "<ver>"
+// Config.toml [launcher]: check_updates = false turns the check at start off (Extras > About); skip_update = "<ver>"
 // is the version the player chose to skip. FRIGHTWORKS_UPDATE_SOURCE (a folder or URL holding a vpk pack output)
 // replaces GitHub for testing an update (docs/testing.md).
 sealed class Updater
