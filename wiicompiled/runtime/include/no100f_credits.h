@@ -9,7 +9,7 @@ namespace no100f_credits {
 inline constexpr const char* kAuthor = "Loneranger419";
 // Everyone who helped, in the order they joined: add new names at the end. The credits pill lists each one on its own
 // line, under the first.
-inline constexpr const char* kHelpers[] = {"BitsofBitsofBits"};
+inline constexpr const char* kHelpers[] = {"BitsofBitsofBits", "Junkaholic55"};
 
 // "BitsofBitsofBits", "A and B", "A, B and C".
 inline std::string HelperList() {
@@ -22,7 +22,7 @@ inline std::string HelperList() {
     return text;
 }
 
-// "Made by Loneranger419 with the help of BitsofBitsofBits"
+// "Made by Loneranger419 with the help of BitsofBitsofBits and Junkaholic55"
 inline std::string Line() { return std::string("Made by ") + kAuthor + " with the help of " + HelperList(); }
 
 } // namespace no100f_credits
