@@ -127,8 +127,8 @@ Set `DOTNET_CLI_TELEMETRY_OPTOUT=1` when running `dotnet` by hand (PowerShell: `
 Pin a version and hash where the source allows it, and say so in the PR.
 A new download that runs an installer or changes security settings needs the maintainer's OK.
 
-**Credits:** in game "Made by Loneranger419 with the help of BitsofBitsofBits" (`no100f_credits.h`; later helpers are appended to `kHelpers`).
-JosiahG in the README, launcher Extras > About and `tools/package-README.txt`.
+**Credits:** in game "Made by Loneranger419 with the help of BitsofBitsofBits and Junkaholic55" (`no100f_credits.h`; later helpers are appended to `kHelpers`).
+The helpers and JosiahG are also in the README, launcher Extras > About and `tools/package-README.txt`: a new helper goes in all four.
 ScoobyHD by dogerki in the README.
 
 ## Testing

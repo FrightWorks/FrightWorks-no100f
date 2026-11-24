@@ -81,6 +81,8 @@ version, developer tools.
 
 - FrightWorks: Loneranger419
 - Fright Wrangler, Master of Mysteries, and Scooby Snack Technician - [BitsofBitsofBits](https://github.com/BitsofBitsofBitsofBits)
+- Linux port, the launcher for Windows and Linux, motion blur, ambient occlusion, ink outlines and bloom -
+  [Junkaholic55](https://github.com/Junkaholic55)
 - Original port, [Scooby-Doo: Refrightened](https://github.com/josiahg2502-glitch/Scooby-Doo-Refrightened): JosiahG
 - [WiiCompiled](https://github.com/patchzyy/Wiicompiled) by patchzyy and contributors (GPLv3); Aurora by Luke Street
   (MIT); other components in [`wiicompiled/THIRD-PARTY-NOTICES.md`](wiicompiled/THIRD-PARTY-NOTICES.md)

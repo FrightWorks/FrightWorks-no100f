@@ -729,7 +729,7 @@ sealed class MainWindow : Window
 
         body.Children.Add(Title("About"));
         var version = typeof(MainWindow).Assembly.GetName().Version;
-        body.Children.Add(Note("FrightWorks " + (version == null ? "" : "v" + version.ToString(3) + " ") + "by Loneranger419, based on Scooby-Doo: Refrightened by JosiahG. Built on WiiCompiled (GPLv3) " +
+        body.Children.Add(Note("FrightWorks " + (version == null ? "" : "v" + version.ToString(3) + " ") + "by Loneranger419 with the help of BitsofBitsofBits and Junkaholic55, based on Scooby-Doo: Refrightened by JosiahG. Built on WiiCompiled (GPLv3) " +
                                "and Aurora (MIT). HD texture pack by dogerki. Button prompts by Kenney (CC0). Lettering in " +
                                "Luckiest Guy by Astigmatic and in-game menu text in Roboto by Christian Robertson (both Apache 2.0)" +
                                "; the launcher bundles Inter by Rasmus Andersson (SIL Open Font License), which it uses for text on Linux. " +
