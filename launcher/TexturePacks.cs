@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 
 namespace FrightWorks;
 
-// Optional HD texture packs (Extras > HD texture packs). They hold pictures made from the game's own textures, so no
+// Optional HD texture packs (Extras > Textures). They hold pictures made from the game's own textures, so no
 // build ships one and players opt in to each (maintainer, 2026-11-24): the launcher downloads a pack only when the
 // player chooses it, checks it against the checksum below and unpacks it into UserData/texture_packs/<Folder>. The game
 // indexes those folders after the player's own texture_replacements and the mods, the lower folder name first (it

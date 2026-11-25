@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Downloads dogerki's HD texture pack into texture_pack/ScoobyHD (git-ignored) for the debug kit: play-patched.ps1
 -HdTextures, manual-session.ps1 -HdTextures, look.ps1, hunt.ps1, spots-run.ps1, loop-capture.ps1, smoke-test.py and
-the texhunt tools link or read it from there. Players get it from the launcher instead (Extras > HD texture packs,
+the texhunt tools link or read it from there. Players get it from the launcher instead (Extras > Textures,
 launcher/TexturePacks.cs); no build ships it since 2026-11-24.
 
     python tools/debug/get-hd-pack.py            (nothing to do when texture_pack/ScoobyHD is there)
