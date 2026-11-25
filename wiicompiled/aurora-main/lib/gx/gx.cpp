@@ -2379,6 +2379,8 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   // The light file's unlit textures (the sky band, painted backdrops) get a variant without it (command_processor.cpp).
   config.shaderConfig.relight = (relightFlat || gfx::scene_stage::relighting()) &&
                                 g_gxState.projType == GX_PERSPECTIVE && g_gxState.depthUpdate;
+  config.shaderConfig.deblue =
+      config.shaderConfig.relight && gfx::scene_stage::relighting() ? gfx::scene_stage::relight_deblue() : 0;
 }
 
 // Cut-outs: materials like leaves, grass and webs are drawn with alpha compare "alpha > 0" (or another low ref),

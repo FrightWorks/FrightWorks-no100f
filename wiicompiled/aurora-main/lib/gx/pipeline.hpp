@@ -27,7 +27,7 @@ struct DrawData {
   bool clearQuad = false;
 };
 
-constexpr uint32_t GXPipelineConfigVersion = 21;  // 21: ShaderConfig.relight (relighting experiment)
+constexpr uint32_t GXPipelineConfigVersion = 22;  // 21: ShaderConfig.relight (relighting experiment); 22: deblue
 
 constexpr GXFogType effective_pipeline_fog_type(GXFogType fogType, GXZTexOp zTextureOp,
                                                 bool zCompLocBeforeTex, GXBlendMode blendMode,

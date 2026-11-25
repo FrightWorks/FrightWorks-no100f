@@ -584,7 +584,8 @@ struct ShaderConfig {
   u8 motionRole : 2 = 0;    // how the draw writes the HUD mark (MotionRole), with motionVectors
   u8 numTexGens = 0;
   u8 relight = 0; // relighting experiment: a solid perspective draw, drawn without its baked vertex colours
-  u8 _relightPad[3]{};
+  u8 deblue = 0;  // Reimagined: how much blue its textures lose (0-255, the light file's "deblue"), relit draws only
+  u8 _relightPad[2]{};
   u32 zTexture = 0; // bias[0:23], format[24:25], op[26:27]; 0 disables shader depth output.
   std::array<AttrConfig, MaxVtxAttr> attrs;
   std::array<TevSwap, MaxTevSwap> tevSwapTable;

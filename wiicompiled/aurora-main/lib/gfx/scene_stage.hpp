@@ -80,6 +80,8 @@ bool is_unlit_texture(const std::string& key) noexcept;
 bool is_hidden_texture(const std::string& key) noexcept;
 // The file's opaque textures ("opaque KEY"): drawn without blending, so the game can't fade them.
 bool is_opaque_texture(const std::string& key) noexcept;
+// The file's "deblue" (0-255) for the relit draws' shader (ShaderConfig.deblue).
+uint8_t relight_deblue() noexcept;
 
 // Moon shadows: the solid scene is drawn a second time from the moon into a depth map, before the stage. Each solid
 // draw gets a copy of its uniforms (shader_info.cpp build_uniform), whose projection is replaced, once the frame's

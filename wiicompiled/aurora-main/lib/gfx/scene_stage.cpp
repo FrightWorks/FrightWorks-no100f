@@ -71,6 +71,7 @@ Camera g_camera;
 //   unlit KEY                    (a texture drawn as the game draws it: the sky band, painted backdrops)
 //   hide KEY                     (a texture not drawn at all: the game's painted shadow decals)
 //   opaque KEY                   (a texture drawn solid, never blended: trees the game fades near the camera)
+//   deblue S                     (0..1: how much blue the original textures lose under the new light)
 //   move ID X Y Z [YAW]          (read by the runtime: an entity moved there, no100f_devmenu.cpp)
 //   sky ZR ZG ZB HR HG HB        (a night sky behind everything: zenith and horizon colours; hide the game's band)
 //   moondisc RADIUS_DEG R G B    (the moon drawn in the sky at the moon's direction; radius 0 = none)
@@ -91,6 +92,7 @@ struct RelightScene {
   float moonColor[3] = {0.5f, 0.55f, 0.7f};
   float radiusScale = 1.f;
   float pointIntensity = 1.f;
+  float deblue = 0.f;  // "deblue S": 0..1, how much of the original textures' blue (positive Cb) goes
   float fadeNear = 1e6f, fadeFar = 2e6f;
   float shadowRadius = 40.f;
   uint32_t shadowSize = 2048;
@@ -156,6 +158,8 @@ RelightScene load_relight_scene() {
         }
       } else if (w == "light" && n >= 8 && s.lights.size() < kMaxRelightLights) {
         s.lights.push_back({{v[0], v[1], v[2]}, v[3], {v[4], v[5], v[6]}});
+      } else if (w == "deblue" && n >= 2) {
+        s.deblue = std::clamp(v[0], 0.f, 1.f);
       } else if (w == "scale" && n >= 3) {
         s.radiusScale = v[0];
         s.pointIntensity = v[1];
@@ -940,6 +944,10 @@ wgpu::TextureView g_skyNoMoonView;
 bool is_hidden_texture(const std::string& key) noexcept {
   const auto& hidden = relight_scene().hidden;
   return !key.empty() && hidden.contains(key);
+}
+
+uint8_t relight_deblue() noexcept {
+  return static_cast<uint8_t>(std::lround(relight_scene().deblue * 255.f));
 }
 
 bool is_opaque_texture(const std::string& key) noexcept {

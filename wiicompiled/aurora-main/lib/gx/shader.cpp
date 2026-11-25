@@ -1859,6 +1859,20 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept {
         "    out.depth = fragDepth;\n"
         "    return out;";
   }
+  // Reimagined (ShaderConfig.deblue): the original textures lose some of their blue before the new light multiplies
+  // them: the positive blue difference (Cb) is scaled down, brightness (Y) and the red difference (Cr) are kept.
+  if (config.relight != 0 && config.deblue != 0) {
+    fragmentReturn = fmt::format("    {{\n"
+                                 "        let dbY = dot(prev.rgb, vec3f(0.299, 0.587, 0.114));\n"
+                                 "        let dbCb = (prev.b - dbY) * 0.564;\n"
+                                 "        let dbCr = (prev.r - dbY) * 0.713;\n"
+                                 "        let dbCb2 = select(dbCb, dbCb * {:.4f}, dbCb > 0.0);\n"
+                                 "        prev = vec4f(clamp(vec3f(dbY + 1.403 * dbCr, dbY - 0.344 * dbCb2 - 0.714 * dbCr,\n"
+                                 "                                 dbY + 1.773 * dbCb2), vec3f(0.0), vec3f(1.0)), prev.a);\n"
+                                 "    }}\n",
+                                 1.0f - config.deblue / 255.0f) +
+                     fragmentReturn;
+  }
 
   auto shaderSource = fmt::format(R"""(
 fn bswap32(v: u32, le: bool) -> u32 {{
