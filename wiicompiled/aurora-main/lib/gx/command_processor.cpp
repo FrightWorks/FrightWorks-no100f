@@ -3525,6 +3525,12 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   }
   // The game queues alpha-tested grass after particles. Finish that solid geometry and its
   // fringes before blending clouds over it; retain submission order within the translucent tail.
+  // Relighting experiment: a relit late blended surface (the cypresses the game fades near the camera, drawn after
+  // the see-through tail starts) is drawn before the stage too, so it is lit and casts moon shadows. Its depth can then
+  // hide see-through draws behind it (what keeps it in the tail otherwise; i004's faded walls).
+  if (lateBlendedSurface && info.relight && gfx::scene_stage::relighting() && particleDepths.empty()) {
+    surfaceLayer = true;
+  }
   if (surfaceLayer) {
     gfx::push_deferred_draw_command(draw, gfx::DeferredDrawKind::SurfaceLayer);
   } else if (translucentWorld) {
