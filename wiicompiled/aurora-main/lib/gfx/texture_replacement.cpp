@@ -212,15 +212,12 @@ uint32_t texture_base_level_size(const GXTexObj_& obj) noexcept {
   }
 }
 
-std::optional<uint64_t> compute_referenced_tlut_hash(const GXTexObj_& obj) noexcept {
-  if (!is_palette_format(obj.format()) || obj.tlut >= s_loadedTluts.size()) {
-    return std::nullopt;
-  }
-
-  const auto& tlut = s_loadedTluts[obj.tlut];
+// Dolphin's palette hash for a CI texture: XXH64 of the palette entries from the lowest to the highest index the base
+// level uses. `palette` is the raw guest palette (2 bytes per entry), `paletteBytes` its size.
+std::optional<uint64_t> referenced_tlut_hash(const GXTexObj_& obj, const uint8_t* palette, size_t paletteBytes) noexcept {
   const uint32_t textureSize = texture_base_level_size(obj);
   const auto* textureData = static_cast<const uint8_t*>(obj.data);
-  if (!tlut.valid || textureData == nullptr || textureSize == 0) {
+  if (palette == nullptr || textureData == nullptr || textureSize == 0) {
     return std::nullopt;
   }
 
@@ -255,12 +252,37 @@ std::optional<uint64_t> compute_referenced_tlut_hash(const GXTexObj_& obj) noexc
     return std::nullopt;
   }
 
-  size_t tlutSize = 2 * (static_cast<size_t>(maxIndex) + 1 - minIndex);
-  const size_t tlutOffset = 2 * static_cast<size_t>(minIndex);
-  if (tlutOffset + tlutSize > tlut.data.size()) {
+  if (minIndex > maxIndex) {
     return std::nullopt;
   }
-  return XXH64(tlut.data.data() + tlutOffset, tlutSize, 0);
+  const size_t tlutSize = 2 * (static_cast<size_t>(maxIndex) + 1 - minIndex);
+  const size_t tlutOffset = 2 * static_cast<size_t>(minIndex);
+  if (tlutOffset + tlutSize > paletteBytes) {
+    return std::nullopt;
+  }
+  return XXH64(palette + tlutOffset, tlutSize, 0);
+}
+
+// From the mirror of the palette loaded into the texture's TLUT slot (register_tlut/load_tlut).
+std::optional<uint64_t> compute_referenced_tlut_hash(const GXTexObj_& obj) noexcept {
+  if (!is_palette_format(obj.format()) || obj.tlut >= s_loadedTluts.size()) {
+    return std::nullopt;
+  }
+  const auto& tlut = s_loadedTluts[obj.tlut];
+  if (!tlut.valid) {
+    return std::nullopt;
+  }
+  return referenced_tlut_hash(obj, tlut.data.data(), tlut.data.size());
+}
+
+// From the palette the texture is drawn with (resolve_static_palette_texture's GXTlutObj_). Used for the sharp font,
+// and for any palette texture whose mirror slot holds nothing: load_tlut empties a slot when the GXTlutObj it loads has
+// no registration left (already consumed by an earlier load into a slot that has since been overwritten).
+std::optional<uint64_t> drawn_tlut_hash(const GXTexObj_& obj, const GXTlutObj_& tlut) noexcept {
+  if (!is_palette_format(obj.format())) {
+    return std::nullopt;
+  }
+  return referenced_tlut_hash(obj, static_cast<const uint8_t*>(tlut.data), static_cast<size_t>(tlut.numEntries) * 2);
 }
 
 const TlutMetadata* get_loaded_tlut(const GXTexObj_& obj) noexcept {
@@ -278,7 +300,9 @@ bool ensure_directory(const std::filesystem::path& dir) noexcept {
   return !ec;
 }
 
-RuntimeTextureKey build_runtime_key(const GXTexObj_& obj) noexcept {
+// nullopt for a palette texture whose palette hash can't be found (no mirror and no drawn palette): no name with a
+// made-up palette hash gets looked up, dumped or logged. `drawn`: the palette the texture is drawn with, if known.
+std::optional<RuntimeTextureKey> build_runtime_key(const GXTexObj_& obj, const GXTlutObj_* drawn = nullptr) noexcept {
   RuntimeTextureKey key{
       .width = obj.width(),
       .height = obj.height(),
@@ -291,7 +315,14 @@ RuntimeTextureKey build_runtime_key(const GXTexObj_& obj) noexcept {
     key.textureHash = XXH64(obj.data, textureSize, 0);
   }
   if (key.hasTlut) {
-    key.tlutHash = compute_referenced_tlut_hash(obj).value_or(0);
+    auto tlutHash = compute_referenced_tlut_hash(obj);
+    if (!tlutHash.has_value() && drawn != nullptr) {
+      tlutHash = drawn_tlut_hash(obj, *drawn);
+    }
+    if (!tlutHash.has_value()) {
+      return std::nullopt;
+    }
+    key.tlutHash = *tlutHash;
   }
   return key;
 }
@@ -814,26 +845,6 @@ gfx::TextureHandle load_replacement_texture(const RuntimeTextureKey& key, const 
   return upload_replacement(key, load_replacement(entry));
 }
 
-// Sharp font: XXH64 of the palette entries the sheet's indices use, from the palette it is drawn with (the same hash
-// compute_referenced_tlut_hash takes from the mirrors, which only exist while texture replacement is on).
-std::optional<uint64_t> drawn_tlut_hash(const GXTexObj_& obj, const GXTlutObj_& tlut) noexcept {
-  const uint32_t textureSize = texture_base_level_size(obj);
-  const auto* textureData = static_cast<const uint8_t*>(obj.data);
-  if (obj.format() != GX_TF_C4 || textureData == nullptr || textureSize == 0 || tlut.data == nullptr) {
-    return std::nullopt;
-  }
-  uint32_t minIndex = 15;
-  uint32_t maxIndex = 0;
-  for (uint32_t i = 0; i < textureSize; ++i) {
-    minIndex = std::min({minIndex, textureData[i] & 0xfu, static_cast<uint32_t>(textureData[i] >> 4)});
-    maxIndex = std::max({maxIndex, textureData[i] & 0xfu, static_cast<uint32_t>(textureData[i] >> 4)});
-  }
-  if (minIndex > maxIndex || maxIndex >= tlut.numEntries) {
-    return std::nullopt;
-  }
-  return XXH64(static_cast<const uint8_t*>(tlut.data) + 2 * minIndex, 2 * (maxIndex + 1 - minIndex), 0);
-}
-
 std::optional<ConvertedTexture> sharpen_font_sheet(const GXTexObj_& obj, const GXTlutObj_& tlut) noexcept {
   const auto sheet = convert_texture_palette(obj.format(), obj.width(), obj.height(), 1,
                                              {static_cast<const uint8_t*>(obj.data), texture_base_level_size(obj)},
@@ -913,20 +924,24 @@ void cache_replacement(const RuntimeTextureKey& key, const gfx::TextureHandle& h
   evict_replacement_cache_if_needed();
 }
 
-bool dump_editable_texture_dds(const RuntimeTextureKey& key, const GXTexObj_& obj) noexcept {
+bool dump_editable_texture_dds(const RuntimeTextureKey& key, const GXTexObj_& obj, const GXTlutObj_* drawn) noexcept {
   const ArrayRef<uint8_t> texData{static_cast<const uint8_t*>(obj.data), UINT32_MAX};
   const uint32_t texWidth = obj.width();
   const uint32_t texHeight = obj.height();
 
   ConvertedTexture pixels;
   if (is_palette_format(obj.format())) {
-    const TlutMetadata* tlut = get_loaded_tlut(obj);
-    if (tlut == nullptr) {
+    // The same palette build_runtime_key hashed: the mirror if it has one, else the drawn palette.
+    if (const TlutMetadata* tlut = get_loaded_tlut(obj); tlut != nullptr) {
+      pixels =
+          convert_texture_palette(obj.format(), texWidth, texHeight, 1, texData, static_cast<GXTlutFmt>(tlut->format),
+                                  tlut->entries, {tlut->data.data(), tlut->data.size()});
+    } else if (drawn != nullptr && drawn->data != nullptr) {
+      pixels = convert_texture_palette(obj.format(), texWidth, texHeight, 1, texData, drawn->format, drawn->numEntries,
+                                       {static_cast<const uint8_t*>(drawn->data), size_t{drawn->numEntries} * 2});
+    } else {
       return false;
     }
-    pixels =
-        convert_texture_palette(obj.format(), texWidth, texHeight, 1, texData, static_cast<GXTlutFmt>(tlut->format),
-                                tlut->entries, {tlut->data.data(), tlut->data.size()});
   } else {
     pixels = convert_texture(obj.format(), texWidth, texHeight, 1, texData);
   }
@@ -941,13 +956,13 @@ bool dump_editable_texture_dds(const RuntimeTextureKey& key, const GXTexObj_& ob
   return dds::write_rgba8_dds(path, texWidth, texHeight, pixels.data);
 }
 
-bool report_missing_key(const RuntimeTextureKey& key, const GXTexObj_& obj) noexcept {
+bool report_missing_key(const RuntimeTextureKey& key, const GXTexObj_& obj, const GXTlutObj_* drawn) noexcept {
   if (!s_reportedMisses.insert(key).second) {
     return false;
   }
 
   if (g_config.allowTextureDumps) {
-    dump_editable_texture_dds(key, obj);
+    dump_editable_texture_dds(key, obj, drawn);
   }
   return true;
 }
@@ -1155,7 +1170,11 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
     return std::nullopt;
   }
 
-  RuntimeTextureKey key = build_runtime_key(obj);
+  const auto builtKey = build_runtime_key(obj, tlut);
+  if (!builtKey.has_value()) {
+    return std::nullopt;
+  }
+  RuntimeTextureKey key = *builtKey;
   const auto* path = find_replacement_path(key);
   // Sharp font: one of the game's font sheets, unless the player's own texture folder or a mod replaces it (the
   // downloaded HD packs and the extra folder don't win: the pack's font is an AI upscale with lumpy edges).
@@ -1171,7 +1190,7 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
   const bool icon = !sharp && path == nullptr && iconCandidate &&
                     sharp_font::is_flat_icon(obj.width(), obj.height(), obj.format(), key.textureHash);
   if (path == nullptr && !sharp && !icon) {
-    if (g_config.allowTextureReplacements) report_missing_key(key, obj);
+    if (g_config.allowTextureReplacements) report_missing_key(key, obj, tlut);
     return std::nullopt;
   }
   // Only a replacement file counts as drawn. The sharp font and icons share the pack's names (and the font wins over
@@ -1249,9 +1268,13 @@ bool take_button_icon_style_change() noexcept {
   return true;
 }
 
-std::string build_texture_replacement_name(const GXTexObj_& obj) noexcept {
-  const RuntimeTextureKey key = build_runtime_key(obj);
-  return format_replacement_filename(key);
+std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj_* tlut) noexcept {
+  if (const auto key = build_runtime_key(obj, tlut); key.has_value()) {
+    return format_replacement_filename(*key);
+  }
+  // Palette hash unknown: say so rather than name a file no pack can have.
+  return fmt::format("tex1_{}x{}_{:016x}_unknown_{}.dds", obj.width(), obj.height(),
+                     obj.data != nullptr ? XXH64(obj.data, texture_base_level_size(obj), 0) : 0, obj.format());
 }
 
 } // namespace aurora::gfx::texture_replacement
