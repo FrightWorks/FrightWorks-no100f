@@ -952,7 +952,8 @@ bool report_missing_key(const RuntimeTextureKey& key, const GXTexObj_& obj) noex
   return true;
 }
 
-// Dev menu (F8): names of the replacements the game has drawn since start, for the dev menu's Textures tab.
+// Dev menu (F8): names of the replacement files the game has drawn since start, for the dev menu's Textures tab (not
+// the sharp font or icons, which are drawn in place of a file).
 // find_replacement runs once per texture upload (the GX texture caches keep the handle), so this stays cheap.
 absl::flat_hash_set<RuntimeTextureKey> s_usedKeys;
 absl::flat_hash_set<std::string> s_usedNames;
@@ -1173,7 +1174,9 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
     if (g_config.allowTextureReplacements) report_missing_key(key, obj);
     return std::nullopt;
   }
-  note_used_replacement(key);
+  // Only a replacement file counts as drawn. The sharp font and icons share the pack's names (and the font wins over
+  // the pack's file), so noting them made pack textures look drawn with HD textures off (smoke test i004).
+  if (!sharp && !icon) note_used_replacement(key);
   if (is_highlighted(key)) {
     return highlight_texture();
   }
