@@ -12,7 +12,8 @@ struct CpuContext;
 namespace no100f_devmenu {
 // [game] dev_tools, read once.
 bool Enabled() noexcept;
-void HandleSdlEvent(const SDL_Event& event) noexcept;
+// settingsOpen: F10 is open (LB is its page switch there, so it doesn't toggle the menu).
+void HandleSdlEvent(const SDL_Event& event, bool settingsOpen) noexcept;
 // Called from settings_overlay::Draw (game thread, once per GXCopyDisp, inside the ImGui frame).
 void Draw() noexcept;
 bool IsOpen() noexcept;

@@ -305,13 +305,15 @@ void aurora_set_button_icons(int family, const char* const buttons[4]);
 size_t aurora_get_button_icon_folder(char* out, size_t size);
 // Dev menu (F8): keep a list of every texture drawn since the last reset (off by default).
 void aurora_texture_track_drawn(bool on);
-// Dev menu (F8): one texture of that list. name: its pack file name without the extension; pack: drawn from a
-// replacement file (texture pack, mod or the player's folder); file_width/file_height: the size drawn in its place (0 =
-// the game's own); versions: how often the game rewrote it in place (name = the newest).
+// Dev menu (F8): one texture of that list. name: its pack file name without the extension; pack: drawn from an HD file
+// (texture pack, mod or the player's texture_replacements); xbox: drawn from the player's Xbox textures;
+// file_width/file_height: the size drawn in its place (0 = the game's own); versions: how often the game rewrote it in
+// place (name = the newest).
 typedef struct AuroraDrawnTexture {
   char name[96];
   uint32_t width, height, format, versions, file_width, file_height;
   bool pack;
+  bool xbox;
 } AuroraDrawnTexture;
 // Copies up to `capacity` entries of the list to `out` and returns how many there are; the generation changes whenever
 // the list does.

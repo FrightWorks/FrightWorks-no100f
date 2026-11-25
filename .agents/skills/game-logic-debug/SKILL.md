@@ -142,8 +142,9 @@ For dev tools on, `manual-session start` passes the variable to the game. A real
 Textures tab (for HD pack audits): every static texture drawn since the level was entered, from aurora's drawn list
 (`aurora_texture_track_drawn` / `aurora_texture_drawn`, filled in gx.cpp `note_debug_key` on every texture resolve; the
 menu clears it on a scene change, which drops the GX texture caches so everything on screen is noted again). Each row is
-a texture pack name, its size and **HD** when it was drawn from a replacement file (the sharp font and icons don't
-count, though they share the pack's names). A texture rewritten in place (same guest address, size and format, new
+a texture pack name, its size, **HD** when it was drawn from an HD file (pack, mod or `texture_replacements`) and
+**Xbox** when it came from the extra folder (the player's Xbox textures; `ReplacementIndexEntry::xbox`). The sharp font,
+icons and button prompts get no marker, though they share the pack's names; `textures` counts HD files only. A texture rewritten in place (same guest address, size and format, new
 contents) keeps one row with a version count. Find (click a row, or `find <name>`) draws that texture solid magenta,
 with or without a pack file and with HD textures off too, and writes each distinct GX state it is drawn with to
 `Play\devmenu_drawstate.txt`. `textures` logs `pack textures drawn in this level (N of M): <names>`.
