@@ -2671,6 +2671,45 @@ static bool gx_draw_ndc_extent(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtx
   return x0 <= x1;
 }
 
+// Lighting probe (investigation): the draw's positions as sent (model space; world space for the game's world-space
+// draws), min/max/mean, for log_lighting_probe. Only on the probe's sampled frames.
+static void probe_note_vertices(GXVtxFmt fmt, const u8* verts, u32 count, u32 vtxSize, bool be) {
+  auto& pv = g_probeVerts;
+  pv.valid = false;
+  if (!lighting_probe_sampling()) return;
+  const auto& pf = g_gxState.vtxFmts[fmt].attrs[GX_VA_POS];
+  const GXAttrType pd = g_gxState.vtxDesc[GX_VA_POS];
+  if (!verts || vtxSize == 0 || pd == GX_NONE) return;
+  const u32 compSize = (pf.type == GX_F32) ? 4u : (pf.type >= GX_U16 ? 2u : 1u);
+  const u32 comps = pf.cnt == GX_POS_XY ? 2u : 3u;
+  const u32 pre = matrix_index_prefix_size(fmt);
+  const auto& arr = g_gxState.arrays[GX_VA_POS];
+  for (int c = 0; c < 3; ++c) {
+    pv.min[c] = 1e30f;
+    pv.max[c] = -1e30f;
+    pv.sum[c] = 0.f;
+  }
+  pv.n = 0;
+  for (u32 i = 0; i < count; ++i) {
+    const u8* pp = verts + i * vtxSize + pre;
+    if (pd == GX_INDEX8 || pd == GX_INDEX16) {
+      const u32 idx = pd == GX_INDEX8 ? pp[0] : (be ? u32((pp[0] << 8) | pp[1]) : u32(pp[0] | (pp[1] << 8)));
+      if (!arr.data || u64(idx) * arr.stride + comps * compSize > arr.size) continue;
+      pp = static_cast<const u8*>(arr.data) + idx * arr.stride;
+    }
+    const bool cbe = (pd == GX_DIRECT) ? be : !arr.le;
+    float pos[3] = {0.f, 0.f, 0.f};
+    for (u32 c = 0; c < comps; ++c) pos[c] = gx_bbox_comp(pp + c * compSize, pf.type, pf.frac, cbe);
+    for (int c = 0; c < 3; ++c) {
+      pv.min[c] = std::min(pv.min[c], pos[c]);
+      pv.max[c] = std::max(pv.max[c], pos[c]);
+      pv.sum[c] += pos[c];
+    }
+    ++pv.n;
+  }
+  pv.valid = pv.n > 0;
+}
+
 // GX coplanar ("zfreeze"): the depth plane of the last triangle of a draw made with zfreeze off, in the game's NDC
 // with x scaled into the widened projection the GPU uses. Frozen draws take their depth from it (shader.cpp).
 static bool gx_vertex_ndc(GXVtxFmt fmt, const u8* v, bool be, float out[3]) {
@@ -2942,6 +2981,7 @@ bool submit_raw_draw(GXPrimitive prim, GXVtxFmt fmt, const uint8_t* vertices, ui
       throw gfx::StagingCapacityError("Raw draw does not fit after capacity submission");
   }
   const gfx::Range vertRange = gfx::push_verts(vertices, vertexBytes);
+  probe_note_vertices(fmt, vertices, vtxCount, vtxSize, true);
   const bool interpolationIdentityActive = frame_interpolation_identity_needed();
   const PnMtxUsage matrixUsage = interpolationIdentityActive
                                      ? pn_mtx_usage(vertices, vtxCount, vtxSize)
@@ -3141,6 +3181,7 @@ static bool handle_draw(u8 cmd, const u8* data, u32& pos, u32 size, bool bigEndi
   }
   if (!admit_draw(prim, fmt, vtxCount, totalVtxBytes, mergeTarget != nullptr)) throw gfx::StagingBatchFull{};
   const uint8_t* vertices = data + pos;
+  probe_note_vertices(fmt, vertices, vtxCount, vtxSize, bigEndian);
   gfx::Range vertRange = gfx::push_verts(vertices, totalVtxBytes);
   pos += totalVtxBytes;
   if (auto* lastDraw = mergeTarget) {

@@ -1309,12 +1309,20 @@ static void log_texture_draw_states(const ShaderInfo& info) noexcept {
 // lights its draws. lightlog_draws.csv: one row per distinct (scene, texture, lighting state). lightlog_frames.csv:
 // every 300th frame, every draw (its texture, vertex count, model origin in view space, lighting) and the lights the
 // lit draws use, so the lights can be followed as the camera moves.
-void log_lighting_probe(const ShaderInfo& info, GXPrimitive prim, u32 vtxCount) noexcept {
+ProbeVerts g_probeVerts;
+
+static bool lighting_probe_on() noexcept {
   static const bool on = [] {
     const char* v = std::getenv("NO100F_LIGHT_LOG");
     return v != nullptr && *v != '\0' && std::string_view(v) != "0";
   }();
-  if (!on) {
+  return on;
+}
+
+bool lighting_probe_sampling() noexcept { return lighting_probe_on() && gfx::current_frame() % 300 == 0; }
+
+void log_lighting_probe(const ShaderInfo& info, GXPrimitive prim, u32 vtxCount) noexcept {
+  if (!lighting_probe_on()) {
     return;
   }
   static uint32_t generation = UINT32_MAX;
@@ -1392,7 +1400,7 @@ void log_lighting_probe(const ShaderInfo& info, GXPrimitive prim, u32 vtxCount) 
     return;
   }
   if (fresh) {
-    std::fputs("frame,scene,kind,key_or_light,a,b,c,d,e,f,g,h,i,j,k,l,m,n\n", f);
+    std::fputs("frame,scene,kind,key_or_light,a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r\n", f);
   }
   if (lit) {
     GX::LightMask mask;
@@ -1414,12 +1422,23 @@ void log_lighting_probe(const ShaderInfo& info, GXPrimitive prim, u32 vtxCount) 
   const auto& m = s.pnMtx[std::min<u32>(s.currentPnMtx, MaxPnMtx - 1)].pos;
   const auto& c0 = s.colorChannelState[GX_COLOR0];
   // draw: key, vertex count, model origin in view space (translation column), lit, light mask of COLOR0, mat and amb
-  // colour of COLOR0, proj, has normals, blend, z write
-  std::fprintf(f, "%u,%s,draw,%s,%u,%.3f,%.3f,%.3f,%d,%02lx,%.2f %.2f %.2f %.2f,%.2f %.2f %.2f %.2f,%s,%d,%d,%d,,\n",
+  // colour of COLOR0, proj, has normals, blend, z write, then the positions as sent (min, max, mean; "-" when not
+  // known) and the position matrix's three rows
+  const auto& pv = g_probeVerts;
+  char verts[200] = "-,-,-";
+  if (pv.valid) {
+    std::snprintf(verts, sizeof verts, "%.2f %.2f %.2f,%.2f %.2f %.2f,%.2f %.2f %.2f", pv.min[0], pv.min[1], pv.min[2],
+                  pv.max[0], pv.max[1], pv.max[2], pv.sum[0] / pv.n, pv.sum[1] / pv.n, pv.sum[2] / pv.n);
+  }
+  std::fprintf(f,
+               "%u,%s,draw,%s,%u,%.3f,%.3f,%.3f,%d,%02lx,%.2f %.2f %.2f %.2f,%.2f %.2f %.2f %.2f,%s,%d,%d,%d,%s,"
+               "%.4f %.4f %.4f %.3f,%.4f %.4f %.4f %.3f,%.4f %.4f %.4f %.3f\n",
                frame, scene.c_str(), key.c_str(), vtxCount, m.m0.m[3], m.m1.m[3], m.m2.m[3], lit ? 1 : 0,
                c0.lightMask.to_ulong(), c0.matColor.m[0], c0.matColor.m[1], c0.matColor.m[2], c0.matColor.m[3],
                c0.ambColor.m[0], c0.ambColor.m[1], c0.ambColor.m[2], c0.ambColor.m[3], persp ? "persp" : "ortho",
-               nrm ? 1 : 0, static_cast<int>(s.blendMode), s.depthUpdate ? 1 : 0);
+               nrm ? 1 : 0, static_cast<int>(s.blendMode), s.depthUpdate ? 1 : 0, verts, m.m0.m[0], m.m0.m[1],
+               m.m0.m[2], m.m0.m[3], m.m1.m[0], m.m1.m[1], m.m1.m[2], m.m1.m[3], m.m2.m[0], m.m2.m[1], m.m2.m[2],
+               m.m2.m[3]);
   std::fclose(f);
 }
 
