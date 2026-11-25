@@ -2376,6 +2376,7 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
     const char* v = std::getenv("NO100F_RELIGHT_FLAT");
     return v != nullptr && *v != '\0' && std::string_view(v) != "0";
   }();
+  // The light file's unlit textures (the sky band, painted backdrops) get a variant without it (command_processor.cpp).
   config.shaderConfig.relight = (relightFlat || gfx::scene_stage::relighting()) &&
                                 g_gxState.projType == GX_PERSPECTIVE && g_gxState.depthUpdate;
 }

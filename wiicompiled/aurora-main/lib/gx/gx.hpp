@@ -774,6 +774,7 @@ enum MotionRole : u8 {
   MotionRoleLayer2D = 3,     // 2D (orthographic): the HUD marks its pixels, anything else clears the mark under it
 };
 struct ShaderInfo {
+  bool relight = false;  // ShaderConfig::relight: relit, and drawn into the moon's shadow map
   std::bitset<MaxTexCoord> sampledTexCoords;
   std::bitset<MaxTextures> sampledTextures;
   std::bitset<MaxKColors> sampledKColors;

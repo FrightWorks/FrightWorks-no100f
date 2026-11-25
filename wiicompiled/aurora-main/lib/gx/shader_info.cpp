@@ -302,6 +302,8 @@ ShaderInfo build_shader_info(const ShaderConfig& config) noexcept {
       .uniformSize = 4 + 4 + 8 + 8 + 8 + 48 + 64,
   };
 
+  info.relight = config.relight != 0;
+
   if (config.lineMode != 0) {
     info.uniformSize += 4 + 4 + 4 + 4; // line_width, line_aspect_y, line_tex_offset, line_texcoord_mask
     info.lineMode = config.lineMode;
@@ -777,11 +779,18 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
                      g_gxState.projType == GX_ORTHOGRAPHIC && g_gxState.depthCompare && g_gxState.depthUpdate &&
                          g_gxState.depthFunc == GX_ALWAYS);
   }
+  // Relighting experiment: a solid draw's copy for the moon's shadow map; its projection is written at the stage.
+  gfx::Range shadowRange{};
+  if (info.relight && gfx::scene_stage::relighting()) {
+    shadowRange = gfx::copy_uniform(range).second;
+    gfx::scene_stage::note_shadow_uniform(shadowRange.offset + projectionOffset);
+  }
   if (!perspective || (frame_interpolation_fps() == 0 && motionPrevData == nullptr)) {
     g_gxState.stateDirty = false;
     return {
         .current = range,
         .interpolated = {},
+        .shadow = shadowRange,
     };
   }
 
@@ -807,6 +816,7 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
   return {
       .current = range,
       .interpolated = interpolatedRanges,
+      .shadow = shadowRange,
   };
 }
 } // namespace aurora::gx

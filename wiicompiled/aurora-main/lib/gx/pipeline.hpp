@@ -21,6 +21,8 @@ struct DrawData {
   // It samples one of the game's light textures (lit windows, fire, lamp light cones): the bloom glows from these draws
   // (gfx/bloom.hpp).
   bool emitsLight;
+  // Relighting experiment: its uniforms for the moon's shadow map (size 0: not drawn there).
+  gfx::Range shadowUniformRange{};
 };
 
 constexpr uint32_t GXPipelineConfigVersion = 21;  // 21: ShaderConfig.relight (relighting experiment)

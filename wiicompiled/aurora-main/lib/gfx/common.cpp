@@ -611,6 +611,8 @@ void flush_deferred_draws() {
     // The solid scene, its cut-out fringes and its surfaces' second layers are drawn: the scene stage runs here, so
     // the see-through tail goes into a new pass that keeps the colour and depth (its draws carry their own viewport
     // and scissor).
+    const auto stageCamera = scene_stage::camera();
+    scene_stage::write_shadow_uniforms(g_uniforms.data());
     RenderPass continuation{
         .colorView = pass.colorView,
         .motionView = pass.motionView,
@@ -627,7 +629,7 @@ void flush_deferred_draws() {
         .clearDepth = false,
         .requireReadyPipelines = pass.requireReadyPipelines,
         .sceneStageBefore = true,
-        .sceneCamera = scene_stage::camera(),
+        .sceneCamera = stageCamera,
     };
     CommandList translucent = std::move(pass.translucent);
     pass.translucent.clear();
@@ -1434,6 +1436,7 @@ static void end_batch_impl(const wgpu::CommandEncoder& cmd, bool advanceFrame) {
     // Mid-frame batch split: the staging buffer is about to be unmapped and rotated, so pending
     // interpolation tasks pointing into it would dangle. Tie the clear to the rotation itself.
     gx::drop_pending_frame_interpolation_uniforms();
+    scene_stage::drop_shadow_uniforms();
     g_frameSubmittedInParts = true;
   }
   // A frame submitted in parts has no scene stage. A part's see-through draws must go with it, as they use its staging
@@ -1610,8 +1613,10 @@ static const char* render_pass_label(u32 index) noexcept {
 }
 
 // `onlyLight`: only the draws that sample a light texture (gx::DrawData::emitsLight), for the bloom.
+// `shadow`: only the draws with a moon shadow copy, with it, ignoring the game's viewports and clears.
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& passes, u32 idx,
-                             int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight = false);
+                             int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight = false,
+                             bool shadow = false);
 
 // The bloom (bloom.hpp), at the scene stage: the frame's light draws up to the end of its see-through tail
 // (gx::DrawData::emitsLight, in the EFB passes before `afterPass`, the pass after the tail) are drawn once more, alone
@@ -1671,6 +1676,50 @@ static void encode_bloom(const wgpu::CommandEncoder& cmd, const std::vector<Rend
   bloom::encode(cmd, after.colorView, after.targetSize, after.msaaSamples, after.sceneCamera.viewport);
 }
 
+// Relighting experiment (scene_stage.hpp): the solid scene before the stage, drawn again from the moon into its depth
+// map, each draw with its shadow uniform copy; the colour and motion targets are stand-ins.
+static void encode_moon_shadow(const wgpu::CommandEncoder& cmd, const std::vector<RenderPass>& renderPasses,
+                               u32 stagePass, int32_t interpolatedFrame, DebugFrameData& debugFrame) {
+  const auto& stage = renderPasses[stagePass];
+  if (!stage.sceneCamera.hasShadow)
+    return;
+  const bool motionPass =
+      stage.motionView != nullptr && stage.motionDepthView != nullptr && stage.motionMarkView != nullptr;
+  const auto& targets = scene_stage::shadow_targets(stage.msaaSamples, motionPass);
+  std::vector<u32> passes;
+  for (u32 i = 0; i < stagePass; ++i) {
+    if (renderPasses[i].colorView.Get() == stage.colorView.Get())
+      passes.push_back(i);
+  }
+  for (size_t n = 0; n < passes.size(); ++n) {
+    const std::array attachments{
+        wgpu::RenderPassColorAttachment{
+            .view = targets.color, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+        wgpu::RenderPassColorAttachment{
+            .view = targets.motion, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+        wgpu::RenderPassColorAttachment{
+            .view = targets.motionDepth, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+        wgpu::RenderPassColorAttachment{
+            .view = targets.mark, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+    };
+    const wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{
+        .view = targets.depth,
+        .depthLoadOp = n == 0 ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load,
+        .depthStoreOp = wgpu::StoreOp::Store,
+        .depthClearValue = gx::UseReversedZ ? 0.f : 1.f,
+    };
+    const wgpu::RenderPassDescriptor renderPassDescriptor{
+        .label = "Moon shadow map",
+        .colorAttachmentCount = motionPass ? attachments.size() : 1,
+        .colorAttachments = attachments.data(),
+        .depthStencilAttachment = &depthStencilAttachment,
+    };
+    auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
+    render_pass_impl(pass, renderPasses, passes[n], interpolatedFrame, debugFrame, false, true);
+    pass.End();
+  }
+}
+
 static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEncoder& cmd, int32_t interpolatedFrame,
                         bool finalize, DebugFrameData& debugFrame, const depth_peek::FrameMapping& depthMapping) {
   ZoneScoped;
@@ -1714,6 +1763,7 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
       }
     }
     if (i == sceneStagePass) {
+      encode_moon_shadow(cmd, renderPasses, i, interpolatedFrame, debugFrame);
       scene_stage::encode(cmd, passInfo.colorView, passInfo.depthView, passInfo.targetSize, passInfo.msaaSamples,
                           passInfo.sceneCamera);
       if (afterTailPass != UINT32_MAX && passInfo.depthView.Get() == webgpu::g_depthBuffer.view.Get()) {
@@ -1952,7 +2002,7 @@ void after_submit() noexcept {
 }
 
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& renderPasses, u32 idx,
-                             int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight) {
+                             int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight, bool shadow) {
   // Per-invocation, not per-process: two encoders can be recording at once.
   gx::DrawEncodeState encodeState{};
   encodeState.boundTextureBindGroup = gx::g_emptyTextureBindGroup.Get();
@@ -1987,6 +2037,8 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
 #endif
     switch (cmd.type) {
     case CommandType::SetViewport: {
+      if (shadow)
+        break;
       const auto& vp = cmd.data.setViewport;
       // WebGPU requires 0 <= minDepth <= maxDepth <= 1. vp.znear/vp.zfar are in GX's own distance
       // terms (0 = near); under UseReversedZ the host depth-buffer storage direction is flipped
@@ -2013,6 +2065,8 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
       }
     } break;
     case CommandType::SetScissor: {
+      if (shadow)
+        break;
       const auto& sc = cmd.data.setScissor;
       const auto& size = renderPasses[idx].targetSize;
       const auto left = std::clamp(sc.x, 0, static_cast<int32_t>(size.width));
@@ -2030,8 +2084,10 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
       case ShaderType::GX: {
         if (onlyLight && !draw.gx.emitsLight)
           break;
-        const gfx::Range* uniformOverride = nullptr;
-        if (interpolatedFrame >= 0 &&
+        if (shadow && draw.gx.shadowUniformRange.size == 0)
+          break;
+        const gfx::Range* uniformOverride = shadow ? &draw.gx.shadowUniformRange : nullptr;
+        if (!shadow && interpolatedFrame >= 0 &&
             static_cast<size_t>(interpolatedFrame) < draw.gx.interpolatedUniformRanges.size() &&
             draw.gx.interpolatedUniformRanges[interpolatedFrame].size != 0) {
           uniformOverride = &draw.gx.interpolatedUniformRanges[interpolatedFrame];
@@ -2039,7 +2095,7 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
         gx::render(draw.gx, pass, encodeState, renderPasses[idx].requireReadyPipelines, uniformOverride);
       } break;
       case ShaderType::Clear:
-        if (!onlyLight)
+        if (!onlyLight && !shadow)
           clear::render(draw.clear, pass, renderPasses[idx].targetSize, encodeState.currentPipeline);
         break;
       }

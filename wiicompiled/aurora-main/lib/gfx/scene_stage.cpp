@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -63,6 +64,9 @@ Camera g_camera;
 //   moon DX DY DZ R G B          (direction toward the moon)
 //   light X Y Z RADIUS R G B
 //   scale RADIUS_SCALE POINT_INTENSITY
+//   far NEAR FAR                 (the light fades out from NEAR to FAR units away: distant backdrops stay as painted)
+//   shadow RADIUS SIZE BIAS      (moon shadows within RADIUS units round the view, SIZE texels; RADIUS 0 = none)
+//   unlit KEY                    (a texture drawn as the game draws it: the sky band, painted backdrops)
 constexpr size_t kMaxRelightLights = 32;
 struct RelightLight {
   float pos[3];
@@ -77,7 +81,12 @@ struct RelightScene {
   float moonColor[3] = {0.5f, 0.55f, 0.7f};
   float radiusScale = 1.f;
   float pointIntensity = 1.f;
+  float fadeNear = 1e6f, fadeFar = 2e6f;
+  float shadowRadius = 40.f;
+  uint32_t shadowSize = 2048;
+  float shadowBias = 0.15f;  // units toward the moon
   std::vector<RelightLight> lights;
+  std::unordered_set<std::string> unlit;
 };
 
 const RelightScene& relight_scene() {
@@ -100,6 +109,11 @@ const RelightScene& relight_scene() {
                                 &v[6]);
       if (n < 1 || word[0] == '#') continue;
       const std::string_view w(word);
+      char key[128] = {};
+      if (w == "unlit" && std::sscanf(line, "%15s %127s", word, key) == 2) {
+        s.unlit.emplace(key);
+        continue;
+      }
       if (w == "ambient" && n >= 4) {
         std::copy(v, v + 3, s.ambient);
       } else if (w == "moon" && n >= 7) {
@@ -114,6 +128,13 @@ const RelightScene& relight_scene() {
       } else if (w == "scale" && n >= 3) {
         s.radiusScale = v[0];
         s.pointIntensity = v[1];
+      } else if (w == "shadow" && n >= 2) {
+        s.shadowRadius = std::max(v[0], 0.f);
+        if (n >= 3) s.shadowSize = static_cast<uint32_t>(std::clamp(v[1], 256.f, 8192.f));
+        if (n >= 4) s.shadowBias = v[2];
+      } else if (w == "far" && n >= 3 && v[1] > v[0]) {
+        s.fadeNear = v[0];
+        s.fadeFar = v[1];
       }
     }
     std::fclose(f);
@@ -128,7 +149,9 @@ struct RelightParams {
   std::array<float, 4> moonDir;   // view space, toward the moon; w = 1 when there is a moon
   std::array<float, 4> moonColor;
   std::array<float, 4> ambient;
-  std::array<float, 4> info;      // light count
+  std::array<float, 4> info;      // light count, fade near, fade far
+  std::array<std::array<float, 4>, 4> shadow; // view space to shadow clip space (rows)
+  std::array<float, 4> shadowInfo; // on, size, normal offset (units), bias (depth)
   std::array<std::array<float, 4>, kMaxRelightLights * 2> lights; // (view pos, radius), (colour, 0)
 };
 
@@ -139,6 +162,66 @@ struct MatrixVote {
 };
 std::array<MatrixVote, 16> g_votes;
 size_t g_voteCount = 0;
+// This frame's shadow uniform copies (their projections' offsets in the staging buffer).
+std::vector<size_t> g_shadowOffsets;
+// Half the depth range of the shadow map, in units along the moon's direction.
+constexpr float kShadowDepth = 200.f;
+
+ShadowTargets g_shadowTargets;
+std::array<wgpu::Texture, 5> g_shadowTextures;
+uint32_t g_shadowSamples = 0;
+
+// The moon's shadow camera for a view matrix `v` (rows of a 3x4, view = R * world + t): an orthographic box `radius`
+// round a point ahead of the camera, snapped to the map's texels (so it doesn't shimmer as the camera moves), depth
+// reversed (nearer the moon = larger). Returned as view space to shadow clip space.
+std::array<float, 16> shadow_matrix(const std::array<float, 12>& v, const float* d, float radius, uint32_t size) {
+  const float R[3][3] = {{v[0], v[1], v[2]}, {v[4], v[5], v[6]}, {v[8], v[9], v[10]}};
+  const float t[3] = {v[3], v[7], v[11]};
+  float cam[3], fwd[3];
+  for (int i = 0; i < 3; ++i) {
+    cam[i] = -(R[0][i] * t[0] + R[1][i] * t[1] + R[2][i] * t[2]);
+    fwd[i] = -R[2][i];
+  }
+  const auto dot = [](const float* a, const float* b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
+  float upRef[3] = {0.f, 1.f, 0.f};
+  if (std::abs(d[1]) > 0.99f) {
+    upRef[1] = 0.f;
+    upRef[2] = 1.f;
+  }
+  float up[3], right[3];
+  const float k = dot(upRef, d);
+  for (int i = 0; i < 3; ++i) up[i] = upRef[i] - d[i] * k;
+  const float ul = std::sqrt(dot(up, up));
+  for (float& c : up) c /= ul;
+  // right = up x d, so right x up = d: the same handedness as a camera (triangle winding, culling, unchanged).
+  right[0] = up[1] * d[2] - up[2] * d[1];
+  right[1] = up[2] * d[0] - up[0] * d[2];
+  right[2] = up[0] * d[1] - up[1] * d[0];
+  // Centre: ahead of the camera along its horizontal forward.
+  float flat[3] = {fwd[0], 0.f, fwd[2]};
+  const float fl = std::sqrt(dot(flat, flat));
+  float centre[3];
+  for (int i = 0; i < 3; ++i) centre[i] = cam[i] + (fl > 1e-4f ? flat[i] / fl : 0.f) * radius * 0.5f;
+  const float texel = 2.f * radius / static_cast<float>(size);
+  const float cx = std::round(dot(right, centre) / texel) * texel;
+  const float cy = std::round(dot(up, centre) / texel) * texel;
+  const float cz = dot(d, centre);
+  // World to shadow clip (rows of a 3x4; the fourth row is 0 0 0 1).
+  const float W[3][4] = {
+      {right[0] / radius, right[1] / radius, right[2] / radius, -cx / radius},
+      {up[0] / radius, up[1] / radius, up[2] / radius, -cy / radius},
+      {d[0] / (2.f * kShadowDepth), d[1] / (2.f * kShadowDepth), d[2] / (2.f * kShadowDepth),
+       (kShadowDepth - cz) / (2.f * kShadowDepth)},
+  };
+  // Times view to world = [R^T | cam].
+  std::array<float, 16> m{};
+  for (int r = 0; r < 3; ++r) {
+    for (int c = 0; c < 3; ++c) m[r * 4 + c] = W[r][0] * R[c][0] + W[r][1] * R[c][1] + W[r][2] * R[c][2];
+    m[r * 4 + 3] = W[r][0] * cam[0] + W[r][1] * cam[1] + W[r][2] * cam[2] + W[r][3];
+  }
+  m[15] = 1.f;
+  return m;
+}
 
 // Every pass's parameters.
 struct Params {
@@ -176,9 +259,43 @@ struct Relight {
     moon_color: vec4f,
     ambient: vec4f,
     info: vec4f,
+    shadow: array<vec4f, 4>,
+    shadow_info: vec4f,
     lights: array<vec4f, 64>,
 };
 @group(0) @binding(3) var<uniform> relight: Relight;
+@group(0) @binding(4) var shadow_tex: EfbDepth;
+
+// How much of the moon reaches view-space point `c` (normal `n`): 3x3 samples of the moon's depth map (depth
+// reversed: an occluder is nearer the moon, so larger). Outside the map: lit.
+fn moon_shadow(c: vec3f, n: vec3f) -> f32 {
+    if (relight.shadow_info.x == 0.0) {
+        return 1.0;
+    }
+    let p = vec4f(c + n * relight.shadow_info.z, 1.0);
+    let s = vec3f(dot(relight.shadow[0], p), dot(relight.shadow[1], p), dot(relight.shadow[2], p));
+    let size = relight.shadow_info.y;
+    let uv = vec2f(s.x * 0.5 + 0.5, 0.5 - s.y * 0.5) * size;
+    if (any(uv < vec2f(0.0)) || any(uv >= vec2f(size)) || s.z <= 0.0 || s.z >= 1.0) {
+        return 1.0;
+    }
+    // 3x3 texels of comparisons, each bilinearly filtered: 4x4 samples weighted by where the point falls in its texel,
+    // so the edge moves smoothly instead of in texel steps.
+    let last = vec2i(i32(size) - 1);
+    let t = uv - 0.5;
+    let base = vec2i(floor(t));
+    let f = t - floor(t);
+    var wx = array<f32, 4>(1.0 - f.x, 1.0, 1.0, f.x);
+    var wy = array<f32, 4>(1.0 - f.y, 1.0, 1.0, f.y);
+    var lit = 0.0;
+    for (var j = 0; j < 4; j++) {
+        for (var i = 0; i < 4; i++) {
+            let d = textureLoad(shadow_tex, clamp(base + vec2i(i - 1, j - 1), vec2i(0), last), 0);
+            lit += wx[i] * wy[j] * select(0.0, 1.0, d <= s.z + relight.shadow_info.w);
+        }
+    }
+    return lit / 9.0;
+}
 
 const SAMPLES = 12;
 const TURNS = 7.0;
@@ -400,9 +517,15 @@ fn light_at(p: vec2i) -> vec3f {
     }
     let c = c4.xyz;
     let n = normal_at(p, c);
+    if (relight.info.w != 0.0) {
+        return vec3f(moon_shadow(c, n) * 2.0);  // debug view 6: the moon's shadow alone
+    }
     var light = relight.ambient.rgb;
     if (relight.moon_dir.w > 0.0) {
-        light += relight.moon_color.rgb * max(dot(n, relight.moon_dir.xyz), 0.0);
+        let facing = max(dot(n, relight.moon_dir.xyz), 0.0);
+        if (facing > 0.0) {
+            light += relight.moon_color.rgb * facing * moon_shadow(c, n);
+        }
     }
     let count = i32(relight.info.x);
     for (var i = 0; i < count; i++) {
@@ -412,7 +535,7 @@ fn light_at(p: vec2i) -> vec3f {
         let f = clamp(1.0 - (d * d) / (lp.w * lp.w), 0.0, 1.0);
         light += relight.lights[i * 2 + 1].rgb * f * f * max(dot(n, to_light / max(d, 1e-4)), 0.0);
     }
-    return light;
+    return mix(light, vec3f(1.0), smoothstep(relight.info.y, relight.info.z, length(c)));
 }
 
 // Multiplied into the solid scene at up to twice its brightness (the blend doubles: source x destination x 2).
@@ -551,8 +674,10 @@ void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureVie
     entries.push_back(wgpu::BindGroupEntry{.binding = 1, .textureView = *depth});
   if (ao != nullptr)
     entries.push_back(wgpu::BindGroupEntry{.binding = 2, .textureView = *ao});
-  if (kind == Kind::Relight || kind == Kind::RelightView)
+  if (kind == Kind::Relight || kind == Kind::RelightView) {
     entries.push_back(wgpu::BindGroupEntry{.binding = 3, .buffer = g_relightParams, .size = sizeof(RelightParams)});
+    entries.push_back(wgpu::BindGroupEntry{.binding = 4, .textureView = g_shadowTargets.depth});
+  }
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .layout = pipeline.GetBindGroupLayout(0),
       .entryCount = entries.size(),
@@ -619,6 +744,11 @@ std::optional<Mat4x4<float>> inverse(const Mat4x4<float>& matrix) {
 
 bool relighting() noexcept { return relight_scene().loaded; }
 
+bool is_unlit_texture(const std::string& key) noexcept {
+  const auto& unlit = relight_scene().unlit;
+  return !key.empty() && unlit.contains(key);
+}
+
 bool wanted() noexcept {
   return g_viewMode.load(std::memory_order_relaxed) != 0 || g_aoStrength.load(std::memory_order_relaxed) > 0.f ||
          g_inkLevel.load(std::memory_order_relaxed) != 0 || bloom::wanted() || relighting();
@@ -646,6 +776,48 @@ int ink_outlines() noexcept { return g_inkLevel.load(std::memory_order_relaxed);
 void begin_frame() noexcept {
   g_solidSurfaces.clear();
   g_voteCount = 0;
+  g_shadowOffsets.clear();
+}
+
+void note_shadow_uniform(size_t offset) noexcept { g_shadowOffsets.push_back(offset); }
+
+void write_shadow_uniforms(uint8_t* uniforms) noexcept {
+  static constexpr std::array<float, 16> kNothing{};
+  const auto& m = g_camera.hasShadow ? g_camera.shadow : kNothing;
+  for (const size_t offset : g_shadowOffsets) std::memcpy(uniforms + offset, m.data(), sizeof(m));
+}
+
+void drop_shadow_uniforms() noexcept { g_shadowOffsets.clear(); }
+
+const ShadowTargets& shadow_targets(uint32_t samples, bool motion) {
+  const uint32_t size = relight_scene().shadowSize;
+  if (g_shadowSamples != samples || g_shadowTargets.size != size) {
+    g_shadowTextures = {};
+    g_shadowTargets = {};
+    g_shadowSamples = samples;
+    g_shadowTargets.size = size;
+  }
+  const auto make = [&](size_t i, wgpu::TextureView& view, wgpu::TextureFormat format, bool sampled) {
+    if (g_shadowTextures[i]) return;
+    const wgpu::TextureDescriptor descriptor{
+        .label = "Moon shadow map",
+        .usage = wgpu::TextureUsage::RenderAttachment |
+                 (sampled ? wgpu::TextureUsage::TextureBinding : wgpu::TextureUsage::None),
+        .size = {size, size, 1},
+        .format = format,
+        .sampleCount = samples,
+    };
+    g_shadowTextures[i] = g_device.CreateTexture(&descriptor);
+    view = g_shadowTextures[i].CreateView();
+  };
+  make(0, g_shadowTargets.depth, webgpu::g_graphicsConfig.depthFormat, true);
+  make(1, g_shadowTargets.color, webgpu::g_graphicsConfig.surfaceConfiguration.format, false);
+  if (motion) {
+    make(2, g_shadowTargets.motion, wgpu::TextureFormat::RG16Float, false);
+    make(3, g_shadowTargets.motionDepth, wgpu::TextureFormat::R32Float, false);
+    make(4, g_shadowTargets.mark, wgpu::TextureFormat::R8Unorm, false);
+  }
+  return g_shadowTargets;
 }
 void note_solid_surface(HashType surface) noexcept { g_solidSurfaces.insert(surface); }
 bool is_solid_surface(HashType surface) noexcept { return g_solidSurfaces.contains(surface); }
@@ -655,7 +827,7 @@ void set_ambient_occlusion(float strength) noexcept {
 }
 float ambient_occlusion() noexcept { return g_aoStrength.load(std::memory_order_relaxed); }
 
-void set_view(int mode) noexcept { g_viewMode.store(mode >= 0 && mode <= 5 ? mode : 0, std::memory_order_relaxed); }
+void set_view(int mode) noexcept { g_viewMode.store(mode >= 0 && mode <= 6 ? mode : 0, std::memory_order_relaxed); }
 int view() noexcept { return g_viewMode.load(std::memory_order_relaxed); }
 
 void note_camera(const Mat4x4<float>& projection, const webgpu::Viewport& viewport) noexcept {
@@ -669,6 +841,10 @@ const Camera& camera() noexcept {
   }
   g_camera.hasView = best != nullptr;
   if (best != nullptr) g_camera.view = best->m;
+  const auto& scene = relight_scene();
+  g_camera.hasShadow = g_camera.hasView && scene.hasMoon && scene.shadowRadius > 0.f;
+  if (g_camera.hasShadow)
+    g_camera.shadow = shadow_matrix(g_camera.view, scene.moonDir, scene.shadowRadius, scene.shadowSize);
   return g_camera;
 }
 
@@ -721,7 +897,7 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       .ink2 = {kInkFadeEnd, 0.f, 0.f, 0.f},
   };
   g_queue.WriteBuffer(g_params, 0, &params, sizeof(params));
-  if (relight || mode == 5) {
+  if (relight || mode == 5 || mode == 6) {
     const auto& scene = relight_scene();
     const auto& v = camera.view;  // rows: view = R * world + t
     const auto toView = [&](const float* p, float w, float* out) {
@@ -735,6 +911,16 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
     std::copy(scene.moonColor, scene.moonColor + 3, rp.moonColor.begin());
     std::copy(scene.ambient, scene.ambient + 3, rp.ambient.begin());
     rp.info[0] = static_cast<float>(scene.lights.size());
+    rp.info[1] = scene.fadeNear;
+    rp.info[2] = scene.fadeFar;
+    rp.info[3] = mode == 6 ? 1.f : 0.f;
+    shadow_targets(samples, false);  // the depth map is bound even when the frame has no shadows
+    if (camera.hasShadow) {
+      for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c) rp.shadow[r][c] = camera.shadow[r * 4 + c];
+      const float size = static_cast<float>(scene.shadowSize);
+      rp.shadowInfo = {1.f, size, 6.f * scene.shadowRadius / size, scene.shadowBias / (2.f * kShadowDepth)};
+    }
     for (size_t i = 0; i < scene.lights.size(); ++i) {
       const auto& l = scene.lights[i];
       toView(l.pos, 1.f, rp.lights[i * 2].data());
@@ -750,7 +936,7 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       g_relightParams = g_device.CreateBuffer(&descriptor);
     }
     g_queue.WriteBuffer(g_relightParams, 0, &rp, sizeof(rp));
-    if (mode == 5) {
+    if (mode == 5 || mode == 6) {
       draw(encoder, Kind::RelightView, color, size, &depth, nullptr);
       return;
     }
@@ -795,6 +981,9 @@ void shutdown() noexcept {
   g_pipelines = {};
   g_params = {};
   g_relightParams = {};
+  g_shadowTextures = {};
+  g_shadowTargets = {};
+  g_shadowSamples = 0;
   g_aoTargets = {};
 }
 } // namespace aurora::gfx::scene_stage

@@ -8,6 +8,7 @@ namespace aurora::gx {
 struct UniformRanges {
   gfx::Range current;
   std::array<gfx::Range, MaxInterpolatedFrames> interpolated;
+  gfx::Range shadow{};  // relighting experiment: the copy drawn into the moon's shadow map (scene_stage.hpp)
 };
 
 ShaderInfo build_shader_info(const ShaderConfig& config) noexcept;

@@ -4,6 +4,7 @@
 #include "../webgpu/gpu.hpp"
 
 #include <array>
+#include <string>
 
 namespace aurora::gfx::scene_stage {
 // The scene stage: a point in each frame where the game's solid scene is finished and its see-through world draws
@@ -38,7 +39,7 @@ float ambient_occlusion() noexcept;
 void set_ink_outlines(int level) noexcept;
 int ink_outlines() noexcept;
 
-// Debug view (5 = the relighting's light alone): 0 off, 1 tint (everything drawn before the stage is tinted blue; what is drawn after keeps its colour),
+// Debug view (5 = the relighting's light alone, 6 = the moon's shadow alone): 0 off, 1 tint (everything drawn before the stage is tinted blue; what is drawn after keeps its colour),
 // 2 depth (the solid scene's distance from the camera, near = white), 3 the ambient occlusion alone (white = none),
 // 4 the ink outlines alone (black on white; Bold when the setting is off), all with what is drawn after the stage on
 // top.
@@ -54,6 +55,9 @@ struct Camera {
   // perspective draws use (the level is drawn in world space with the camera's view matrix).
   std::array<float, 12> view{};
   bool hasView = false;
+  // Moon shadows: view space to the moon's shadow map's clip space (rows of a 4x4), when the frame has them.
+  std::array<float, 16> shadow{};
+  bool hasShadow = false;
 };
 void note_camera(const Mat4x4<float>& projection, const webgpu::Viewport& viewport) noexcept;
 // A solid perspective draw's position matrix (12 floats, rows of a 3x4): a vote for the view matrix.
@@ -63,6 +67,25 @@ const Camera& camera() noexcept;
 // Relighting experiment (NO100F_RELIGHT=<light file>): solid perspective draws lose their baked vertex colours
 // (shader.cpp) and the stage lights the solid scene from the file's ambient, moon and point lights (world space).
 bool relighting() noexcept;
+// The light file's unlit textures ("unlit KEY", KEY as TextureRef::debugKey): drawn as the game draws them.
+bool is_unlit_texture(const std::string& key) noexcept;
+
+// Moon shadows: the solid scene is drawn a second time from the moon into a depth map, before the stage. Each solid
+// draw gets a copy of its uniforms (shader_info.cpp build_uniform), whose projection is replaced, once the frame's
+// camera is known (common.cpp, at the stage), by the camera's view space to the shadow map's clip space.
+// note_shadow_uniform: the absolute offset of a copy's projection in the uniform staging buffer.
+void note_shadow_uniform(size_t offset) noexcept;
+// Writes Camera::shadow (or a matrix that draws nothing) into every copy noted this frame; `uniforms` = the staging.
+void write_shadow_uniforms(uint8_t* uniforms) noexcept;
+// The frame is submitted in parts: the copies' staging is gone.
+void drop_shadow_uniforms() noexcept;
+// The shadow map's targets for EFB pipelines with `samples` per pixel: a colour target and stand-ins for the motion
+// targets (`motion`) that the pipelines write too, and the depth map itself. Square, `size` texels.
+struct ShadowTargets {
+  wgpu::TextureView color, depth, motion, motionDepth, mark;
+  uint32_t size = 0;
+};
+const ShadowTargets& shadow_targets(uint32_t samples, bool motion);
 
 // The stage itself, encoded between the two EFB passes: draws over `color` (the EFB, `samples` per pixel, `size`),
 // reading `depth` (its depth buffer).
