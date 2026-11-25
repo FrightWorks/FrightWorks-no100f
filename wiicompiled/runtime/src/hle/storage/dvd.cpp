@@ -777,6 +777,18 @@ static fs::path ResolveDvdMappedHostPath(const std::string& dvdPath, const fs::p
     return fallbackHostPath;
 }
 
+// A whole disc file as the game would read it (a mod's copy wins), for host-side features. False if missing.
+bool ReadDvdFileForHost(const std::string& dvdPath, std::vector<uint8_t>& out) {
+    std::string path = dvdPath;
+    if (path.empty() || path[0] != '/') path = "/" + path;
+    const fs::path host = ResolveDvdMappedHostPath(path, fs::path{});
+    if (host.empty()) return false;
+    std::ifstream in(host, std::ios::binary);
+    if (!in) return false;
+    out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return !out.empty();
+}
+
 [[noreturn]] static void FailRuntimeFst(const std::string& reason) {
     RT_LOGF(RT_TAG_DVD, "ERROR: cannot publish the runtime FST: %s\n", reason.c_str());
     FailDvd("dvd_fst", "DVD file table is unavailable", reason);

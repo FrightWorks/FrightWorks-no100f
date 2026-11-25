@@ -268,6 +268,10 @@ int aurora_get_scene_stage_view();
 // texture rules. 0 off, 1 on, 2 reload the file. Get: -1 = no file.
 void aurora_set_reimagined(int mode);
 int aurora_get_reimagined();
+// Reimagined: blocks of the game's data (a level's texture assets) where a texture the file names is looked for when no
+// pack has it. Clear, then add.
+void aurora_clear_texture_sources();
+void aurora_add_texture_source(const void* data, size_t size);
 void aurora_set_ambient_occlusion(float strength);
 float aurora_get_ambient_occlusion();
 // Cartoon ink outlines on the solid scene: 0 = off, 1 = thin (silhouettes), 2 = bold (thicker, sharp creases too);

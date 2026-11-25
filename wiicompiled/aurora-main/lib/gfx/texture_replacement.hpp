@@ -19,6 +19,12 @@ std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj
 // A replacement texture by its file name without extension ("tex1_64x64_..._5"), from the same folders and in the
 // same order as the game's textures (a pack's file wins), whether or not the game draws it. Recording thread only.
 std::optional<TextureHandle> find_replacement_by_name(std::string_view name) noexcept;
+// The game's own texture data for find_replacement_by_name when no file has the name: blocks of disc data (such as a
+// level's texture assets) searched for the key's base level (its XXH64, as the game's keys are made) and decoded like
+// the game's textures. Recording thread only.
+void add_texture_source(const uint8_t* data, size_t size) noexcept;
+void clear_texture_sources() noexcept;
+uint32_t texture_source_generation() noexcept;
 // Dev menu (F8): a static texture was uploaded (gx.cpp, every texture resolve): returns its name (pack file name without
 // the extension, as build_texture_replacement_name) and, while track_drawn is on, adds it to the drawn list. `handle`:
 // what was uploaded for it.

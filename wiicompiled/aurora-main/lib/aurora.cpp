@@ -2576,6 +2576,11 @@ void aurora_set_reimagined(int mode) {
   aurora::gfx::scene_stage::set_relight(mode);
 #endif
 }
+void aurora_clear_texture_sources() { aurora::gfx::texture_replacement::clear_texture_sources(); }
+void aurora_add_texture_source(const void* data, size_t size) {
+  aurora::gfx::texture_replacement::add_texture_source(static_cast<const uint8_t*>(data), size);
+}
+
 int aurora_get_reimagined() {
 #ifdef AURORA_ENABLE_GX
   return aurora::gfx::scene_stage::relight_state();

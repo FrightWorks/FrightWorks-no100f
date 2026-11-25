@@ -1147,9 +1147,13 @@ const Camera& camera() noexcept {
   static std::string s_moonName;
   static const RelightScene* s_moonScene = nullptr;
   static TextureHandle s_moon;
-  if (relighting() && scene.hasSky && (&scene != s_moonScene || scene.moonTexture != s_moonName)) {
+  static uint32_t s_moonSources = UINT32_MAX;
+  if (relighting() && scene.hasSky &&
+      (&scene != s_moonScene || scene.moonTexture != s_moonName ||
+       (!s_moon && s_moonSources != texture_replacement::texture_source_generation()))) {
     s_moonScene = &scene;
     s_moonName = scene.moonTexture;
+    s_moonSources = texture_replacement::texture_source_generation();
     s_moon = {};
     if (!s_moonName.empty()) {
       if (auto found = texture_replacement::find_replacement_by_name(s_moonName); found.has_value()) s_moon = *found;

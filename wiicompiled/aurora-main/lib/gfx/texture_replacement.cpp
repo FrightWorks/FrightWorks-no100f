@@ -1422,16 +1422,55 @@ std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj
   return unknown_palette_name(obj);
 }
 
+std::vector<std::vector<uint8_t>> s_textureSources;
+std::atomic_uint32_t s_textureSourceGeneration{0};
+absl::flat_hash_map<RuntimeTextureKey, gfx::TextureHandle> s_sourceTextures;
+
+void add_texture_source(const uint8_t* data, size_t size) noexcept {
+  if (data == nullptr || size == 0) return;
+  s_textureSources.emplace_back(data, data + size);
+  s_textureSourceGeneration.fetch_add(1);
+}
+
+void clear_texture_sources() noexcept {
+  s_textureSources.clear();
+  s_sourceTextures.clear();
+  s_textureSourceGeneration.fetch_add(1);
+}
+
+uint32_t texture_source_generation() noexcept { return s_textureSourceGeneration.load(); }
+
 std::optional<gfx::TextureHandle> find_replacement_by_name(std::string_view name) noexcept {
   const auto key = parse_replacement_filename(std::string(name) + ".png");
   if (!key.has_value()) return std::nullopt;
-  if (const auto* cached = find_cached_replacement(*key); cached != nullptr) return *cached;
-  const auto* path = find_replacement_path(*key);
-  if (path == nullptr) return std::nullopt;
-  auto handle = load_replacement_texture(*key, *path);
-  if (!handle) return std::nullopt;
-  cache_replacement(*key, handle);
-  return handle;
+  // A pack or the imported Xbox textures, as for the game's own draws (only with texture replacements on).
+  if (const auto* path = find_replacement_path(*key); path != nullptr) {
+    if (const auto* cached = find_cached_replacement(*key); cached != nullptr) return *cached;
+    auto handle = load_replacement_texture(*key, *path);
+    if (handle) {
+      cache_replacement(*key, handle);
+      return handle;
+    }
+  }
+  // The game's own data: a block whose bytes hash to the key (no palette formats).
+  if (key->hasTlut) return std::nullopt;
+  if (const auto it = s_sourceTextures.find(*key); it != s_sourceTextures.end()) return it->second;
+  const uint32_t size = GXGetTexBufferSize(key->width, key->height, key->format, false, 0);
+  if (size == 0) return std::nullopt;
+  for (const auto& source : s_textureSources) {
+    for (size_t off = 0; off + size <= source.size(); off += 4) {
+      if (XXH64(source.data() + off, size, 0) != key->textureHash) continue;
+      auto converted = convert_texture(key->format, key->width, key->height, 1,
+                                       ArrayRef<uint8_t>{source.data() + off, size});
+      auto handle = upload_replacement(*key, std::optional<ConvertedTexture>(std::move(converted)));
+      if (!handle) return std::nullopt;
+      handle->debugKey = std::string(name);
+      s_sourceTextures.emplace(*key, handle);
+      Log.info("{}: decoded from the game's data", name);
+      return handle;
+    }
+  }
+  return std::nullopt;
 }
 
 } // namespace aurora::gfx::texture_replacement

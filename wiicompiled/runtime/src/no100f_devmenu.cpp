@@ -71,6 +71,9 @@ extern "C" void func_8004C968(CpuContext* ctx);
 extern "C" void func_8005A0A8(CpuContext* ctx);
 extern "C" void No100f_CutsceneRequestStart(uint32_t manager);  // hle/no100f_cutscene.cpp
 
+// hle/storage/dvd.cpp: a whole disc file as the game would read it (a mod's copy wins).
+bool ReadDvdFileForHost(const std::string& dvdPath, std::vector<uint8_t>& out);
+
 namespace no100f_devmenu {
 namespace {
 
@@ -336,9 +339,33 @@ std::vector<uint32_t> EntityMatrices(uint32_t base) {
 std::vector<ReimaginedMove> g_reimaginedMoves;
 bool g_reimaginedMovesLoaded = false;
 
+// Reimagined "moontex KEY FILE": the level file's texture assets (RWTX) go to aurora, which finds the texture there
+// when no pack or Xbox texture has it.
+void AddReimaginedTextureSource(const std::string& file) {
+    std::vector<uint8_t> hip;
+    if (!ReadDvdFileForHost(file, hip)) {
+        RT_LOGF(RT_TAG_RUNTIME, "[devmenu] reimagined: cannot read %s\n", file.c_str());
+        return;
+    }
+    const auto be32 = [&](size_t o) {
+        return (uint32_t(hip[o]) << 24) | (uint32_t(hip[o + 1]) << 16) | (uint32_t(hip[o + 2]) << 8) | hip[o + 3];
+    };
+    size_t added = 0;
+    for (size_t p = 0; p + 24 <= hip.size(); ++p) {
+        if (std::memcmp(hip.data() + p, "AHDR", 4) != 0) continue;
+        const uint32_t type = be32(p + 12), off = be32(p + 16), size = be32(p + 20);
+        if (type == 0x52575458u /* RWTX */ && size != 0 && off < hip.size() && size <= hip.size() - off) {
+            aurora_add_texture_source(hip.data() + off, size);
+            ++added;
+        }
+    }
+    RT_LOGF(RT_TAG_RUNTIME, "[devmenu] reimagined: %zu texture assets from %s\n", added, file.c_str());
+}
+
 void LoadReimaginedMoves() {
     g_reimaginedMoves.clear();
     g_reimaginedMovesLoaded = true;
+    aurora_clear_texture_sources();
     const char* path = std::getenv("NO100F_REIMAGINED");
     if (path == nullptr || *path == '\0') path = std::getenv("NO100F_RELIGHT");
     if (path == nullptr || *path == '\0') return;
@@ -347,8 +374,13 @@ void LoadReimaginedMoves() {
         std::istringstream ls(line.substr(0, line.find('#')));
         std::string word, id;
         ReimaginedMove m;
-        if (!(ls >> word >> id) || (word != "move" && word != "shift") || !(ls >> m.pos[0] >> m.pos[1] >> m.pos[2]))
+        if (!(ls >> word >> id)) continue;
+        if (word == "moontex") {
+            std::string file;
+            if (ls >> file) AddReimaginedTextureSource(file);
             continue;
+        }
+        if ((word != "move" && word != "shift") || !(ls >> m.pos[0] >> m.pos[1] >> m.pos[2])) continue;
         m.shift = word == "shift";
         m.id = static_cast<uint32_t>(std::strtoul(id.c_str(), nullptr, 16));
         m.hasYaw = static_cast<bool>(ls >> m.yaw);
