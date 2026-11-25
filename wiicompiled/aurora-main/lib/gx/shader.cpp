@@ -810,11 +810,22 @@ auto lighting_func(const ShaderConfig& config, const ColorChannelConfig& cc, u8 
     posVar = "mv_pos"sv;
   }
   std::string ambSrc, matSrc;
+  // Relighting experiment (NO100F_RELIGHT_FLAT=1): perspective draws (proj[3][3] == 0) take white instead of their
+  // vertex colours, which hold the game's baked lighting; alpha is kept. Shows what the textures look like unlit.
+  static const bool relightFlat = [] {
+    const char* v = std::getenv("NO100F_RELIGHT_FLAT");
+    return v != nullptr && *v != '\0' && std::string_view(v) != "0";
+  }();
+  const auto vertexColor = [&]() -> std::string {
+    std::string vc = vertex_color_attr(config, i);
+    if (!relightFlat || alpha) return vc;
+    return fmt::format("select({0}, vec4f(vec3f(1.0), {0}.a), ubuf.proj[3][3] == 0.0)", vc);
+  };
   if (cc.ambSrc == GX_SRC_VTX) {
     if (UsePerPixelLighting) {
       ambSrc = fmt::format("in.clr{}", i);
     } else {
-      ambSrc = vertex_color_attr(config, i);
+      ambSrc = vertexColor();
     }
   } else if (cc.ambSrc == GX_SRC_REG) {
     ambSrc = fmt::format("ubuf.cc{0}{1}_amb", i, alpha ? "a"sv : ""sv);
@@ -823,7 +834,7 @@ auto lighting_func(const ShaderConfig& config, const ColorChannelConfig& cc, u8 
     if (UsePerPixelLighting) {
       matSrc = fmt::format("in.clr{}", i);
     } else {
-      matSrc = vertex_color_attr(config, i);
+      matSrc = vertexColor();
     }
   } else if (cc.matSrc == GX_SRC_REG) {
     matSrc = fmt::format("ubuf.cc{0}{1}_mat", i, alpha ? "a"sv : ""sv);
