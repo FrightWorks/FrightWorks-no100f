@@ -897,6 +897,7 @@ void resolve_pass(TextureHandle texture, ClipRect rect, bool clearColor, bool cl
         .depth = clearDepthValue,
         .useScissor = !clearFullTarget,
         .scissor = rect,
+        .clearsColor = clearColor,
     });
   }
   push_command(CommandType::SetViewport, Command::Data{.setViewport = g_cachedViewport});
@@ -1614,9 +1615,15 @@ static const char* render_pass_label(u32 index) noexcept {
 
 // `onlyLight`: only the draws that sample a light texture (gx::DrawData::emitsLight), for the bloom.
 // `shadow`: only the draws with a moon shadow copy, with it, ignoring the game's viewports and clears.
+// Reimagined: where the night sky is drawn (after command `afterCommand` of the pass's command list; -1 = first).
+struct SkyInsert {
+  int64_t afterCommand = -1;
+  const scene_stage::Camera* camera = nullptr;
+  bool motion = false;
+};
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& passes, u32 idx,
                              int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight = false,
-                             bool shadow = false);
+                             bool shadow = false, const SkyInsert* sky = nullptr);
 
 // The bloom (bloom.hpp), at the scene stage: the frame's light draws up to the end of its see-through tail
 // (gx::DrawData::emitsLight, in the EFB passes before `afterPass`, the pass after the tail) are drawn once more, alone
@@ -1754,6 +1761,47 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
     if (renderPasses[i].afterTailBefore && sceneStagePass != UINT32_MAX && afterTailPass == UINT32_MAX)
       afterTailPass = i;
   }
+  // Reimagined: the night sky goes right after the scene's EFB colour clear (the last one before the stage: a pass's
+  // load op, or the game's scissored clear draw at a copy).
+  u32 skyPass = UINT32_MAX;
+  SkyInsert skyInsert{};
+  if (sceneStagePass != UINT32_MAX && scene_stage::sky_wanted(renderPasses[sceneStagePass].sceneCamera)) {
+    skyInsert.camera = &renderPasses[sceneStagePass].sceneCamera;
+    for (u32 i = 0; i < sceneStagePass; ++i) {
+      if (renderPasses[i].colorView.Get() != renderPasses[sceneStagePass].colorView.Get()) continue;
+      if (renderPasses[i].clearColor) {
+        skyPass = i;
+        skyInsert.afterCommand = -1;
+      }
+      const auto& cmds = renderPasses[i].commands;
+      for (size_t c = 0; c < cmds.size(); ++c) {
+        if (cmds[c].type == CommandType::Draw && cmds[c].data.draw.type == ShaderType::Clear &&
+            cmds[c].data.draw.clear.clearsColor) {
+          skyPass = i;
+          skyInsert.afterCommand = static_cast<int64_t>(c);
+        }
+      }
+    }
+    // The game's own frame clear (h002: a full-screen ortho quad in the fog colour, first in the frame) wins.
+    for (u32 i = 0; i < sceneStagePass; ++i) {
+      if (renderPasses[i].colorView.Get() != renderPasses[sceneStagePass].colorView.Get()) continue;
+      const auto& cmds = renderPasses[i].commands;
+      size_t c = 0;
+      while (c < cmds.size() && !(cmds[c].type == CommandType::Draw && cmds[c].data.draw.type == ShaderType::GX &&
+                                  cmds[c].data.draw.gx.clearQuad))
+        ++c;
+      if (c < cmds.size()) {
+        skyPass = i;
+        skyInsert.afterCommand = static_cast<int64_t>(c);
+        break;
+      }
+    }
+    if (skyPass == UINT32_MAX) {  // no clear this frame: the start of the frame's first EFB pass
+      for (u32 i = 0; i < sceneStagePass && skyPass == UINT32_MAX; ++i)
+        if (renderPasses[i].colorView.Get() == renderPasses[sceneStagePass].colorView.Get()) skyPass = i;
+      skyInsert.afterCommand = -1;
+    }
+  }
   for (u32 i = 0; i < renderPasses.size(); ++i) {
     sort_particle_draws(renderPasses[i].translucent);
     const auto& passInfo = renderPasses[i];
@@ -1838,7 +1886,9 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
     };
 
     auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
-    render_pass_impl(pass, renderPasses, i, interpolatedFrame, debugFrame);
+    skyInsert.motion = motionPass;
+    render_pass_impl(pass, renderPasses, i, interpolatedFrame, debugFrame, false, false,
+                     i == skyPass ? &skyInsert : nullptr);
     pass.End();
 
     if (finalize && i == renderPasses.size() - 1) {
@@ -2002,10 +2052,22 @@ void after_submit() noexcept {
 }
 
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& renderPasses, u32 idx,
-                             int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight, bool shadow) {
+                             int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight, bool shadow,
+                             const SkyInsert* sky) {
   // Per-invocation, not per-process: two encoders can be recording at once.
   gx::DrawEncodeState encodeState{};
   encodeState.boundTextureBindGroup = gx::g_emptyTextureBindGroup.Get();
+  // Reimagined: the sky, then the pass's own state put back (the clear before it left the full viewport).
+  const auto drawSky = [&] {
+    const auto& size = renderPasses[idx].targetSize;
+    scene_stage::encode_sky(pass, *sky->camera, size, renderPasses[idx].msaaSamples, sky->motion);
+    pass.SetViewport(0.f, 0.f, static_cast<float>(size.width), static_cast<float>(size.height), 0.f, 1.f);
+    pass.SetBindGroup(0, g_staticBindGroup);
+    pass.SetBindGroup(2, gx::g_emptyTextureBindGroup);
+    encodeState = {};
+    encodeState.boundTextureBindGroup = gx::g_emptyTextureBindGroup.Get();
+  };
+  int64_t commandIndex = -1;
 #ifdef AURORA_GFX_DEBUG_GROUPS
   std::vector<std::string> lastDebugGroupStack;
 #endif
@@ -2015,8 +2077,12 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
   pass.SetBindGroup(2, gx::g_emptyTextureBindGroup);
 
   const auto& passCommands = renderPasses[idx];
+  if (sky != nullptr && sky->afterCommand < 0) drawSky();
   for (const CommandList* list : {&passCommands.commands, &passCommands.deferred, &passCommands.translucent})
   for (const auto& cmd : *list) {
+    if (sky != nullptr && list == &passCommands.commands && commandIndex >= 0 && commandIndex == sky->afterCommand)
+      drawSky();
+    if (list == &passCommands.commands) ++commandIndex;
 #ifdef AURORA_GFX_DEBUG_GROUPS
     {
       size_t firstDiff = lastDebugGroupStack.size();

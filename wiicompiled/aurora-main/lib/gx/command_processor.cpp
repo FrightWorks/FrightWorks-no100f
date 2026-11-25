@@ -2292,9 +2292,10 @@ static const CachedPipelineState& cached_pipeline_state(const PipelineConfig& co
 enum class PipelineVariant : u8 { Game, CutoutSolid, CutoutFringe };
 // `unlit`: relighting experiment, a draw of one of the light file's unlit textures (the sky band, painted backdrops):
 // it keeps its baked colours and writes no depth, so the stage leaves its pixels as drawn and it casts no shadow.
+// `opaque`: Reimagined, a draw of one of the file's opaque textures: drawn without blending (no fading).
 static const CachedPipelineState& resolve_pipeline_state(GXPrimitive prim, GXVtxFmt fmt,
                                                          PipelineVariant variant = PipelineVariant::Game,
-                                                         bool unlit = false) {
+                                                         bool unlit = false, bool opaque = false) {
   struct Memo {
     const CachedPipelineState* state = nullptr;
     u32 generation = 0;
@@ -2303,8 +2304,8 @@ static const CachedPipelineState& resolve_pipeline_state(GXPrimitive prim, GXVtx
     GXVtxFmt fmt = static_cast<GXVtxFmt>(0);
     unsigned relightGeneration = 0;
   };
-  static Memo memos[6]{};
-  Memo& memo = memos[static_cast<u8>(variant) + (unlit ? 3 : 0)];
+  static Memo memos[12]{};
+  Memo& memo = memos[static_cast<u8>(variant) + (unlit ? 3 : 0) + (opaque ? 6 : 0)];
 
   const u32 sampleCount = gfx::get_sample_count();
   const u32 generation = g_gxState.pipelineStateGeneration;
@@ -2324,6 +2325,9 @@ static const CachedPipelineState& resolve_pipeline_state(GXPrimitive prim, GXVtx
   if (unlit && config.shaderConfig.relight) {
     config.shaderConfig.relight = 0;
     config.depthUpdate = false;
+  }
+  if (opaque) {
+    config.blendMode = GX_BM_NONE;
   }
   // cached_pipeline_state hands back a reference into a fixed direct-mapped table, so the address stays valid; the entry it points at can only be rewritten by another call to that function, and every such call goes through this miss path and replaces the memo in the same breath.
   const CachedPipelineState& state = cached_pipeline_state(config);
@@ -3416,6 +3420,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   resolve_sampled_textures(pipelineStatePtr->shaderInfo);
   log_lighting_probe(pipelineStatePtr->shaderInfo, prim, vtxCount);
   bool unlit = false;
+  bool opaque = false;
   if (gfx::scene_stage::relighting()) {
     if (draws_game_shadow(pipelineStatePtr->shaderInfo) ||
         samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_hidden_texture)) {
@@ -3423,8 +3428,9 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
     }
     unlit = pipelineStatePtr->shaderInfo.relight &&
             samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_unlit_texture);
-    if (unlit) {
-      pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::Game, true);
+    opaque = samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_opaque_texture);
+    if (unlit || opaque) {
+      pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::Game, unlit, opaque);
     }
   }
   // Only the resolved textures tell whether an HD replacement is drawn. The cut-out variants change the alpha test and
@@ -3433,12 +3439,12 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   std::optional<std::pair<decltype(pipelineStatePtr->ref), decltype(pipelineStatePtr->dstAlpha)>> fringe;
   switch (cutout_passes(pipelineStatePtr->shaderInfo)) {
   case CutoutPasses::Cut:
-    pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::CutoutSolid, unlit);
+    pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::CutoutSolid, unlit, opaque);
     break;
   case CutoutPasses::TwoPass: {
-    const auto& fringeState = resolve_pipeline_state(prim, fmt, PipelineVariant::CutoutFringe, unlit);
+    const auto& fringeState = resolve_pipeline_state(prim, fmt, PipelineVariant::CutoutFringe, unlit, opaque);
     fringe.emplace(fringeState.ref, fringeState.dstAlpha);
-    pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::CutoutSolid, unlit);
+    pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::CutoutSolid, unlit, opaque);
     break;
   }
   default:
@@ -3496,6 +3502,8 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
       .dstAlpha = pipelineState.dstAlpha,
       .emitsLight = samples_light_texture(info),
       .shadowUniformRange = uniformRanges.shadow,
+      .clearQuad = g_gxState.projType == GX_ORTHOGRAPHIC && g_gxState.depthUpdate && vtxCount == 4 &&
+                   info.sampledTextures.none() && gfx::scene_stage::relighting(),
   };
   const auto cutoutMode = cutout_mode();
   const bool enhancedCutouts = cutoutMode == CutoutMode::TwoPass || cutoutMode == CutoutMode::TwoPassAll;

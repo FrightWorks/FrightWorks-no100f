@@ -264,9 +264,10 @@ float aurora_get_motion_vector_view_scale();
 #define AURORA_HAS_SCENE_STAGE 1
 void aurora_set_scene_stage_view(int mode);
 int aurora_get_scene_stage_view();
-// Relighting experiment (NO100F_RELIGHT=<light file>): 0 off, 1 on, 2 reload the light file. Get: -1 = no light file.
-void aurora_set_relight(int mode);
-int aurora_get_relight();
+// Reimagined (experiment; NO100F_REIMAGINED=<file>, or NO100F_RELIGHT): new lighting, moon shadows, sky and the file's
+// texture rules. 0 off, 1 on, 2 reload the file. Get: -1 = no file.
+void aurora_set_reimagined(int mode);
+int aurora_get_reimagined();
 void aurora_set_ambient_occlusion(float strength);
 float aurora_get_ambient_occlusion();
 // Cartoon ink outlines on the solid scene: 0 = off, 1 = thin (silhouettes), 2 = bold (thicker, sharp creases too);

@@ -270,7 +270,7 @@ def shots(views_text: str, reload: bool, light_file: Path | None, grid: tuple[in
         if parts:
             views.append((parts[0], parts[1:]))
     if reload:
-        dev_command("relight reload", 1.0)
+        dev_command("reimagined reload", 1.0)
     log = REPO / "Play" / "devmenu.log"
     summary = []
     for name, cam in views:
@@ -278,12 +278,12 @@ def shots(views_text: str, reload: bool, light_file: Path | None, grid: tuple[in
             dev_command("cam " + " ".join(cam), 1.5)
         else:
             dev_command("freecam off", 1.5)  # the game's own camera
-        dev_command("relight 0", 1.5)
+        dev_command("reimagined 0", 1.5)
         base = shot(f"rl-{name}-game")
-        dev_command("relight 1", 1.5)
+        dev_command("reimagined 1", 1.5)
         test = shot(f"rl-{name}-relit")
-        if log.exists() and "relight on" not in log.read_text(errors="replace").splitlines()[-1]:
-            sys.exit("shots: relighting did not turn on (is NO100F_RELIGHT set for this run?)")
+        if log.exists() and "reimagined on" not in log.read_text(errors="replace").splitlines()[-1]:
+            sys.exit("shots: Reimagined did not turn on (is NO100F_REIMAGINED set for this run?)")
         summary.append((name, compare(base, test, light_file, grid)))
     print("\n=== all views (relit vs game)")
     for name, result in summary:

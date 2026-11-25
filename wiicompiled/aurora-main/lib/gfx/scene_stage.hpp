@@ -76,6 +76,8 @@ unsigned relight_generation() noexcept;
 bool is_unlit_texture(const std::string& key) noexcept;
 // The light file's hidden textures ("hide KEY"): draws that sample one are skipped (painted shadow decals).
 bool is_hidden_texture(const std::string& key) noexcept;
+// The file's opaque textures ("opaque KEY"): drawn without blending, so the game can't fade them.
+bool is_opaque_texture(const std::string& key) noexcept;
 
 // Moon shadows: the solid scene is drawn a second time from the moon into a depth map, before the stage. Each solid
 // draw gets a copy of its uniforms (shader_info.cpp build_uniform), whose projection is replaced, once the frame's
@@ -93,6 +95,13 @@ struct ShadowTargets {
   uint32_t size = 0;
 };
 const ShadowTargets& shadow_targets(uint32_t samples, bool motion);
+
+// The light file's night sky ("sky", "moondisc", "stars"): drawn over the whole EFB at the start of the scene's pass
+// (right after its clear, before the game draws anything), from the stage camera; the game's draws cover it.
+// `motion`: the pass has the motion targets (left alone).
+bool sky_wanted(const Camera& camera) noexcept;
+void encode_sky(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size, uint32_t samples,
+                bool motion);
 
 // The stage itself, encoded between the two EFB passes: draws over `color` (the EFB, `samples` per pixel, `size`),
 // reading `depth` (its depth buffer).

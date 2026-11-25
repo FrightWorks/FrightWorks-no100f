@@ -12,6 +12,7 @@ struct DrawData {
   float depth = 0.f;
   bool useScissor = false;
   ClipRect scissor{};
+  bool clearsColor = false;  // an EFB colour clear (the Reimagined sky goes right after the scene's)
 };
 
 constexpr uint32_t ClearPipelineConfigVersion = 3;

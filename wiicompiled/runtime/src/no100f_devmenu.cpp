@@ -274,6 +274,129 @@ uint32_t CurrentScenePtr() {
     const uint32_t scene = Read32Or0(kSceneCurPtr);
     return IsGuestPtr(scene) ? scene : 0;
 }
+bool InPlay();
+uint64_t g_reimaginedToastUntil = 0;
+
+// Reimagined experiment: the file's entity moves ("move ID X Y Z [YAW]", ID in hex, YAW in degrees, 0 = facing +z).
+// While Reimagined is on and the game is in play, the entity's frame is held there every frame (its AI does not
+// move it back); turned off, or before the file is reloaded, it goes back to where it was when first moved.
+struct ReimaginedMove {
+    uint32_t id = 0;
+    float pos[3] = {};
+    bool hasYaw = false;
+    float yaw = 0.f;
+    uint32_t scene = 0;
+    uint32_t base = 0;
+    bool moved = false;
+    std::vector<uint32_t> mats;      // the frame's matrix and each model instance's (+0x2C list, matrix +0x20)
+    std::vector<float> original;     // 12 floats per matrix
+};
+
+// The matrices that place an entity: its frame's (+0x40) and its model instances' (they aren't rebuilt from the frame
+// while the entity stands still, so both are written).
+std::vector<uint32_t> EntityMatrices(uint32_t base) {
+    std::vector<uint32_t> mats;
+    const uint32_t frame = Read32Or0(base + 0x40);
+    if (IsGuestPtr(frame)) mats.push_back(frame);
+    uint32_t inst = Read32Or0(base + 0x2C);
+    for (int n = 0; IsGuestPtr(inst) && n < 16; ++n, inst = Read32Or0(inst)) {
+        const uint32_t m = Read32Or0(inst + 0x20);
+        if (IsGuestPtr(m) && m != frame) mats.push_back(m);
+    }
+    return mats;
+}
+std::vector<ReimaginedMove> g_reimaginedMoves;
+bool g_reimaginedMovesLoaded = false;
+
+void LoadReimaginedMoves() {
+    g_reimaginedMoves.clear();
+    g_reimaginedMovesLoaded = true;
+    const char* path = std::getenv("NO100F_REIMAGINED");
+    if (path == nullptr || *path == '\0') path = std::getenv("NO100F_RELIGHT");
+    if (path == nullptr || *path == '\0') return;
+    std::ifstream in(path);
+    for (std::string line; std::getline(in, line);) {
+        std::istringstream ls(line.substr(0, line.find('#')));
+        std::string word, id;
+        ReimaginedMove m;
+        if (!(ls >> word >> id) || word != "move" || !(ls >> m.pos[0] >> m.pos[1] >> m.pos[2])) continue;
+        m.id = static_cast<uint32_t>(std::strtoul(id.c_str(), nullptr, 16));
+        m.hasYaw = static_cast<bool>(ls >> m.yaw);
+        g_reimaginedMoves.push_back(m);
+    }
+    RT_LOGF(RT_TAG_RUNTIME, "[devmenu] reimagined: %zu entity moves\n", g_reimaginedMoves.size());
+}
+
+void RestoreReimaginedMove(ReimaginedMove& m) {
+    if (m.moved)
+        for (size_t i = 0; i < m.mats.size(); ++i)
+            for (uint32_t k = 0; k < 12; ++k) WriteF(m.mats[i] + (k / 3) * 0x10 + (k % 3) * 4, m.original[i * 12 + k]);
+    if (m.moved && m.base) {
+        const uint32_t frame = Read32Or0(m.base + 0x40);
+        if (IsGuestPtr(frame) && !m.original.empty())
+            for (uint32_t k = 0; k < 3; ++k) WriteF(frame + 0x80 + k * 4, m.original[9 + k]);
+    }
+    m.moved = false;
+}
+
+void ReloadReimaginedMoves() {
+    for (auto& m : g_reimaginedMoves) RestoreReimaginedMove(m);
+    LoadReimaginedMoves();
+}
+
+void UpdateReimagined() {
+    if (!g_reimaginedMovesLoaded) LoadReimaginedMoves();
+    if (g_reimaginedMoves.empty()) return;
+    const bool on = aurora_get_reimagined() == 1;
+    const uint32_t scene = CurrentScenePtr();
+    for (auto& m : g_reimaginedMoves) {
+        if (m.scene != scene) {  // another level (or none): its entities are gone
+            m.scene = scene;
+            m.base = 0;
+            m.moved = false;
+        }
+        if (!scene || !InPlay()) continue;
+        if (m.base == 0) {
+            const uint32_t list = Read32Or0(scene + 0x78), count = Read32Or0(scene + 0x74);
+            for (uint32_t i = 0; IsGuestPtr(list) && i < count && i < 4000; ++i) {
+                const uint32_t base = Read32Or0(list + i * 4);
+                if (IsGuestPtr(base) && Read32Or0(base) == m.id) {
+                    m.base = base;
+                    break;
+                }
+            }
+            if (m.base == 0) continue;
+        }
+        const uint32_t frame = Read32Or0(m.base + 0x40);
+        if (!IsGuestPtr(frame)) continue;
+        if (!on) {
+            RestoreReimaginedMove(m);
+            continue;
+        }
+        if (!m.moved) {
+            m.mats = EntityMatrices(m.base);
+            m.original.assign(m.mats.size() * 12, 0.f);
+            for (size_t i = 0; i < m.mats.size(); ++i)
+                for (uint32_t k = 0; k < 12; ++k) m.original[i * 12 + k] = ReadF(m.mats[i] + (k / 3) * 0x10 + (k % 3) * 4);
+            m.moved = true;
+        }
+        for (size_t i = 0; i < m.mats.size(); ++i) {
+            const uint32_t mat = m.mats[i];
+            if (m.hasYaw) {  // rows right, up, at; their lengths (scale) kept
+                const float a = m.yaw * 3.14159265f / 180.0f, s = std::sin(a), c = std::cos(a);
+                const float rows[3][3] = {{c, 0.f, -s}, {0.f, 1.f, 0.f}, {s, 0.f, c}};
+                for (uint32_t r = 0; r < 3; ++r) {
+                    const float* o = m.original.data() + i * 12 + r * 3;
+                    const float len = std::sqrt(o[0] * o[0] + o[1] * o[1] + o[2] * o[2]);
+                    for (uint32_t k = 0; k < 3; ++k) WriteF(mat + r * 0x10 + k * 4, rows[r][k] * len);
+                }
+            }
+            for (uint32_t k = 0; k < 3; ++k) WriteF(mat + 0x30 + k * 4, m.pos[k]);
+        }
+        for (uint32_t k = 0; k < 3; ++k) WriteF(frame + 0x80 + k * 4, m.pos[k]);  // previous position: no blur/lerp
+    }
+}
+
 uint32_t CurrentSceneId() {
     const uint32_t scene = CurrentScenePtr();
     return scene ? Read32Or0(scene + 0x6C) : 0;
@@ -1521,11 +1644,13 @@ void PollCommandFile() {
         } else if (cmd == "stageview") {
             aurora_set_scene_stage_view(std::atoi(arg.c_str()));
             g_status = "scene stage view " + std::to_string(aurora_get_scene_stage_view());
-        } else if (cmd == "relight") {  // relighting experiment: relight 0 | 1 | reload
-            aurora_set_relight(arg == "reload" ? 2 : std::atoi(arg.c_str()));
-            const int state = aurora_get_relight();
-            g_status = state < 0 ? "relight: no light file (NO100F_RELIGHT)"
-                                 : std::string("relight ") + (state ? "on" : "off") + (arg == "reload" ? " (reloaded)" : "");
+        } else if (cmd == "reimagined" || cmd == "relight") {  // Reimagined experiment: 0 | 1 | reload
+            if (arg == "reload") ReloadReimaginedMoves();
+            aurora_set_reimagined(arg == "reload" ? 2 : std::atoi(arg.c_str()));
+            const int state = aurora_get_reimagined();
+            g_status = state < 0 ? "reimagined: no file (NO100F_REIMAGINED)"
+                                 : std::string("reimagined ") + (state ? "on" : "off") +
+                                       (arg == "reload" ? " (reloaded)" : "");
         } else if (cmd == "ao") {
             aurora_set_ambient_occlusion(static_cast<float>(std::atoi(arg.c_str())) / 100.0f);
             g_status = "ambient occlusion " + std::to_string(static_cast<int>(aurora_get_ambient_occlusion() * 100.0f + 0.5f)) + "%";
@@ -2122,6 +2247,24 @@ void DrawFindToast() {
 // F7 (branches with aurora's cut-out modes): cycle the mode, shown for 2 s at the bottom of the screen.
 uint64_t g_cutoutToastUntil = 0;
 
+// F6 (Reimagined experiment): shown for 2 s at the bottom of the screen.
+void DrawReimaginedToast() {
+#ifdef AURORA_HAS_SCENE_STAGE
+    if (SDL_GetTicks() >= g_reimaginedToastUntil) return;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y - 120.0f),
+                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.75f);
+    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
+                                        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
+                                        ImGuiWindowFlags_NoDocking;
+    if (ImGui::Begin("##devmenu_reimagined", nullptr, kFlags))
+        ImGui::Text("Reimagined: %s", aurora_get_reimagined() == 1 ? "on" : "off");
+    ImGui::End();
+#endif
+}
+
 void CycleCutoutMode() {
 #ifdef AURORA_HAS_CUTOUT_MODE
     aurora_set_cutout_mode((aurora_get_cutout_mode() + 1) % 4);
@@ -2256,11 +2399,12 @@ void HandleSdlEvent(const SDL_Event& event, bool settingsOpen) noexcept {
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F8) g_open = !g_open;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F7) CycleCutoutMode();
 #ifdef AURORA_HAS_SCENE_STAGE
-    // Relighting experiment: F6 switches between the game's lighting and the light file's (NO100F_RELIGHT).
+    // Reimagined experiment: F6 switches between the game as made and Reimagined (NO100F_REIMAGINED).
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F6 &&
-        aurora_get_relight() >= 0) {
-        aurora_set_relight(aurora_get_relight() == 1 ? 0 : 1);
-        RT_LOGF(RT_TAG_RUNTIME, "[devmenu] F6: relight %s\n", aurora_get_relight() == 1 ? "on" : "off");
+        aurora_get_reimagined() >= 0) {
+        aurora_set_reimagined(aurora_get_reimagined() == 1 ? 0 : 1);
+        g_reimaginedToastUntil = SDL_GetTicks() + 2000;
+        RT_LOGF(RT_TAG_RUNTIME, "[devmenu] F6: reimagined %s\n", aurora_get_reimagined() == 1 ? "on" : "off");
     }
 #endif
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F3)
@@ -2345,11 +2489,13 @@ void Draw() noexcept {
     ObservePlayerEdits();
     UpdateGod();
     UpdateMonsters();
+    UpdateReimagined();
     PollCommandFile();
     UpdateDrawn();
     UpdateTexLog();
     DrawFindToast();
     DrawCutoutToast();
+    DrawReimaginedToast();
     UpdateFreecam(g_open && g_focused);
     g_focused = false;
     if (!g_open) {

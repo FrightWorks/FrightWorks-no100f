@@ -69,6 +69,11 @@ Camera g_camera;
 //   shadow RADIUS SIZE BIAS      (moon shadows within RADIUS units round the view, SIZE texels; RADIUS 0 = none)
 //   unlit KEY                    (a texture drawn as the game draws it: the sky band, painted backdrops)
 //   hide KEY                     (a texture not drawn at all: the game's painted shadow decals)
+//   opaque KEY                   (a texture drawn solid, never blended: trees the game fades near the camera)
+//   move ID X Y Z [YAW]          (read by the runtime: an entity moved there, no100f_devmenu.cpp)
+//   sky ZR ZG ZB HR HG HB        (a night sky behind everything: zenith and horizon colours; hide the game's band)
+//   moondisc RADIUS_DEG R G B    (the moon drawn in the sky at the moon's direction; radius 0 = none)
+//   stars DENSITY                (0 to about 0.1)
 constexpr size_t kMaxRelightLights = 32;
 struct RelightLight {
   float pos[3];
@@ -90,11 +95,19 @@ struct RelightScene {
   std::vector<RelightLight> lights;
   std::unordered_set<std::string> unlit;
   std::unordered_set<std::string> hidden;
+  std::unordered_set<std::string> opaque;
+  bool hasSky = false;
+  float skyZenith[3] = {0.02f, 0.035f, 0.07f};
+  float skyHorizon[3] = {0.08f, 0.2f, 0.19f};
+  float moonRadiusDeg = 2.0f;
+  float moonDisc[3] = {0.93f, 0.93f, 0.86f};
+  float starDensity = 0.035f;
 };
 
 RelightScene load_relight_scene() {
     RelightScene s;
-    const char* path = std::getenv("NO100F_RELIGHT");
+    const char* path = std::getenv("NO100F_REIMAGINED");
+    if (path == nullptr || *path == '\0') path = std::getenv("NO100F_RELIGHT");
     if (path == nullptr || *path == '\0') {
       return s;
     }
@@ -120,6 +133,10 @@ RelightScene load_relight_scene() {
         s.hidden.emplace(key);
         continue;
       }
+      if (w == "opaque" && std::sscanf(line, "%15s %127s", word, key) == 2) {
+        s.opaque.emplace(key);
+        continue;
+      }
       if (w == "ambient" && n >= 4) {
         std::copy(v, v + 3, s.ambient);
       } else if (w == "moon" && n >= 7) {
@@ -138,6 +155,15 @@ RelightScene load_relight_scene() {
         s.shadowRadius = std::max(v[0], 0.f);
         if (n >= 3) s.shadowSize = static_cast<uint32_t>(std::clamp(v[1], 256.f, 8192.f));
         if (n >= 4) s.shadowBias = v[2];
+      } else if (w == "sky" && n >= 7) {
+        s.hasSky = true;
+        std::copy(v, v + 3, s.skyZenith);
+        std::copy(v + 3, v + 6, s.skyHorizon);
+      } else if (w == "moondisc" && n >= 5) {
+        s.moonRadiusDeg = std::max(v[0], 0.f);
+        std::copy(v + 1, v + 4, s.moonDisc);
+      } else if (w == "stars" && n >= 2) {
+        s.starDensity = std::clamp(v[0], 0.f, 0.5f);
       } else if (w == "far" && n >= 3 && v[1] > v[0]) {
         s.fadeNear = v[0];
         s.fadeFar = v[1];
@@ -145,8 +171,9 @@ RelightScene load_relight_scene() {
     }
     std::fclose(f);
     s.loaded = true;
-    Log.info("Relight: {} lights, moon {}, {} unlit and {} hidden textures, from {}", s.lights.size(),
-             s.hasMoon ? "on" : "off", s.unlit.size(), s.hidden.size(), path);
+    Log.info("Reimagined: {} lights, moon {}, {} unlit, {} hidden and {} opaque textures, sky {}, from {}",
+             s.lights.size(), s.hasMoon ? "on" : "off", s.unlit.size(), s.hidden.size(), s.opaque.size(),
+             s.hasSky ? "on" : "off", path);
     return s;
 }
 
@@ -790,9 +817,112 @@ bool is_unlit_texture(const std::string& key) noexcept {
   return !key.empty() && unlit.contains(key);
 }
 
+constexpr char kSkyWgsl[] = R"WGSL(
+struct Sky {
+    rot0: vec4f,       // view direction to world: world.x = dot(rot0.xyz, v), ...
+    rot1: vec4f,
+    rot2: vec4f,
+    proj: vec4f,       // 1/P00, 1/P11, P02, P12
+    viewport: vec4f,   // left, top, width, height (EFB pixels)
+    zenith: vec4f,
+    horizon: vec4f,
+    moon_dir: vec4f,   // toward the moon; w = angular radius (radians), 0 = no moon
+    moon_color: vec4f, // the disc; w = star density
+};
+@group(0) @binding(0) var<uniform> sky: Sky;
+
+@vertex
+fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+    let uv = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+    return vec4f(uv * 2.0 - 1.0, 0.0, 1.0);
+}
+
+fn hash3(p: vec3f) -> f32 {
+    return fract(sin(dot(p, vec3f(127.1, 311.7, 74.7))) * 43758.5453);
+}
+fn hash2(p: vec2f) -> f32 {
+    return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+}
+fn noise2(p: vec2f) -> f32 {
+    let i = floor(p);
+    let f = p - i;
+    let u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), u.x),
+               mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), u.x), u.y);
+}
+fn fbm2(p: vec2f) -> f32 {
+    return 0.5 * noise2(p) + 0.25 * noise2(p * 2.03 + 1.7) + 0.125 * noise2(p * 4.01 + 3.1) + 0.0625 * noise2(p * 8.1);
+}
+
+@fragment
+fn fs_sky(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let ndc = vec2f((pos.x - sky.viewport.x) / sky.viewport.z * 2.0 - 1.0,
+                    1.0 - (pos.y - sky.viewport.y) / sky.viewport.w * 2.0);
+    let v = vec3f((ndc.x + sky.proj.z) * sky.proj.x, (ndc.y + sky.proj.w) * sky.proj.y, -1.0);
+    let d = normalize(vec3f(dot(sky.rot0.xyz, v), dot(sky.rot1.xyz, v), dot(sky.rot2.xyz, v)));
+    let h = d.y;
+
+    // Horizon to zenith.
+    var col = mix(sky.horizon.rgb, sky.zenith.rgb, smoothstep(-0.02, 0.65, h));
+    col *= select(1.0, 0.75, h < 0.0);
+
+    // Stars: one possible star per cell of a fine grid on the sphere's directions.
+    let density = sky.moon_color.w;
+    let sp = d * 260.0;
+    let cell = floor(sp);
+    let pick = hash3(cell);
+    if (pick > 1.0 - density) {
+        let jitter = vec3f(hash3(cell + 1.3), hash3(cell + 7.1), hash3(cell + 3.7));
+        let star = cell + 0.25 + 0.5 * jitter;
+        let size = 0.18 + 0.22 * hash3(cell + 11.0);
+        let bright = 0.35 + 0.65 * hash3(cell + 5.0);
+        let s = (1.0 - smoothstep(0.0, size, length(sp - star))) * bright * smoothstep(0.03, 0.3, h);
+        col += vec3f(0.85, 0.9, 1.0) * s;
+    }
+
+    // The moon: a disc with soft limb darkening and darker patches, and its glow.
+    let r = sky.moon_dir.w;
+    if (r > 0.0) {
+        let m = sky.moon_dir.xyz;
+        let c = clamp(dot(d, m), -1.0, 1.0);
+        let angle = acos(c);
+        let halo = exp(-max(angle - r, 0.0) / (r * 2.0)) * 0.30 + exp(-angle / 0.30) * 0.07;
+        col += sky.moon_color.rgb * vec3f(0.75, 0.82, 1.0) * halo;
+        if (angle < r * 1.05) {
+            let t1 = normalize(cross(select(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), abs(m.y) > 0.99), m));
+            let t2 = cross(m, t1);
+            let q = vec2f(dot(d, t1), dot(d, t2)) / sin(r);
+            let limb = sqrt(max(1.0 - dot(q, q), 0.0));
+            let patches = smoothstep(0.42, 0.66, fbm2(q * 2.6 + vec2f(4.0, 9.0)));
+            let shade = (0.78 + 0.22 * limb) * (1.0 - 0.22 * patches);
+            let disc = 1.0 - smoothstep(r * 0.94, r, angle);
+            col = mix(col, sky.moon_color.rgb * shade, disc);
+        }
+    }
+    return vec4f(clamp(col, vec3f(0.0), vec3f(1.0)), 1.0);
+}
+)WGSL";
+
+struct SkyParams {
+  std::array<std::array<float, 4>, 9> v;
+};
+struct SkyPipelines {
+  wgpu::RenderPipeline pipeline;
+  uint32_t samples = 0;
+  bool motion = false;
+  wgpu::TextureFormat format = wgpu::TextureFormat::Undefined;
+};
+SkyPipelines g_sky;
+wgpu::Buffer g_skyParams;
+
 bool is_hidden_texture(const std::string& key) noexcept {
   const auto& hidden = relight_scene().hidden;
   return !key.empty() && hidden.contains(key);
+}
+
+bool is_opaque_texture(const std::string& key) noexcept {
+  const auto& opaque = relight_scene().opaque;
+  return !key.empty() && opaque.contains(key);
 }
 
 bool wanted() noexcept {
@@ -834,6 +964,81 @@ void write_shadow_uniforms(uint8_t* uniforms) noexcept {
 }
 
 void drop_shadow_uniforms() noexcept { g_shadowOffsets.clear(); }
+
+bool sky_wanted(const Camera& camera) noexcept {
+  return relighting() && relight_scene().hasSky && camera.hasView;
+}
+
+void encode_sky(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size, uint32_t samples,
+                bool motion) {
+  if (!sky_wanted(camera)) return;
+  const auto& scene = relight_scene();
+  const auto format = webgpu::g_graphicsConfig.surfaceConfiguration.format;
+  if (!g_sky.pipeline || g_sky.samples != samples || g_sky.motion != motion || g_sky.format != format) {
+    wgpu::ShaderSourceWGSL wgsl{};
+    wgsl.code = kSkyWgsl;
+    const wgpu::ShaderModuleDescriptor moduleDescriptor{.nextInChain = &wgsl, .label = "Relight sky"};
+    const auto module = g_device.CreateShaderModule(&moduleDescriptor);
+    // The EFB pass's targets: the EFB (colour only, never its alpha) and, with motion vectors, three it leaves alone.
+    const std::array targets{
+        wgpu::ColorTargetState{.format = format,
+                               .writeMask = wgpu::ColorWriteMask::Red | wgpu::ColorWriteMask::Green |
+                                            wgpu::ColorWriteMask::Blue},
+        wgpu::ColorTargetState{.format = wgpu::TextureFormat::RG16Float, .writeMask = wgpu::ColorWriteMask::None},
+        wgpu::ColorTargetState{.format = wgpu::TextureFormat::R32Float, .writeMask = wgpu::ColorWriteMask::None},
+        wgpu::ColorTargetState{.format = wgpu::TextureFormat::R8Unorm, .writeMask = wgpu::ColorWriteMask::None},
+    };
+    const wgpu::FragmentState fragment{
+        .module = module, .entryPoint = "fs_sky", .targetCount = motion ? targets.size() : 1, .targets = targets.data()};
+    const wgpu::DepthStencilState depthStencil{
+        .format = webgpu::g_graphicsConfig.depthFormat,
+        .depthWriteEnabled = false,
+        .depthCompare = wgpu::CompareFunction::Always,
+    };
+    const wgpu::RenderPipelineDescriptor descriptor{
+        .label = "Relight sky",
+        .vertex = {.module = module, .entryPoint = "vs_main"},
+        .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
+        .depthStencil = &depthStencil,
+        .multisample = {.count = samples},
+        .fragment = &fragment,
+    };
+    g_sky.pipeline = g_device.CreateRenderPipeline(&descriptor);
+    g_sky.samples = samples;
+    g_sky.motion = motion;
+    g_sky.format = format;
+  }
+  if (!g_skyParams) {
+    const wgpu::BufferDescriptor descriptor{
+        .label = "Relight sky",
+        .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+        .size = sizeof(SkyParams),
+    };
+    g_skyParams = g_device.CreateBuffer(&descriptor);
+  }
+  // View direction to world: R^T (the view matrix's rotation, rows).
+  const auto& v = camera.view;
+  SkyParams p{};
+  for (int i = 0; i < 3; ++i) p.v[i] = {v[0 + i], v[4 + i], v[8 + i], 0.f};
+  const auto& P = camera.projection;
+  p.v[3] = {1.f / P.m0.m[0], 1.f / P.m1.m[1], P.m0.m[2], P.m1.m[2]};
+  const auto& vp = camera.viewport;
+  p.v[4] = {vp.left, vp.top, vp.width, vp.height};
+  p.v[5] = {scene.skyZenith[0], scene.skyZenith[1], scene.skyZenith[2], 0.f};
+  p.v[6] = {scene.skyHorizon[0], scene.skyHorizon[1], scene.skyHorizon[2], 0.f};
+  const float radius = scene.hasMoon ? scene.moonRadiusDeg * 3.14159265f / 180.f : 0.f;
+  p.v[7] = {scene.moonDir[0], scene.moonDir[1], scene.moonDir[2], radius};
+  p.v[8] = {scene.moonDisc[0], scene.moonDisc[1], scene.moonDisc[2], scene.starDensity};
+  g_queue.WriteBuffer(g_skyParams, 0, &p, sizeof(p));
+  const wgpu::BindGroupEntry entry{.binding = 0, .buffer = g_skyParams, .size = sizeof(SkyParams)};
+  const wgpu::BindGroupDescriptor bindGroupDescriptor{
+      .layout = g_sky.pipeline.GetBindGroupLayout(0), .entryCount = 1, .entries = &entry};
+  const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
+  pass.SetViewport(0.f, 0.f, static_cast<float>(size.width), static_cast<float>(size.height), 0.f, 1.f);
+  pass.SetPipeline(g_sky.pipeline);
+  pass.SetBindGroup(0, bindGroup);
+  pass.Draw(3);
+}
 
 const ShadowTargets& shadow_targets(uint32_t samples, bool motion) {
   const uint32_t size = relight_scene().shadowSize;
@@ -1027,6 +1232,8 @@ void shutdown() noexcept {
   g_pipelines = {};
   g_params = {};
   g_relightParams = {};
+  g_sky = {};
+  g_skyParams = {};
   g_shadowTextures = {};
   g_shadowTargets = {};
   g_shadowSamples = 0;
