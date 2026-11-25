@@ -142,7 +142,8 @@ For dev tools on, `manual-session start` passes the variable to the game. A real
 Textures tab (for HD pack audits): reads `UserData/devmenu_textures.txt` (tab-separated `id file severity asset scenes level`,
 optional seventh column starting with `effect`, any case = Effects tab instead; `#` comments; the Reload button re-reads
 it; each tab keeps its own "This level only" / "Hide fine" filters) and lists those replacement textures per scene, each marked "drawn" once the game has used it since start
-(aurora `aurora_texture_replacement_used(name)`, added by the patch: names are recorded when a replacement is looked up).
+(aurora `aurora_texture_replacement_used(name)`, added by the patch: names are recorded when a replacement file is looked up;
+the sharp font and icons don't count, though they share the pack's names).
 Each row can save a spot named after the ID or go to it; suspects whose scenes include `boot` count in every scene.
 Find (row button or `find <id>`) draws that replacement solid magenta and writes each distinct GX state it is drawn with to
 `Play\devmenu_drawstate.txt` (needs `texture_replacements = true` and a pack file for the key).
