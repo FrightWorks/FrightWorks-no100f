@@ -67,6 +67,11 @@ const Camera& camera() noexcept;
 // Relighting experiment (NO100F_RELIGHT=<light file>): solid perspective draws lose their baked vertex colours
 // (shader.cpp) and the stage lights the solid scene from the file's ambient, moon and point lights (world space).
 bool relighting() noexcept;
+// -1 = no light file, 0 = off, 1 = on. set_relight: 0 off, 1 on, 2 reload the light file (dev menu "relight").
+int relight_state() noexcept;
+void set_relight(int mode) noexcept;
+// Changes with every set_relight: the pipeline state memo is redone (the relight bit is in the pipeline config).
+unsigned relight_generation() noexcept;
 // The light file's unlit textures ("unlit KEY", KEY as TextureRef::debugKey): drawn as the game draws them.
 bool is_unlit_texture(const std::string& key) noexcept;
 

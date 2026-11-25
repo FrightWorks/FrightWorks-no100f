@@ -2301,14 +2301,16 @@ static const CachedPipelineState& resolve_pipeline_state(GXPrimitive prim, GXVtx
     u32 sampleCount = 0;
     GXPrimitive prim = static_cast<GXPrimitive>(0);
     GXVtxFmt fmt = static_cast<GXVtxFmt>(0);
+    unsigned relightGeneration = 0;
   };
   static Memo memos[6]{};
   Memo& memo = memos[static_cast<u8>(variant) + (unlit ? 3 : 0)];
 
   const u32 sampleCount = gfx::get_sample_count();
   const u32 generation = g_gxState.pipelineStateGeneration;
+  const unsigned relightGeneration = gfx::scene_stage::relight_generation();
   if (memo.state != nullptr && memo.generation == generation && memo.sampleCount == sampleCount &&
-      memo.prim == prim && memo.fmt == fmt) LIKELY {
+      memo.prim == prim && memo.fmt == fmt && memo.relightGeneration == relightGeneration) LIKELY {
     return *memo.state;
   }
 
@@ -2331,6 +2333,7 @@ static const CachedPipelineState& resolve_pipeline_state(GXPrimitive prim, GXVtx
       .sampleCount = sampleCount,
       .prim = prim,
       .fmt = fmt,
+      .relightGeneration = relightGeneration,
   };
   return state;
 }

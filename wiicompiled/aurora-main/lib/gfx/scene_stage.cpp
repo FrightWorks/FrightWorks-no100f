@@ -14,6 +14,7 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <mutex>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
@@ -89,8 +90,7 @@ struct RelightScene {
   std::unordered_set<std::string> unlit;
 };
 
-const RelightScene& relight_scene() {
-  static const RelightScene scene = [] {
+RelightScene load_relight_scene() {
     RelightScene s;
     const char* path = std::getenv("NO100F_RELIGHT");
     if (path == nullptr || *path == '\0') {
@@ -139,10 +139,29 @@ const RelightScene& relight_scene() {
     }
     std::fclose(f);
     s.loaded = true;
-    Log.info("Relight: {} lights, moon {}, from {}", s.lights.size(), s.hasMoon ? "on" : "off", path);
+    Log.info("Relight: {} lights, moon {}, {} unlit textures, from {}", s.lights.size(), s.hasMoon ? "on" : "off",
+             s.unlit.size(), path);
     return s;
-  }();
-  return scene;
+}
+
+// The light file as last loaded. A reload (dev menu "relight reload") replaces it; the old one is kept (never freed),
+// so a reader on another thread keeps a valid scene.
+std::atomic<const RelightScene*> g_relightScene{nullptr};
+std::atomic_bool g_relightOn{true};
+std::atomic_uint g_relightGeneration{1};
+
+const RelightScene& relight_scene() {
+  const RelightScene* scene = g_relightScene.load(std::memory_order_acquire);
+  if (scene == nullptr) {
+    static std::mutex mutex;
+    std::lock_guard lock(mutex);
+    scene = g_relightScene.load(std::memory_order_acquire);
+    if (scene == nullptr) {
+      scene = new RelightScene(load_relight_scene());
+      g_relightScene.store(scene, std::memory_order_release);
+    }
+  }
+  return *scene;
 }
 
 struct RelightParams {
@@ -742,7 +761,23 @@ std::optional<Mat4x4<float>> inverse(const Mat4x4<float>& matrix) {
 }
 } // namespace
 
-bool relighting() noexcept { return relight_scene().loaded; }
+bool relighting() noexcept { return g_relightOn.load(std::memory_order_relaxed) && relight_scene().loaded; }
+
+int relight_state() noexcept {
+  if (!relight_scene().loaded) return -1;
+  return g_relightOn.load(std::memory_order_relaxed) ? 1 : 0;
+}
+
+void set_relight(int mode) noexcept {
+  if (mode == 2) {
+    g_relightScene.store(new RelightScene(load_relight_scene()), std::memory_order_release);
+  } else {
+    g_relightOn.store(mode != 0, std::memory_order_relaxed);
+  }
+  g_relightGeneration.fetch_add(1, std::memory_order_relaxed);
+}
+
+unsigned relight_generation() noexcept { return g_relightGeneration.load(std::memory_order_relaxed); }
 
 bool is_unlit_texture(const std::string& key) noexcept {
   const auto& unlit = relight_scene().unlit;

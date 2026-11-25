@@ -1521,6 +1521,11 @@ void PollCommandFile() {
         } else if (cmd == "stageview") {
             aurora_set_scene_stage_view(std::atoi(arg.c_str()));
             g_status = "scene stage view " + std::to_string(aurora_get_scene_stage_view());
+        } else if (cmd == "relight") {  // relighting experiment: relight 0 | 1 | reload
+            aurora_set_relight(arg == "reload" ? 2 : std::atoi(arg.c_str()));
+            const int state = aurora_get_relight();
+            g_status = state < 0 ? "relight: no light file (NO100F_RELIGHT)"
+                                 : std::string("relight ") + (state ? "on" : "off") + (arg == "reload" ? " (reloaded)" : "");
         } else if (cmd == "ao") {
             aurora_set_ambient_occlusion(static_cast<float>(std::atoi(arg.c_str())) / 100.0f);
             g_status = "ambient occlusion " + std::to_string(static_cast<int>(aurora_get_ambient_occlusion() * 100.0f + 0.5f)) + "%";

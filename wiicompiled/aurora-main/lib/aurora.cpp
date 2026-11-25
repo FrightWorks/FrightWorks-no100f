@@ -2571,6 +2571,18 @@ void aurora_set_scene_stage_view(int mode) {
   aurora::gfx::scene_stage::set_view(mode);
 #endif
 }
+void aurora_set_relight(int mode) {
+#ifdef AURORA_ENABLE_GX
+  aurora::gfx::scene_stage::set_relight(mode);
+#endif
+}
+int aurora_get_relight() {
+#ifdef AURORA_ENABLE_GX
+  return aurora::gfx::scene_stage::relight_state();
+#else
+  return -1;
+#endif
+}
 int aurora_get_scene_stage_view() {
 #ifdef AURORA_ENABLE_GX
   return aurora::gfx::scene_stage::view();
