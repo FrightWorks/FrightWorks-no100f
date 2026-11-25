@@ -25,7 +25,8 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
 - Up to 4K, in true widescreen (16:9, fill, cinematic 2.39:1) or the original 4:3
 - 30 or 60 fps, MSAA, HDR with brightness calibration
 - Motion blur and cartoon ink outlines; ambient occlusion and bloom (experimental)
-- Optional HD texture pack by dogerki, downloaded from the launcher when you choose it (Extras > Textures)
+- Optional HD texture packs, downloaded from the launcher when you choose them (Extras > Textures): Scooby-HD by
+  dogerki, and the menu pack (menu screens at 8x and the HD Creeper window)
 - The Xbox version's Creeper window animation in the Mystic Manor courtyard
 
 **Controls**

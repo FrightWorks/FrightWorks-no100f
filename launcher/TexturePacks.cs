@@ -17,8 +17,7 @@ static class TexturePacks
     public sealed record Pack(string Folder, string Name, string Credit, string About, long ApproxBytes, string Url,
                               HashAlgorithmName HashKind, string Hash, string Archive);
 
-    // The menu pack (Loneranger419/no100f-menu-pack: menu screens and the HD Creeper window) goes in here at a lower
-    // number than Scooby-HD once it is on archive.org, so its textures win.
+    // The menu pack has a lower number than Scooby-HD, so its menus and Creeper frames win over Scooby-HD's.
     public static readonly Pack[] All =
     {
         new("50-scoobyhd", "Scooby-HD", "dogerki",
@@ -27,6 +26,11 @@ static class TexturePacks
             "https://archive.org/download/dolphin-scooby-doo-night-of-100-frights-hd-texture-pack/" +
             "Dolphin%20Scooby%20Doo%20Night%20of%20100%20Frights%20HD%20Texture%20Pack.rar",
             HashAlgorithmName.SHA1, "1E55E7F802BD0E5AD00538FB21D17A66417F723B", "rar"),
+        new("40-menu", "Menu pack", "Loneranger419",
+            "The menu screens (title, main menu, options, pause menu and maps) redrawn at 8x, and the HD Creeper window in the hub.",
+            53277774,
+            "https://archive.org/download/no100f-menu-pack-1.0.0/no100f-menu-pack-1.0.0.zip",
+            HashAlgorithmName.SHA256, "349AD55E74C68CCCB2BE66725676D543508CD46F1F2B4D2E3AD3568F85AD88D0", "zip"),
     };
 
     public static string Dir(string userData) => Path.Combine(userData, "texture_packs");

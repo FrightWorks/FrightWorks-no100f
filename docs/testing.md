@@ -48,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   `Play\texture_replacements\ScoobyHD` is removed (links the debug kit made are left alone).
 - **HD texture packs** are an opt-in download in the launcher (**Extras > Textures**, `launcher\TexturePacks.cs`):
   it downloads the pack, checks its hash, unpacks it (RAR through Windows' `tar.exe`, bsdtar, 7-Zip or unrar) into
-  `UserData\texture_packs\<NN-name>` (Scooby-HD is `50-scoobyhd`) and sets `[video] texture_replacements = true`.
+  `UserData\texture_packs\<NN-name>` (Scooby-HD is `50-scoobyhd`, the menu pack `40-menu`) and sets `[video] texture_replacements = true`.
   The game indexes `UserData\texture_replacements` and mods first, then the packs, lower folder name first (it wins);
   a `disabled` file in a pack's folder skips it, and the log names each pack it uses (`Texture pack: 50-scoobyhd`).
   dogerki's Smuggler's Cove sign has no alpha channel (#107: the small ship's sails on its roof drew as opaque planks):
