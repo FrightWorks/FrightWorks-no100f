@@ -327,6 +327,17 @@ std::optional<RuntimeTextureKey> build_runtime_key(const GXTexObj_& obj, const G
   return key;
 }
 
+uint64_t base_level_hash(const GXTexObj_& obj) noexcept {
+  const uint32_t textureSize = texture_base_level_size(obj);
+  return obj.data != nullptr && textureSize != 0 ? XXH64(obj.data, textureSize, 0) : 0;
+}
+
+// A palette texture whose palette hash can't be found (build_runtime_key gives no key): say so rather than name a file
+// no pack can have.
+std::string unknown_palette_name(const GXTexObj_& obj) {
+  return fmt::format("tex1_{}x{}_{:016x}_unknown_{}.dds", obj.width(), obj.height(), base_level_hash(obj), obj.format());
+}
+
 std::string format_replacement_filename(const RuntimeTextureKey& key) {
   if (key.hasTlut) {
     return fmt::format("tex1_{}x{}_{:016x}_{:016x}_{}.dds", key.width, key.height,
@@ -968,12 +979,27 @@ bool report_missing_key(const RuntimeTextureKey& key, const GXTexObj_& obj, cons
   return true;
 }
 
-// Dev menu (F8): names of the replacement files the game has drawn since start, for the dev menu's Textures tab (not
-// the sharp font or icons, which are drawn in place of a file).
+// Dev menu (F8): names of the replacement files drawn since the last reset_used (this level), for the Textures tab's
+// pack marker and the `textures` command: not the sharp font or icons, which are drawn in place of a file.
 // find_replacement runs once per texture upload (the GX texture caches keep the handle), so this stays cheap.
 absl::flat_hash_set<RuntimeTextureKey> s_usedKeys;
 absl::flat_hash_set<std::string> s_usedNames;
 std::mutex s_usedMutex;
+
+// Dev menu (F8): every static texture drawn since the last reset_used, for the Textures tab (once track_drawn is on).
+// One row per texture: a texture the game rewrites in place (same guest address, size and format, new contents, like
+// h001's 640x448 copy of the picture every frame) keeps its row, with the newest name and a count of versions.
+struct DrawnEntry {
+  std::string name;
+  uint64_t textureHash = 0;
+  uint32_t width = 0, height = 0, format = 0, versions = 1, fileWidth = 0, fileHeight = 0;
+};
+constexpr size_t kMaxDrawn = 8192;
+std::vector<DrawnEntry> s_drawn;                         // guarded by s_usedMutex
+absl::flat_hash_map<std::string, size_t> s_drawnByName;  // guarded by s_usedMutex
+absl::flat_hash_map<const void*, size_t> s_drawnByData;  // newest row at that guest address; guarded by s_usedMutex
+std::atomic<uint32_t> s_drawnGeneration{0};
+std::atomic<bool> s_trackDrawn{false};
 
 void note_used_replacement(const RuntimeTextureKey& key) noexcept {
   std::lock_guard lock(s_usedMutex);
@@ -983,11 +1009,7 @@ void note_used_replacement(const RuntimeTextureKey& key) noexcept {
   auto name = format_replacement_filename(key);
   name.resize(name.size() - 4);  // ".dds"
   s_usedNames.insert(std::move(name));
-}
-
-bool replacement_used(std::string_view name) noexcept {
-  std::lock_guard lock(s_usedMutex);
-  return s_usedNames.contains(name);
+  s_drawnGeneration.fetch_add(1);
 }
 
 // Dev menu (F8): forget what was drawn (new level). Raises the highlight-change flag so the GX caches are
@@ -999,12 +1021,35 @@ void reset_used() noexcept {
     std::lock_guard lock(s_usedMutex);
     s_usedKeys.clear();
     s_usedNames.clear();
+    s_drawn.clear();
+    s_drawnByName.clear();
+    s_drawnByData.clear();
+    s_drawnGeneration.fetch_add(1);
   }
   s_highlightChanged.store(true);
 }
 
-// Dev menu (F8): the dev menu's "Find" draws one replacement solid magenta so it stands out in the scene.
+void track_drawn(bool on) noexcept {
+  if (s_trackDrawn.exchange(on) != on && on) reset_used();  // turned on: note every texture on screen
+}
+
+uint32_t drawn_generation() noexcept { return s_drawnGeneration.load(); }
+
+std::vector<DrawnTexture> drawn_textures() noexcept {
+  std::lock_guard lock(s_usedMutex);
+  std::vector<DrawnTexture> out;
+  out.reserve(s_drawn.size());
+  for (const auto& e : s_drawn) {
+    out.push_back({.name = e.name, .width = e.width, .height = e.height, .format = e.format, .versions = e.versions,
+                   .fileWidth = e.fileWidth, .fileHeight = e.fileHeight, .pack = s_usedNames.contains(e.name)});
+  }
+  return out;
+}
+
+// Dev menu (F8): the dev menu's "Find" draws one texture solid magenta so it stands out in the scene: any static
+// texture, with or without a replacement file, and with HD textures off too.
 std::optional<RuntimeTextureKey> s_highlightKey;  // guarded by s_usedMutex
+std::atomic<bool> s_highlightOn{false};
 gfx::TextureHandle s_highlightTexture;
 
 void set_highlight(std::string_view name) noexcept {
@@ -1012,6 +1057,7 @@ void set_highlight(std::string_view name) noexcept {
   if (!name.empty()) key = parse_replacement_filename(std::string(name) + ".dds");
   std::lock_guard lock(s_usedMutex);
   s_highlightKey = key;
+  s_highlightOn.store(key.has_value());
   s_highlightChanged.store(true);
 }
 
@@ -1042,6 +1088,7 @@ bool take_reload() noexcept {
     std::lock_guard lock(s_usedMutex);
     s_usedKeys.clear();
     s_usedNames.clear();
+    s_drawnGeneration.fetch_add(1);
   }
   Log.info("Texture packs: reloading");
   build_index(false);
@@ -1054,6 +1101,59 @@ bool is_highlighted(const RuntimeTextureKey& key) noexcept {
 }
 
 bool is_highlight_handle(const gfx::TextureHandle& handle) noexcept { return handle && handle == s_highlightTexture; }
+
+bool tracking_drawn() noexcept { return s_trackDrawn.load(std::memory_order_relaxed); }
+
+std::string note_drawn_texture(const GXTexObj_& obj, const GXTlutObj_* tlut, const gfx::TextureHandle& handle) noexcept {
+  const auto key = build_runtime_key(obj, tlut);
+  std::string name = key.has_value() ? format_replacement_filename(*key) : unknown_palette_name(obj);
+  name.resize(name.size() - 4);  // ".dds"
+  if (!s_trackDrawn.load(std::memory_order_relaxed)) {
+    return name;
+  }
+  const uint64_t textureHash = key.has_value() ? key->textureHash : base_level_hash(obj);
+  const uint32_t width = obj.width(), height = obj.height(), format = obj.format();
+  std::lock_guard lock(s_usedMutex);
+  size_t index;
+  bool changed = false;
+  if (const auto it = s_drawnByName.find(name); it != s_drawnByName.end()) {
+    index = it->second;
+  } else if (const auto at = s_drawnByData.find(obj.data);
+             at != s_drawnByData.end() && s_drawn[at->second].textureHash != textureHash &&
+             s_drawn[at->second].width == width && s_drawn[at->second].height == height &&
+             s_drawn[at->second].format == format) {
+    // The same texture rewritten in place: keep one row.
+    index = at->second;
+    auto& e = s_drawn[index];
+    s_drawnByName.erase(e.name);
+    e.name = name;
+    e.textureHash = textureHash;
+    ++e.versions;
+    s_drawnByName.emplace(name, index);
+    changed = true;
+  } else {
+    if (s_drawn.size() >= kMaxDrawn) {
+      return name;
+    }
+    index = s_drawn.size();
+    s_drawn.push_back({.name = name, .textureHash = textureHash, .width = width, .height = height, .format = format});
+    s_drawnByName.emplace(name, index);
+    s_drawnByData[obj.data] = index;
+    changed = true;
+  }
+  if (handle && !is_highlight_handle(handle)) {  // the size of what was uploaded (the magenta stand-in says nothing)
+    auto& e = s_drawn[index];
+    const uint32_t fw = handle->isReplacement ? handle->size.width : 0;
+    const uint32_t fh = handle->isReplacement ? handle->size.height : 0;
+    if (e.fileWidth != fw || e.fileHeight != fh) {
+      e.fileWidth = fw;
+      e.fileHeight = fh;
+      changed = true;
+    }
+  }
+  if (changed) s_drawnGeneration.fetch_add(1);
+  return name;
+}
 
 // Dev menu (F8): the texture log's scene tag; the dev menu sets it when the scene or its log switch changes.
 std::mutex s_texLogMutex;
@@ -1198,7 +1298,8 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
                               obj.width() == 256 && obj.height() == 256;
   const bool iconCandidate = g_config.sharpIcons && tlut == nullptr &&
                              sharp_font::may_be_flat_icon(obj.width(), obj.height(), obj.format());
-  if (!g_config.allowTextureReplacements && s_appliedButtonIcons.family < 0 && !sharpCandidate && !iconCandidate) {
+  if (!g_config.allowTextureReplacements && s_appliedButtonIcons.family < 0 && !sharpCandidate && !iconCandidate &&
+      !s_highlightOn.load(std::memory_order_relaxed)) {
     return std::nullopt;
   }
 
@@ -1221,6 +1322,11 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
   // Sharp icons: only where no replacement file exists (HD textures off, or a texture the pack doesn't have).
   const bool icon = !sharp && path == nullptr && iconCandidate &&
                     sharp_font::is_flat_icon(obj.width(), obj.height(), obj.format(), key.textureHash);
+  // Find (dev menu): any texture turns magenta, not only one with a replacement file.
+  if (s_highlightOn.load(std::memory_order_relaxed) && is_highlighted(key)) {
+    if (path != nullptr && !sharp && !icon) note_used_replacement(key);
+    return highlight_texture();
+  }
   if (path == nullptr && !sharp && !icon) {
     if (g_config.allowTextureReplacements) report_missing_key(key, obj, tlut);
     return std::nullopt;
@@ -1228,9 +1334,6 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
   // Only a replacement file counts as drawn. The sharp font and icons share the pack's names (and the font wins over
   // the pack's file), so noting them made pack textures look drawn with HD textures off (smoke test i004).
   if (!sharp && !icon) note_used_replacement(key);
-  if (is_highlighted(key)) {
-    return highlight_texture();
-  }
 
   if (const auto* cached = find_cached_replacement(key); cached != nullptr) {
     return *cached;
@@ -1304,9 +1407,7 @@ std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj
   if (const auto key = build_runtime_key(obj, tlut); key.has_value()) {
     return format_replacement_filename(*key);
   }
-  // Palette hash unknown: say so rather than name a file no pack can have.
-  return fmt::format("tex1_{}x{}_{:016x}_unknown_{}.dds", obj.width(), obj.height(),
-                     obj.data != nullptr ? XXH64(obj.data, texture_base_level_size(obj), 0) : 0, obj.format());
+  return unknown_palette_name(obj);
 }
 
 } // namespace aurora::gfx::texture_replacement

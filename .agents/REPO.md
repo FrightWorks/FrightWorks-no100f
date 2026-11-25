@@ -232,7 +232,7 @@ The dev menu (see Facts) is the way to script a run.
 - **Command file:** `devmenu.txt` in the game's working folder (`Play/` for a normal run).
   It is read every 30 frames, then deleted, and results go to `devmenu.log`.
   It waits until the game is in play, except `skip` and `scene`.
-  Useful commands: `scene ID`, `cam X Y Z YAW PITCH`, `camspin DEG`, `cammove DX DY DZ`, `freecam on|off`, `where`, `perf`, `mvview MODE [SCALE]`, `stageview MODE`, `ao PERCENT`, `ink LEVEL`, `bloom PERCENT`, `bloomview MODE`, `lighttex add|del KEY`, `texreload` (read the texture packs again), `save NAME`, `cutscene`, `skip`.
+  Useful commands: `scene ID`, `cam X Y Z YAW PITCH`, `camspin DEG`, `cammove DX DY DZ`, `freecam on|off`, `where`, `perf`, `mvview MODE [SCALE]`, `stageview MODE`, `ao PERCENT`, `ink LEVEL`, `bloom PERCENT`, `bloomview MODE`, `lighttex add|del KEY`, `texreload` (read the texture packs again), `find NAME|off` (draw a texture magenta), `textures` (pack textures drawn in this level), `save NAME`, `cutscene`, `skip`.
   The full list is at the top of `PollCommandFile` in `wiicompiled/runtime/src/no100f_devmenu.cpp` and in the `game-logic-debug` skill.
 - **Presses:** `devmenu_press.txt`, read every 30 frames even outside play.
   Each line is `BUTTON[+BUTTON] [FRAMES] [cutscene]`, with buttons `a b x y z start up down left right` and 10 frames by default.

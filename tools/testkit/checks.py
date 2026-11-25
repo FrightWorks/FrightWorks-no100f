@@ -3,7 +3,7 @@
   png_is_blank(path)      a screenshot with (almost) no picture, decoded with zlib: no Pillow needed
   audio_peak(raw)         loudest sample of an AUDIO_RAW_DUMP file (big-endian 16-bit stereo, 32 kHz)
   loopcheck(raw, tool)    is the output stuck repeating a short loop? runs tools/debug/audio/loopcheck.py (needs numpy)
-  hd_drawn(game)          how many of the HD pack's textures the game has drawn in this scene (the `textures` command)
+  hd_drawn(game)          how many textures the game has drawn from a pack file in this scene (the `textures` command)
   fps_samples / fps_summary / fps_too_slow   the frame rate the game logs every two seconds (NO100F_LOG_FPS=1) on stderr
 """
 import array
@@ -110,22 +110,17 @@ def loopcheck(raw, repo_tools, skip=8, length=10):
 
 
 # ---- HD textures ----------------------------------------------------------------------------------------------------
-def write_hd_probe(play_dir, pack_dir):
-    """Register every file of the HD pack as a `textures` suspect (UserData/devmenu_textures.txt, id = file stem). The game
-    then lists the ones it really drew in the current scene (aurora_texture_replacement_used), not "the picture differs"."""
-    stems = sorted(f.stem for f in Path(pack_dir).glob("*.png"))
-    if not stems:
-        raise CheckNotRun(f"no HD pack files in {pack_dir}")
-    lines = [f"{s}\t{s}\t1\t0\tboot\tprobe\n" for s in stems]
-    (Path(play_dir) / "UserData" / "devmenu_textures.txt").write_text("".join(lines), encoding="utf-8")
-    return len(stems)
+TEXTURES_LINE = re.compile(r"pack textures drawn in this level \((\d+) of \d+\)")
 
 
 def hd_drawn(devmenu, timeout=20):
-    """Number of pack textures drawn in this scene so far (ask a second after the scene became playable: the game
-    checks every 30 frames)."""
+    """Number of textures drawn from a pack file in this scene so far, as the game counts them (the dev menu's drawn
+    list: what was really drawn, not "the picture differs"). Ask a second after the scene became playable."""
     text = devmenu.command("textures", timeout)
-    return len(text.replace("drawn suspects:", "").split())
+    m = TEXTURES_LINE.search(text)
+    if not m:
+        raise RuntimeError(f"textures gave no count: {text.strip()[:300]}")
+    return int(m.group(1))
 
 
 # ---- frame rate -----------------------------------------------------------------------------------------------------

@@ -4,6 +4,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace aurora::gfx::texture_replacement {
 void initialize() noexcept;
@@ -15,12 +16,29 @@ void load_tlut(const GXTlutObj* obj, uint32_t idx) noexcept;
 std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlutObj_* tlut = nullptr) noexcept;
 // `tlut`: as for find_replacement; a palette texture's palette hash comes from it when the TLUT mirror has none.
 std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj_* tlut = nullptr) noexcept;
-// Dev menu (F8): whether the replacement with this file name (no extension) has been drawn since start.
-bool replacement_used(std::string_view name) noexcept;
-// Dev menu (F8): forget them (new level); the next take_highlight_change returns true.
+// Dev menu (F8): a static texture was uploaded (gx.cpp, every texture resolve): returns its name (pack file name without
+// the extension, as build_texture_replacement_name) and, while track_drawn is on, adds it to the drawn list. `handle`:
+// what was uploaded for it.
+std::string note_drawn_texture(const GXTexObj_& obj, const GXTlutObj_* tlut, const TextureHandle& handle) noexcept;
+bool tracking_drawn() noexcept;
+// Dev menu (F8): keep the list of textures drawn since the last reset_used (off by default: the dev menu turns it on).
+void track_drawn(bool on) noexcept;
+// Dev menu (F8): one texture drawn since the last reset_used. `pack`: drawn from a replacement file (a texture pack, mod
+// or the player's folder); fileWidth/fileHeight: the size uploaded in its place (0 = the game's own); versions: how
+// often the game rewrote it in place (the name is the newest).
+struct DrawnTexture {
+  std::string name;
+  uint32_t width = 0, height = 0, format = 0, versions = 1, fileWidth = 0, fileHeight = 0;
+  bool pack = false;
+};
+std::vector<DrawnTexture> drawn_textures() noexcept;
+// Changes whenever the drawn list or its pack markers change.
+uint32_t drawn_generation() noexcept;
+// Dev menu (F8): forget what was drawn (new level); the next take_highlight_change returns true.
 void reset_used() noexcept;
-// Dev menu (F8): draw that replacement solid magenta ("" = off). take_highlight_change returns true once after
-// it changed: the caller must drop its cached textures so find_replacement runs again.
+// Dev menu (F8): draw that texture solid magenta ("" = off), by its pack file name without the extension, with or
+// without a replacement file. take_highlight_change returns true once after it changed: the caller must drop its
+// cached textures so find_replacement runs again.
 void set_highlight(std::string_view name) noexcept;
 bool take_highlight_change() noexcept;
 // Dev menu (F8): read the texture folders and packs again (any thread). take_reload, on the renderer's thread before

@@ -6,7 +6,7 @@ Run it after a fresh build (tools\\build-no100f.ps1), before a PR. Each job runs
 rumble off, muted, controller isolation, own config), takes a shared run slot (testkit/slots.py) and waits until the game is
 playable (testkit/waitplay.py). All fail on a crash, a logged fault, a black picture or a wrong build.
 
-  h001  boot, HD on: skips the intro; HD textures really drawn (>= 20 of the pack's textures; `textures` dev command); the audio
+  h001  boot, HD on: skips the intro; HD textures really drawn (>= 20 from pack files; `textures` dev command); the audio
         dump is not silent and not stuck on a loop (tools/debug/audio/loopcheck.py, needs numpy); picture not black.
   i004  HD off (0 pack textures drawn): a scripted A press moves Scooby; `scene e001` travels there and it is playable again.
   g001  save and load: a known snack count, onto the save point, saved with scripted presses, the file in Saves\\MemoryCard;
@@ -95,10 +95,8 @@ def job_h001(job, attempt):
     raw = job.out / "logs" / f"h001-{attempt}.raw"
     raw.parent.mkdir(parents=True, exist_ok=True)
     game = job.new_game(attempt, boot="h001", hd=True, extra_env={"AUDIO_RAW_DUMP": str(raw)})
-    pack = game.hd_pack
-    job.passed("HD probe written", f"{checks.write_hd_probe(game.play, pack)} pack textures registered")
     common_start(job, game, "h001", attempt)
-    time.sleep(1.5)  # the game updates the drawn list every 30 frames
+    time.sleep(1.5)  # let the textures on screen be drawn once
     drawn = checks.hd_drawn(game.devmenu)
     job.require(drawn >= HD_MIN_DRAWN, "HD textures drawn", f"{drawn} of the pack drawn in h001 (need {HD_MIN_DRAWN})")
     # audio: wait until the dump has enough seconds
@@ -122,18 +120,11 @@ def job_h001(job, attempt):
 
 def job_i004(job, attempt):
     game = job.new_game(attempt, boot="i004", hd=False)
-    pack = game.hd_pack
-    try:
-        checks.write_hd_probe(game.play, pack)
-        probe = True
-    except checks.CheckNotRun:
-        probe = False
     common_start(job, game, "i004", attempt)
     dm = game.devmenu
     time.sleep(1.5)
-    if probe:
-        drawn = checks.hd_drawn(dm)
-        job.require(drawn == 0, "HD off draws no pack texture", f"{drawn} drawn")
+    drawn = checks.hd_drawn(dm)
+    job.require(drawn == 0, "HD off draws no pack texture", f"{drawn} drawn")
     where0 = dm.where()
     job.require(where0 is not None and where0[0] == "i004", "in i004", str(where0))
     best = 0.0

@@ -2,8 +2,6 @@
 # Lists the assets in each of the suspect's scenes that name the texture. For level geometry (BSP) it also prints the
 # world position of the triangles, grouped (centre, size, height), so you can `tp X Y Z` there with the dev menu.
 # Models (MODL) only get their asset name: where they're placed isn't read here. Default: every suspect still open.
-# --menu: add the kind column (level|effect) to devmenu_textures.txt for the dev menu's Effects tab (rerun after
-# report.py, which writes the file without it).
 import csv, glob, os, re, struct, sys
 sys.path.insert(0, os.path.dirname(__file__))
 import gxtex
@@ -79,34 +77,8 @@ def where(row, max_groups=8):
                 lines.append(f"  {scene} {typ.strip()} {name}")
     return tex, lines
 
-def is_effect(row):
-    """Drawn at runtime: boot.HIP (global effects/UI) or not named by any asset in its scenes (particles)."""
-    if "boot" in row["scenes"].split(): return True
-    tex, lines = where(row)
-    return not any(" BSP " in l or " MODL " in l for l in lines)
-
-def write_menu_kinds(rows):
-    """--menu: 7th column level|effect in devmenu_textures.txt (texhunt copy + Play/UserData) for the Effects tab."""
-    by_id = {r["id"]: r for r in rows}
-    for path in (os.path.join(DATA, "devmenu_textures.txt"),
-                 os.path.join(ROOT, "Play", "UserData", "devmenu_textures.txt")):
-        if not os.path.exists(path): continue
-        out = []
-        for line in open(path, encoding="utf-8").read().splitlines():
-            f = line.split("\t")
-            if line.startswith("#"):
-                out.append("\t".join(f[:6]) + ("\tkind" if len(f) >= 6 else "")); continue
-            if f[0] in by_id and len(f) >= 6:
-                f = f[:6] + ["effect" if is_effect(by_id[f[0]]) else "level"]
-            out.append("\t".join(f))
-        with open(path, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write("\n".join(out) + "\n")
-        print(f"{path}: {sum(l.endswith(chr(9) + 'effect') for l in out)} effects")
-
 if __name__ == "__main__":
     rows = list(csv.DictReader(open(os.path.join(DATA, "suspects.csv"), encoding="utf-8")))
-    if "--menu" in sys.argv:
-        write_menu_kinds(rows); sys.exit()
     ids = [a for a in sys.argv[1:] if not a.startswith("--")]
     pick = [r for r in rows if r["id"] in ids] if ids else \
            rows if "--all" in sys.argv else [r for r in rows if r["status"] == "suspect"]

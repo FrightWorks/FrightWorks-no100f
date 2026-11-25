@@ -303,11 +303,24 @@ void aurora_set_button_icons(int family, const char* const buttons[4]);
 // no controller is connected (BUTTON_ICONS=<family> pins one, for tests). Writes at most size - 1 bytes and a NUL;
 // returns the full length.
 size_t aurora_get_button_icon_folder(char* out, size_t size);
-// Dev menu (F8): whether texture_replacements/<name>.png|.dds has been drawn since start.
-bool aurora_texture_replacement_used(const char* name);
+// Dev menu (F8): keep a list of every texture drawn since the last reset (off by default).
+void aurora_texture_track_drawn(bool on);
+// Dev menu (F8): one texture of that list. name: its pack file name without the extension; pack: drawn from a
+// replacement file (texture pack, mod or the player's folder); file_width/file_height: the size drawn in its place (0 =
+// the game's own); versions: how often the game rewrote it in place (name = the newest).
+typedef struct AuroraDrawnTexture {
+  char name[96];
+  uint32_t width, height, format, versions, file_width, file_height;
+  bool pack;
+} AuroraDrawnTexture;
+// Copies up to `capacity` entries of the list to `out` and returns how many there are; the generation changes whenever
+// the list does.
+size_t aurora_texture_drawn(AuroraDrawnTexture* out, size_t capacity);
+uint32_t aurora_texture_drawn_generation();
 // Dev menu (F8): forget what has been drawn (the dev menu tracks drawn per level).
 void aurora_texture_replacement_reset_used();
-// Dev menu (F8): draw the replacement with this file name (no extension) solid magenta; nullptr or "" = off.
+// Dev menu (F8): draw the texture with this pack file name (no extension) solid magenta, with or without a replacement
+// file; nullptr or "" = off.
 void aurora_texture_replacement_highlight(const char* name);
 // Dev menu (F8): read the texture folders and packs again, as at start, and redraw every texture from them. Does
 // nothing when texture replacement was off at start.

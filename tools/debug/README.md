@@ -83,7 +83,7 @@ side effects. Use an isolated disposable profile for diagnostics; never test aga
 
 ### `texhunt/` (HD texture packs, cut-outs, halos)
 
-Data and output go to `autotest\texhunt\` (`suspects.csv`, `devmenu_textures.txt`, `disc.pkl`, packs, shots); the
+Data and output go to `autotest\texhunt\` (`suspects.csv`, `disc.pkl`, packs, shots); the
 session scripts need the dev menu build in `Play\` (`build-devmenu.ps1` or `play-patched.ps1`) and restore the user's
 setup when the game closes.
 
@@ -98,7 +98,7 @@ setup when the game closes.
 | `where.py [IDs]` | Which assets use a suspect's texture; BSP geometry gets `tp X Y Z` positions |
 | `tint-pack.py --out <dir> (--from <dir> \| --hip <HIP>) [--match s]` | Tinted copies of textures; link them with `look.ps1 -Extra` to see where a texture is drawn |
 | `skipintro.py <mod dir>` | h001.HIP without the intro cutscene (written into a boot mod, never committed) |
-| `ogexport.py`, `clean.py`, `onoff.py`, `verdicts.py` | Original-vs-HD sheets (local only), cleaned and on/off test packs, dev menu marks ↔ `suspects.csv` |
+| `ogexport.py`, `clean.py`, `onoff.py` | Original-vs-HD sheets (local only), cleaned and on/off test packs |
 
 Patches are against upstream `main` `e600261` unless the table says otherwise. `gx-draw-probes.patch` was rebased onto
 PR #8 `622b97a` and not rebuilt since.

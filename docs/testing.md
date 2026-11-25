@@ -346,7 +346,7 @@ Three jobs run at once, each from its own copy of `Play\`:
 
 | Job | What it does and checks |
 | --- | --- |
-| `h001` | Boots the hub with the HD pack on, skips the intro, waits until it is playable. At least 20 of the pack's textures were really drawn (every pack file is registered with the dev menu's `textures` command, which lists the ones the game drew: not "the picture differs"). The audio dump is not silent and `tools/debug/audio/loopcheck.py` finds no stuck loop. The picture is not black. |
+| `h001` | Boots the hub with the HD pack on, skips the intro, waits until it is playable. At least 20 of the pack's textures were really drawn (the dev menu's `textures` command counts the textures drawn from a pack file in this level: not "the picture differs"). The audio dump is not silent and `tools/debug/audio/loopcheck.py` finds no stuck loop. The picture is not black. |
 | `i004` | HD off: none of the pack's textures are drawn. A scripted A press moves Scooby. The dev menu's `scene e001` travels there and the game becomes playable again. |
 | `g001` | Sets a known snack count, `tp`s onto the save point (-25.618 1.186 -1.515), saves with scripted presses, finds the file in `Saves\MemoryCard`, restarts from the same copy, loads from the title menu and checks Scooby is back at the save point with the same count. |
 
@@ -466,7 +466,7 @@ powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1 -HdTexture
 ```
 
 In game, **F8**: current level and Scooby's position, go to any level (Levels tab), save spots and go back to them, god mode,
-monsters off (all or one by one), power-ups on/off (all at once or one by one), a Textures tab (find a texture, mark it), an Effects tab and a free camera. Spots are
+monsters off (all or one by one), power-ups on/off (all at once or one by one), a Textures tab (every texture drawn in the level; click one to see where it is used) and a free camera. Spots are
 saved in `Play\UserData\devmenu_spots.txt`. `tp X Y Z YAW` turns Scooby, not the camera. The power-ups page lists gadgets in the order the game gives them; Flower Pot and Diving Helmet sit under --UNUSED-- and Unlock all leaves them alone; Map is the game's map-received flag (`0x80270FD8`), not a gadget bit. Travel is one transfer at a time: asked for while paused or in a
 cutscene, it waits for normal play (**Cancel travel** drops it). **Skip** presses the game's own skip button for a
 recorded cutscene (A) or the title intro / attract demo (Start). More commands (scripted through `Play\devmenu.txt`) are in the
@@ -502,11 +502,13 @@ freezes the video until the window is back to its old size. It needs ffmpeg: on 
 `tools\debug\local\ffmpeg`; turning the developer tools on in the launcher offers to download it there (the same
 SHA-256-checked build as `tools\debug\capture\get-ffmpeg.ps1`).
 
-The Textures and Effects tabs list textures from `Play\UserData\devmenu_textures.txt`, one per line, tab-separated:
-`id  file  severity  asset  scenes  level  [effect]` (`scenes` space-separated, `boot` = every scene; `#` starts a
-comment). Lines whose seventh column starts with `effect` go on the Effects tab: textures drawn at runtime (bonks,
-pickups, particles), not a switch for gameplay effects. Edit the file while the game runs and press **Reload**. The
-free camera turns itself off when the scene changes.
+The Textures tab lists every texture drawn in the current level, by its texture pack name (`tex1_...`), with its size
+and **HD** when it was drawn from a texture pack file; textures drawn later (bonks, pickups, particles) join the list
+when they first appear, and a filter box and **Pack textures only** narrow it. A texture the game rewrites while it
+draws (h001's 640x448 copy of the picture) stays one row, with its number of versions. Click a row (or `find NAME` in
+`Play\devmenu.txt`) to draw that texture solid magenta wherever it is used, with HD textures on or off; click it again
+or **Find off** to stop. `textures` in `devmenu.txt` logs the pack textures drawn in this level. The free camera turns
+itself off when the scene changes.
 
 Options: `-Patch devmenu,postool` (several patches), `-CleanBuild` (rebuild `Play\` without the patch afterwards),
 `-Keep` (leave it applied to work on it; re-export the patch afterwards), `-Remove` (take the patches out if the

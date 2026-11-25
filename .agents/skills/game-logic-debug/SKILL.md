@@ -139,14 +139,14 @@ git apply -R tools\debug\patches\pad-script.patch                               
 
 For dev tools on, `manual-session start` passes the variable to the game. A real pad still counts, and the game reads it without focus, so leave it alone during a run. On Linux `manual-session` isn't available: set the same variables, set `[audio] muted` and `[controller] rumble = false` yourself and run `Play/FrightWorks Game`.
 
-Textures tab (for HD pack audits): reads `UserData/devmenu_textures.txt` (tab-separated `id file severity asset scenes level`,
-optional seventh column starting with `effect`, any case = Effects tab instead; `#` comments; the Reload button re-reads
-it; each tab keeps its own "This level only" / "Hide fine" filters) and lists those replacement textures per scene, each marked "drawn" once the game has used it since start
-(aurora `aurora_texture_replacement_used(name)`, added by the patch: names are recorded when a replacement file is looked up;
-the sharp font and icons don't count, though they share the pack's names).
-Each row can save a spot named after the ID or go to it; suspects whose scenes include `boot` count in every scene.
-Find (row button or `find <id>`) draws that replacement solid magenta and writes each distinct GX state it is drawn with to
-`Play\devmenu_drawstate.txt` (needs `texture_replacements = true` and a pack file for the key).
+Textures tab (for HD pack audits): every static texture drawn since the level was entered, from aurora's drawn list
+(`aurora_texture_track_drawn` / `aurora_texture_drawn`, filled in gx.cpp `note_debug_key` on every texture resolve; the
+menu clears it on a scene change, which drops the GX texture caches so everything on screen is noted again). Each row is
+a texture pack name, its size and **HD** when it was drawn from a replacement file (the sharp font and icons don't
+count, though they share the pack's names). A texture rewritten in place (same guest address, size and format, new
+contents) keeps one row with a version count. Find (click a row, or `find <name>`) draws that texture solid magenta,
+with or without a pack file and with HD textures off too, and writes each distinct GX state it is drawn with to
+`Play\devmenu_drawstate.txt`. `textures` logs `pack textures drawn in this level (N of M): <names>`.
 
 Texture log ("Log every texture" checkbox, or env `NO100F_TEXLOG=1` at start): the first draw of each texture key with
 each distinct sampler + GX state in each scene appends a row to `Play\devmenu_texlog.csv` (scene, key, replacement, texmap,

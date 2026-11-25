@@ -92,20 +92,25 @@ class AudioTest(unittest.TestCase):
             self.assertLess(checks.loopcheck(Path(d) / "noise.raw", tools), 0.5)
 
 
-class HdProbeTest(FakeGameCase):
-    def test_probe_file_has_six_tab_separated_fields_per_pack_file(self):
-        g = self.game(hd=True)
-        n = checks.write_hd_probe(g.play, g.src_play / "texture_replacements" / "ScoobyHD")
-        self.assertEqual(n, 1)
-        line = (g.play / "UserData" / "devmenu_textures.txt").read_text().splitlines()[0]
-        fields = line.split("\t")
-        self.assertGreaterEqual(len(fields), 6)  # the game skips shorter lines silently
-        self.assertEqual(fields[0], fields[1])
+class HdDrawnTest(unittest.TestCase):
+    class Menu:
+        def __init__(self, reply):
+            self.reply = reply
 
-    def test_no_pack_is_not_run(self):
-        g = self.game(hd=False)
-        with self.assertRaises(checks.CheckNotRun):
-            checks.write_hd_probe(g.play, g.play / "nowhere")
+        def command(self, cmd, timeout):
+            assert cmd == "textures"
+            return self.reply
+
+    def test_counts_the_pack_textures(self):
+        reply = "pack textures drawn in this level (2 of 40): tex1_64x64_aa_14 tex1_32x32_bb_5"
+        self.assertEqual(checks.hd_drawn(self.Menu(reply)), 2)
+
+    def test_none_drawn(self):
+        self.assertEqual(checks.hd_drawn(self.Menu("pack textures drawn in this level (0 of 12):")), 0)
+
+    def test_old_or_garbled_reply_fails(self):
+        with self.assertRaises(RuntimeError):
+            checks.hd_drawn(self.Menu("drawn suspects: a b"))
 
 
 class WaitForSceneTest(FakeGameCase):
