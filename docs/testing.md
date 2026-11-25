@@ -46,7 +46,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   (`tools\stage-assets.ps1`; only what changed is rebuilt). The icons need Python and ImageMagick; without them the
   build warns and goes on. No build ships an HD texture pack (2026-11-24); an older build's staged
   `Play\texture_replacements\ScoobyHD` is removed (links the debug kit made are left alone).
-- **HD texture packs** are an opt-in download in the launcher (**Extras > HD texture packs**, `launcher\TexturePacks.cs`):
+- **HD texture packs** are an opt-in download in the launcher (**Extras > Textures**, `launcher\TexturePacks.cs`):
   it downloads the pack, checks its hash, unpacks it (RAR through Windows' `tar.exe`, bsdtar, 7-Zip or unrar) into
   `UserData\texture_packs\<NN-name>` (Scooby-HD is `50-scoobyhd`) and sets `[video] texture_replacements = true`.
   The game indexes `UserData\texture_replacements` and mods first, then the packs, lower folder name first (it wins);
@@ -449,7 +449,7 @@ Measured on one PC (2026-11-18): `i004` with two A presses, same build twice, id
 
 ## 5. Dev menu (F8)
 
-The dev menu is part of the game, off unless **Extras > Developer tools** is on in the launcher (`[game] dev_tools =
+The dev menu is part of the game, off unless **Extras > Game > Developer tools** is on in the launcher (`[game] dev_tools =
 true` in `Config.toml`) or `NO100F_DEV_TOOLS=1` is set; the scripts in `tools/debug` set that variable for their
 sessions. With it on, the game shows **DEV** and its build in the bottom-right corner. `play-patched.ps1` builds,
 starts the game with the dev menu on, the sound at 5% and rumble off (your volume, mute and rumble lines go back when it
@@ -571,7 +571,7 @@ useful:
   `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout`
   (Linux: `DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet run --project tools/launcher-layout-tests/LauncherLayoutTests.csproj -c Release -- autotest/launcher-layout`).
   It runs the launcher's real window on Avalonia's headless platform (no screen needed, drawn with Skia like on
-  screen) and checks Settings/Display, Controls, Mods and Extras at 1180x830, the 960x680 minimum, 820x600 and 500x547
+  screen) and checks every tab of Settings (Display, Graphics, Controls), Mods and Extras (Discs, Game, Folders, About) at 1180x830, the 960x680 minimum, 820x600 and 500x547
   (what a tiling window manager can force): nothing wider than its page, no horizontal scrolling, usable drop-downs,
   reopening keeps the layout, the wheel over a closed drop-down never changes a setting, long mod names, transparent
   plank corners (normal, hover, pressed, disabled), keyboard activation and accessible names, the Xbox-only rows, the

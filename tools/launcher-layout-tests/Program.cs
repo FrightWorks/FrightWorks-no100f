@@ -125,8 +125,8 @@ static class LauncherLayoutTests
         ThemedCombo Box(MainWindow w, string item) => Descendants(w.boards["settings"]).OfType<ThemedCombo>().Single(c => c.Items.Contains(item));
         void Open(MainWindow w)
         {
+            w.boards["settings"].SelectTab(1);  // Graphics: the row and its note
             w.ShowBoard("settings");
-            w.showControlsTab!(false);
             Pump();
         }
         void Shot(MainWindow w, string name)
@@ -205,6 +205,7 @@ static class LauncherLayoutTests
 
         frameRate.SelectedItem = "30 fps (original)";  // this window's own boxes, as the file below says
         File.WriteAllText(config, before);
+        window.boards["settings"].SelectTab(0);
         window.CloseBoards();
         Pump();
     }
@@ -329,14 +330,14 @@ static class LauncherLayoutTests
         }
         window.showControlsTab!(false);
 
-        void Validate(string name, bool controls = false)
+        void Validate(string name, int tab = 0, string? pageName = null)
         {
+            window.boards[name].SelectTab(tab);
             window.ShowBoard(name);
-            if (name == "settings") window.showControlsTab!(controls);
             Pump();
             var board = window.boards[name];
             var stage = (Control)window.Content!;
-            string page = controls ? "controls" : name;
+            string page = pageName ?? name;
             window.SaveShot(Path.Combine(output, $"{window.ClientSize.Width:0}x{window.ClientSize.Height:0}-{page}.png"));
             Check(new Rect(stage.Bounds.Size).Contains(board.Bounds), $"{page}: board {board.Bounds} escapes the window {stage.Bounds.Size}");
             var scroller = board.Scroller;
@@ -392,9 +393,14 @@ static class LauncherLayoutTests
             Pump();
             Check(Math.Abs(window.ClientSize.Width - size.Width) < 1, $"window did not take {size}: {window.ClientSize}");
             Validate("settings");
-            Validate("settings", controls: true);
+            Validate("settings", 1, "graphics");
+            Validate("settings", 2, "controls");
             Validate("mods");
             Validate("extras");
+            Validate("extras", 1, "extras-textures");
+            Validate("extras", 2, "extras-game");
+            Validate("extras", 3, "extras-folders");
+            Validate("extras", 4, "extras-about");
         }
         Check(File.ReadAllText(config) == initialConfig, "Opening, resizing, or navigation changed configuration");
 
@@ -411,7 +417,7 @@ static class LauncherLayoutTests
         window.KeyPress(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
         window.KeyRelease(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
         Pump();
-        var display = (StackPanel)settings.Body.Children[1];
+        var display = (StackPanel)settings.Body.Children[0];
         Check(display.IsVisible, "Space did not select the Display tab");
 
         // ----- Settings are saved, and nothing else in the file changes -----

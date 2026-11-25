@@ -272,13 +272,38 @@ static class LauncherControllerTests
               "Pad-started and mouse-started actions are not told apart.");
         // The bumpers switch tabs where a page has them: one per press, no wrap, focus on the new tab's button.
         Press(w, LauncherButtons.Previous);
+        Check(Button(w, "Graphics").Selected && !w.layoutBox.IsEffectivelyVisible && Button(w, "Graphics").IsFocused, "LB did not switch to the Graphics tab.");
+        Press(w, LauncherButtons.Previous);
         Check(Button(w, "Display").Selected && !w.layoutBox.IsEffectivelyVisible && Button(w, "Display").IsFocused, "LB did not switch to the Display tab.");
         Press(w, LauncherButtons.Previous);
         Check(Button(w, "Display").Selected && !Button(w, "Controls").Selected, "LB on the first tab wrapped or left it.");
         Press(w, LauncherButtons.Next);
+        Check(Button(w, "Graphics").Selected && Button(w, "Graphics").IsFocused, "RB did not switch to the Graphics tab.");
+        // Down from the tab goes into its page: the first setting there.
+        Press(w, LauncherButtons.Down);
+        Check(TopLevel.GetTopLevel(w)!.FocusManager!.GetFocusedElement() is ThemedCombo { IsEffectivelyVisible: true },
+              "Down from the Graphics tab did not reach its first setting.");
+        Press(w, LauncherButtons.Next);
         Check(Button(w, "Controls").Selected && w.layoutBox.IsEffectivelyVisible && Button(w, "Controls").IsFocused, "RB did not switch to the Controls tab.");
         Press(w, LauncherButtons.Next);
         Check(Button(w, "Controls").Selected && !Button(w, "Display").Selected, "RB on the last tab wrapped or left it.");
+        // Extras has tabs too: Discs, Textures, Game, Folders, About.
+        w.ShowBoard("extras"); Pump();
+        var extras = w.boards["extras"];
+        PlankButton Tab(string name) => extras.GetVisualDescendants().OfType<TabBar>().Single().Children.OfType<PlankButton>().Single(b => b.Text == name);
+        Check(Tab("Discs").Selected, "Extras did not open on Discs.");
+        foreach (var name in new[] { "Textures", "Game", "Folders", "About", "About" })
+        {
+            Press(w, LauncherButtons.Next);
+            Check(Tab(name).Selected && Tab(name).IsFocused && extras.SelectedTab == Array.IndexOf(new[] { "Discs", "Textures", "Game", "Folders", "About" }, name),
+                  $"RB in Extras did not reach {name} (or wrapped).");
+        }
+        Press(w, LauncherButtons.Previous);
+        Check(Tab("Folders").Selected, "LB in Extras did not go back to Folders.");
+        extras.SelectTab(0);
+        Press(w, LauncherButtons.Back);
+        Check(!extras.IsVisible, "Back did not close Extras.");
+        w.ShowBoard("settings"); w.showControlsTab!(true); Pump();
         Shot(w, "Controls-focus");
 
         string before = File.ReadAllText(config);

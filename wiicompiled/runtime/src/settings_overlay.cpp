@@ -1463,26 +1463,6 @@ void DrawVideoSettings() {
         Hint("Used when the game goes fullscreen (F11 or Display mode).");
     }
 #endif
-#ifdef AURORA_HAS_INK_OUTLINES
-    {
-        const int level = std::clamp(RuntimeConfigFile::InkOutlines(), 0, 2);
-        RowLabel("Ink outlines", labelWidth, controlWidth);
-        if (ImGui::BeginCombo("##inkoutlines", RuntimeConfigFile::kInkOutlineLevels[level])) {
-            for (int i = 0; i < 3; ++i) {
-                const bool selected = i == level;
-                if (ImGui::Selectable(RuntimeConfigFile::kInkOutlineLevels[i], selected) && !selected) {
-                    aurora_set_ink_outlines(i);
-                    RuntimeConfigFile::SetInkOutlines(i);
-                }
-                if (selected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        Hint("Cartoon lines around characters and objects. Bold also draws sharp edges inside them.");
-    }
-#endif
 
 #if defined(_WIN32)
     SectionTitle("HDR");
@@ -1493,7 +1473,41 @@ void DrawVideoSettings() {
     Hint("Open brightness controls and real HDR test patterns. HDR output changes require a restart.");
 #endif
 
-    SectionTitle("Smoothness");
+    SectionTitle("Performance");
+    if (Toggle("Show FPS", &g_showFps)) {
+        RuntimeConfigFile::SetShowFps(g_showFps);
+    }
+#if defined(__APPLE__)
+    const bool metalFxSupported = aurora_is_metalfx_spatial_supported();
+    ImGui::BeginDisabled(!metalFxSupported);
+    if (Toggle("MetalFX spatial upscaling", &g_metalFxSpatialUpscaling)) {
+        aurora_set_metalfx_spatial(g_metalFxSpatialUpscaling);
+        RuntimeConfigFile::SetMetalFxSpatialUpscaling(g_metalFxSpatialUpscaling);
+    }
+    ImGui::EndDisabled();
+    switch (aurora_get_metalfx_status()) {
+    case AURORA_METALFX_ACTIVE:
+        Hint("Active: upscaling the game image before the overlay.");
+        break;
+    case AURORA_METALFX_NOT_UPSCALING:
+        Hint("Choose a lower internal resolution to use MetalFX.");
+        break;
+    case AURORA_METALFX_UNSUPPORTED:
+        Hint("Requires macOS 13+, Metal, and a MetalFX-capable GPU.");
+        break;
+    case AURORA_METALFX_ERROR:
+        Hint("Unavailable after a renderer error; toggle off and on to retry.");
+        break;
+    case AURORA_METALFX_DISABLED:
+        Hint(metalFxSupported ? "Render below output resolution for sharper lower-cost output."
+                              : "MetalFX spatial upscaling is unavailable on this device.");
+        break;
+    }
+#endif
+
+    // The same group as the launcher's Graphics > Experimental.
+    SectionTitle("Experimental");
+    Hint("These might show visual glitches.");
     constexpr std::array<const char*, 3> kFrameInterpolationModes{
         "Off", "120 FPS", "180 FPS",
     };
@@ -1527,7 +1541,7 @@ void DrawVideoSettings() {
         }
     }
     Hint(frameInterpolationLocked ? "Only works at 60 fps, so it stays off at 30 fps. The launcher sets the frame rate."
-                                  : "Experimental: you might see visual artifacts.");
+                                  : "Draws extra frames between the game's own for smoother motion.");
     {
         // A strength set by hand in Config.toml that is none of the levels shows as its percentage.
         const int percent = std::clamp(RuntimeConfigFile::MotionBlur(), 0, 100);
@@ -1550,39 +1564,25 @@ void DrawVideoSettings() {
             ImGui::EndCombo();
         }
     }
-    if (Toggle("Show FPS", &g_showFps)) {
-        RuntimeConfigFile::SetShowFps(g_showFps);
+#ifdef AURORA_HAS_INK_OUTLINES
+    {
+        const int level = std::clamp(RuntimeConfigFile::InkOutlines(), 0, 2);
+        RowLabel("Ink outlines", labelWidth, controlWidth);
+        if (ImGui::BeginCombo("##inkoutlines", RuntimeConfigFile::kInkOutlineLevels[level])) {
+            for (int i = 0; i < 3; ++i) {
+                const bool selected = i == level;
+                if (ImGui::Selectable(RuntimeConfigFile::kInkOutlineLevels[i], selected) && !selected) {
+                    aurora_set_ink_outlines(i);
+                    RuntimeConfigFile::SetInkOutlines(i);
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        Hint("Cartoon lines around characters and objects. Bold also draws sharp edges inside them.");
     }
-#if defined(__APPLE__)
-    const bool metalFxSupported = aurora_is_metalfx_spatial_supported();
-    ImGui::BeginDisabled(!metalFxSupported);
-    if (Toggle("MetalFX spatial upscaling", &g_metalFxSpatialUpscaling)) {
-        aurora_set_metalfx_spatial(g_metalFxSpatialUpscaling);
-        RuntimeConfigFile::SetMetalFxSpatialUpscaling(g_metalFxSpatialUpscaling);
-    }
-    ImGui::EndDisabled();
-    switch (aurora_get_metalfx_status()) {
-    case AURORA_METALFX_ACTIVE:
-        Hint("Active: upscaling the game image before the overlay.");
-        break;
-    case AURORA_METALFX_NOT_UPSCALING:
-        Hint("Choose a lower internal resolution to use MetalFX.");
-        break;
-    case AURORA_METALFX_UNSUPPORTED:
-        Hint("Requires macOS 13+, Metal, and a MetalFX-capable GPU.");
-        break;
-    case AURORA_METALFX_ERROR:
-        Hint("Unavailable after a renderer error; toggle off and on to retry.");
-        break;
-    case AURORA_METALFX_DISABLED:
-        Hint(metalFxSupported ? "Render below output resolution for sharper lower-cost output."
-                              : "MetalFX spatial upscaling is unavailable on this device.");
-        break;
-    }
-#endif
-
-#if defined(AURORA_HAS_SCENE_STAGE) || defined(AURORA_HAS_BLOOM)
-    SectionTitle("Experimental");
 #endif
 #ifdef AURORA_HAS_SCENE_STAGE
     {
@@ -1606,7 +1606,7 @@ void DrawVideoSettings() {
             }
             ImGui::EndCombo();
         }
-        Hint("Soft shade where surfaces meet: in corners, creases and under things. You might see visual glitches.");
+        Hint("Soft shade where surfaces meet: in corners, creases and under things.");
     }
 #endif
 #ifdef AURORA_HAS_BLOOM
@@ -1631,7 +1631,7 @@ void DrawVideoSettings() {
             }
             ImGui::EndCombo();
         }
-        Hint("A soft glow around lit windows, lamp light, fire and sparkles. You might see visual glitches.");
+        Hint("A soft glow around lit windows, lamp light, fire and sparkles.");
     }
 #endif
 

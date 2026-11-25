@@ -235,6 +235,169 @@ static class Skin
         Text = text, Foreground = Brush(Cream), FontFamily = BodyFamily, FontSize = BodySize, FontWeight = FontWeight.Bold,
         Margin = new Thickness(0, 9, 14, 6), TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Left,
     };
+
+    // One short line under a setting or section: smaller and dimmer than the setting's name.
+    public static TextBlock Hint(string text) => new()
+    {
+        Text = text, TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Left,
+        Foreground = Brush(CreamDim), FontFamily = BodyFamily, FontSize = SmallSize,
+    };
+
+    // A line below a page's cards (where the changes go, keys in the game).
+    public static TextBlock Footnote(string text)
+    {
+        var t = Hint(text);
+        t.Margin = new Thickness(4, 12, 0, 0);
+        return t;
+    }
+
+    // A status line inside a card (a disc that is set up, or not): green when all is well, orange when something is missing.
+    public static TextBlock Status() => new()
+    {
+        TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Left,
+        FontFamily = BodyFamily, FontSize = BodySize, FontWeight = FontWeight.SemiBold,
+    };
+
+    // A card's heading: small capitals in lime, with an optional hint below.
+    public static Control SectionTitle(string title, string? hint = null)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(4, 14, 0, 6) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = title.ToUpperInvariant(), Foreground = Brush(Lime), FontFamily = BodyFamily, FontSize = SmallSize,
+            FontWeight = FontWeight.Bold, LetterSpacing = 1, TextWrapping = TextWrapping.Wrap,
+        });
+        if (hint != null)
+        {
+            var h = Hint(hint);
+            h.Margin = new Thickness(0, 2, 0, 0);
+            panel.Children.Add(h);
+        }
+        return panel;
+    }
+}
+
+// A group of settings on a board: a slightly lighter rounded card with a thin line between its visible rows.
+sealed class Card : Decorator
+{
+    readonly StackPanel stack = new() { Orientation = Orientation.Vertical };
+    public Controls Children => stack.Children;
+
+    public Card() => Child = stack;
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        var size = base.ArrangeOverride(finalSize);
+        InvalidateVisual();  // a row shown or hidden moves the lines
+        return size;
+    }
+
+    public override void Render(DrawingContext g)
+    {
+        var r = new Rect(Bounds.Size).Deflate(0.5);
+        if (r.Width <= 0 || r.Height <= 0) return;
+        g.DrawGeometry(Skin.Brush(Skin.Argb(20, 255, 255, 255)), new Pen(Skin.Brush(Skin.Argb(34, 255, 255, 255)), 1), Skin.Rounded(r, 10));
+        var line = new Pen(Skin.Brush(Skin.Argb(26, 255, 255, 255)), 1);
+        bool first = true;
+        foreach (var child in Children)
+        {
+            if (!child.IsVisible || child.Bounds.Height <= 0) continue;
+            if (!first) g.DrawLine(line, new Point(14, Math.Round(child.Bounds.Top) + 0.5), new Point(Bounds.Width - 14, Math.Round(child.Bounds.Top) + 0.5));
+            first = false;
+        }
+    }
+}
+
+// Anything other than a setting in a card (a status line, buttons, a progress bar), with the rows' padding. With nothing
+// in it showing it takes no room (and the card draws no line for it).
+sealed class CardBlock : Decorator
+{
+    readonly StackPanel stack = new() { Orientation = Orientation.Vertical };
+
+    public CardBlock(params Control[] children)
+    {
+        Padding = new Thickness(14, 10, 14, 10);
+        foreach (var c in children) stack.Children.Add(c);
+        Child = stack;
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var size = base.MeasureOverride(availableSize);
+        return stack.DesiredSize.Height > 0 ? size : default;
+    }
+}
+
+// One setting: its name with an optional hint below on the left, the control on the right. Narrower than about 400
+// pixels it stacks: name, hint, then the control at full width. The control takes the name as its accessible name, which
+// the controller's choice popup also shows.
+sealed class SettingRow : Panel
+{
+    public readonly TextBlock Label;
+    public readonly TextBlock? HintText;
+    public readonly Control Field;
+    const double PadX = 14, Gap = 16, NarrowBelow = 400, StackGap = 6;
+    double PadY => Compact ? 5 : 9;
+    public bool Compact { get; init; }  // a list of facts (the keyboard keys) rather than settings
+
+    public SettingRow(string label, string? hint, Control field)
+    {
+        Label = new TextBlock
+        {
+            Text = label, Foreground = Skin.Brush(Skin.Cream), FontFamily = Skin.BodyFamily, FontSize = Skin.BodySize,
+            FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap,
+        };
+        Children.Add(Label);
+        if (hint != null)
+        {
+            HintText = Skin.Hint(hint);
+            HintText.Margin = new Thickness(0, 2, 0, 0);
+            Children.Add(HintText);
+        }
+        Field = field;
+        field.Margin = default;
+        field.VerticalAlignment = VerticalAlignment.Center;
+        if (field is ComboBox or CheckBox) AutomationProperties.SetName(field, label);
+        Children.Add(field);
+    }
+
+    // The control column: drop-downs fill it; buttons, ticks and plain text keep their natural width at its left edge,
+    // so they line up with the drop-downs above and below.
+    bool Sized => Field is ComboBox;
+
+    static double Column(double inner) => Math.Clamp(inner * 0.46, 150, 280);
+
+    static bool Narrow(double inner) => inner < NarrowBelow;
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        double width = double.IsInfinity(availableSize.Width) ? 560 : availableSize.Width;
+        double inner = Math.Max(0, width - 2 * PadX);
+        bool narrow = Narrow(inner);
+        double column = narrow ? inner : Column(inner), textWidth = narrow ? inner : Math.Max(0, inner - column - Gap);
+        Field.Measure(new Size(column, double.PositiveInfinity));
+        Label.Measure(new Size(textWidth, double.PositiveInfinity));
+        HintText?.Measure(new Size(textWidth, double.PositiveInfinity));
+        double text = Label.DesiredSize.Height + (HintText?.DesiredSize.Height ?? 0);
+        double content = narrow ? text + StackGap + Field.DesiredSize.Height : Math.Max(text, Field.DesiredSize.Height);
+        return new Size(width, 2 * PadY + content);
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        double inner = Math.Max(0, finalSize.Width - 2 * PadX);
+        bool narrow = Narrow(inner);
+        double column = narrow ? inner : Column(inner), textWidth = narrow ? inner : Math.Max(0, inner - column - Gap);
+        double fieldWidth = Sized ? column : Math.Min(column, Field.DesiredSize.Width);
+        double text = Label.DesiredSize.Height + (HintText?.DesiredSize.Height ?? 0);
+        double content = finalSize.Height - 2 * PadY;
+        double ty = narrow ? PadY : PadY + (content - text) / 2;
+        Label.Arrange(new Rect(PadX, ty, textWidth, Label.DesiredSize.Height));
+        HintText?.Arrange(new Rect(PadX, ty + Label.DesiredSize.Height, textWidth, HintText.DesiredSize.Height));
+        if (narrow) Field.Arrange(new Rect(PadX, PadY + text + StackGap, fieldWidth, Field.DesiredSize.Height));
+        else Field.Arrange(new Rect(PadX + inner - column, PadY + (content - Field.DesiredSize.Height) / 2, fieldWidth, Field.DesiredSize.Height));
+        return finalSize;
+    }
 }
 
 // A small wooden plank button: purple (or lime for the main action), lighter on hover. Enter or Space presses it.
@@ -474,14 +637,18 @@ sealed class ThemedBar : Control
     }
 }
 
-// A page over the left half of the mansion: a dark board with a title, a close plank and scrolling content.
+// A page over the left half of the mansion: a dark board with a title, a close plank, optional tabs under the title
+// (they stay put while the page scrolls) and scrolling content.
 sealed class Board : Panel
 {
     public readonly StackPanel Body;
     public readonly ScrollViewer Scroller;
     readonly PlankButton close;
     readonly Backdrop backdrop;
+    TabBar? tabs;
+    readonly List<(PlankButton Tab, Control Page)> pages = new();
     static readonly Thickness Inset = new(26, 74, 18, 22);
+    const double TabsTop = 66, TabsGap = 4;
 
     public Board(string title, Action onClose)
     {
@@ -505,20 +672,54 @@ sealed class Board : Panel
 
     public string BoardTitle { get; }
 
+    // A tab and its page; the first one added is open. The tabs come before the page in the children, so a controller
+    // reaches them first, as when they were the top of the page.
+    public void AddTab(string name, Control page)
+    {
+        if (tabs == null)
+        {
+            tabs = new TabBar();
+            Children.Insert(Children.IndexOf(Scroller), tabs);
+        }
+        int index = pages.Count;
+        var tab = new PlankButton(name, (_, _) => SelectTab(index));
+        tabs.Children.Add(tab);
+        pages.Add((tab, page));
+        Body.Children.Add(page);
+        if (index == 0) SelectTab(0); else page.IsVisible = false;
+    }
+
+    public int SelectedTab { get; private set; }
+
+    public void SelectTab(int index)
+    {
+        for (int i = 0; i < pages.Count; i++)
+        {
+            pages[i].Page.IsVisible = i == index;
+            pages[i].Tab.Selected = i == index;
+        }
+        if (SelectedTab != index) Scroller.Offset = default;  // a new page starts at its top
+        SelectedTab = index;
+    }
+
+    double ContentTop => tabs == null ? Inset.Top : TabsTop + tabs.DesiredSize.Height + TabsGap;
+
     protected override Size MeasureOverride(Size availableSize)
     {
         backdrop.Measure(availableSize);
         close.Measure(availableSize);
-        Scroller.Measure(new Size(Math.Max(0, availableSize.Width - Inset.Left - Inset.Right),
-                                  Math.Max(0, availableSize.Height - Inset.Top - Inset.Bottom)));
+        double width = Math.Max(0, availableSize.Width - Inset.Left - Inset.Right);
+        tabs?.Measure(new Size(width, double.PositiveInfinity));
+        Scroller.Measure(new Size(width, Math.Max(0, availableSize.Height - ContentTop - Inset.Bottom)));
         return availableSize;
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
         backdrop.Arrange(new Rect(finalSize));
-        Scroller.Arrange(new Rect(Inset.Left, Inset.Top, Math.Max(0, finalSize.Width - Inset.Left - Inset.Right),
-                                  Math.Max(0, finalSize.Height - Inset.Top - Inset.Bottom)));
+        double width = Math.Max(0, finalSize.Width - Inset.Left - Inset.Right);
+        tabs?.Arrange(new Rect(Inset.Left, TabsTop, width, tabs.DesiredSize.Height));
+        Scroller.Arrange(new Rect(Inset.Left, ContentTop, width, Math.Max(0, finalSize.Height - ContentTop - Inset.Bottom)));
         close.Arrange(new Rect(finalSize.Width - close.DesiredSize.Width - 16, 16, close.DesiredSize.Width, close.DesiredSize.Height));
         Clip = Skin.Rounded(new Rect(finalSize), 16);
         return finalSize;

@@ -103,7 +103,7 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 - Saves or local builds.
 - The HD pack, or any picture made from the game's textures (no exceptions).
   Texture packs are an opt-in launcher download (maintainer, 2026-11-24): no build ships one, nothing is selected by default.
-  The launcher (`launcher/TexturePacks.cs`, Extras > HD texture packs) puts a pack in `<UserData>/texture_packs/<NN-name>`; the game indexes those after the mods, lower folder name first (it wins), and skips one with a `disabled` file.
+  The launcher (`launcher/TexturePacks.cs`, Extras > Textures) puts a pack in `<UserData>/texture_packs/<NN-name>`; the game indexes those after the mods, lower folder name first (it wins), and skips one with a `disabled` file.
   A pack texture that needs fixing is fixed by the game as it loads (the Smuggler's Cove sign: `add_original_alpha` in `texture_replacement.cpp`).
   The pack files are on archive.org, uploaded by the maintainer; the Creeper frames and menu art are in the private menu pack repo (`Loneranger419/no100f-menu-pack`).
   `tools/debug/get-hd-pack.py` fetches ScoobyHD into `texture_pack/` for the debug kit.
@@ -345,7 +345,7 @@ To build old source there, set only the paths that differ with `git restore --so
   Its tuning is at the top of `scene_stage.cpp`; the angle bias keeps the game's low-poly walls and rocks from darkening at every polygon edge.
   `ao PERCENT` in `devmenu.txt` sets it for one run without changing the setting.
   Its targets exist only while it is on or the occlusion view is showing, and are freed at the next frame.
-- Ink outlines (`[video] ink_outlines`: 0 off, 1 thin, 2 bold; F10 > Video > Picture and the launcher) run at the scene stage after the ambient occlusion, from the depth alone: a silhouette is a kink in the inverse depth (flat surfaces have none, even at grazing angles), inked on the nearer side only; Bold is the same test with a wider line, with no creases (inking them tore up small and curved things).
+- Ink outlines (`[video] ink_outlines`: 0 off, 1 thin, 2 bold; experimental; F10 > Video > Experimental and the launcher's Experimental section) run at the scene stage after the ambient occlusion, from the depth alone: a silhouette is a kink in the inverse depth (flat surfaces have none, even at grazing angles), inked on the nearer side only; Bold is the same test with a wider line, with no creases (inking them tore up small and curved things).
   A pixel inks only when one side drops away, so things thinner than one line keep their colour; those between one and two lines are mostly black.
   Line width follows the picture's height, and lines fade out from 35 to 80 units.
   Tuning is at the top of `scene_stage.cpp`.

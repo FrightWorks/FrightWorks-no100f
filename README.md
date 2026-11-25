@@ -25,7 +25,7 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
 - Up to 4K, in true widescreen (16:9, fill, cinematic 2.39:1) or the original 4:3
 - 30 or 60 fps, MSAA, HDR with brightness calibration
 - Motion blur and cartoon ink outlines; ambient occlusion and bloom (experimental)
-- Optional HD texture pack by dogerki, downloaded from the launcher when you choose it (Extras > HD texture packs)
+- Optional HD texture pack by dogerki, downloaded from the launcher when you choose it (Extras > Textures)
 - The Xbox version's Creeper window animation in the Mystic Manor courtyard
 
 **Controls**
@@ -62,7 +62,7 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
 | **F10** (or the controller's **Back**/**Select**) | Settings |
 | **F11** | Fullscreen |
 | **F2** / **F3** | Screenshot / video (video needs Developer tools) |
-| **F8** | Dev menu (needs **Extras > Developer tools**) |
+| **F8** | Dev menu (needs **Extras > Game > Developer tools**) |
 | **F1** | Opens this page |
 
 More in the [player's guide](docs/playing.md): file locations, updates, Linux, controllers, moving from an earlier
