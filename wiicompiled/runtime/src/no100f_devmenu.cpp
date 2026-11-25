@@ -35,6 +35,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cstring>
 #include <cctype>
 #include <cmath>
 #include <cfloat>
@@ -1119,122 +1120,43 @@ std::string MonsterList() {
     return out;
 }
 
-// Suspect HD textures for the Textures tab, from UserData/devmenu_textures.txt (tab-separated: id, replacement file name
-// without extension, severity, asset, scenes (space-separated), level). "drawn" = the game has drawn that replacement in
-// this level (see UpdateDrawn).
-struct Suspect {
-    std::string id, key, severity, asset, level;
-    std::vector<uint32_t> scenes;
-    bool effect = false;  // 7th column "effect": drawn at runtime (kills, bonks, pickups...): Effects tab
-};
-std::vector<Suspect> g_suspects;
-bool g_suspectsLoaded = false;
-bool g_suspectsThisScene[2] = {true, true};  // Textures, Effects
-std::string g_findId;  // suspect drawn solid magenta ("Find"), empty = none
-
-// Draws the suspect's replacement solid magenta (needs texture replacements on); nullptr = off.
-void SetFind(const Suspect* s) {
-    g_findId = s ? s->id : "";
-    aurora_texture_replacement_highlight(s ? s->key.c_str() : nullptr);
-    g_status = s ? "Finding " + s->id + " (magenta)" : "Find off";
-}
-
-// Verdicts per scene, UserData/devmenu_verdicts.txt (tab-separated: id, scene, status; scene "*" = every scene). The
-// verdict button sets fine/bugged/fixed for the current scene (a texture can be fine in one level and broken in
-// another); tools/debug/texhunt/verdicts.py merges them into suspects.csv and adds "fixed" for textures fixed in the pack.
-std::map<std::pair<std::string, std::string>, std::string> g_verdicts;  // (id, scene) -> status
-bool g_hideFine[2] = {true, true};  // Textures, Effects
-
-std::filesystem::path VerdictsPath() { return RuntimeConfigFile::ApplicationDataDirectory() / "devmenu_verdicts.txt"; }
-
-std::string Verdict(const std::string& id, uint32_t scene) {
-    auto it = g_verdicts.find({id, Lower(IdString(scene))});
-    if (it == g_verdicts.end()) it = g_verdicts.find({id, "*"});
-    return it == g_verdicts.end() ? "" : it->second;
-}
-
-void SetVerdict(const std::string& id, uint32_t scene, const std::string& status) {
-    const std::string sceneName = Lower(IdString(scene));
-    if (status.empty()) {
-        g_verdicts.erase({id, sceneName});
-    } else {
-        g_verdicts[{id, sceneName}] = status;
-    }
-    std::ofstream out(VerdictsPath(), std::ios::trunc);
-    out << "# id\tscene\tstatus  (dev menu Textures tab; tools/debug/texhunt/verdicts.py)\n";
-    for (const auto& [key, vstatus] : g_verdicts) out << key.first << '\t' << key.second << '\t' << vstatus << '\n';
-    g_status = id + (status.empty() ? " unmarked" : " marked " + status) + " in " + sceneName;
-}
-
-// Drawn per level, UserData/devmenu_drawn.txt (tab-separated: id, scene), kept across sessions. aurora notes each
-// replacement on upload; on entering a level the menu clears that and drops the texture caches, so what gets noted after
-// that was drawn in this level.
-std::set<std::pair<std::string, std::string>> g_drawn;  // (id, scene)
+// Textures tab: every texture drawn in this level, from aurora's list (aurora_texture_drawn). The menu clears it on
+// entering a level; aurora then drops its texture caches, so everything on screen is noted again.
+std::vector<AuroraDrawnTexture> g_levelTextures;  // sorted by name
+uint32_t g_levelTexturesGeneration = UINT32_MAX;
 uint32_t g_drawnScene = 0;
+std::string g_findName;  // texture drawn solid magenta ("Find"), empty = none
 
-std::filesystem::path DrawnPath() { return RuntimeConfigFile::ApplicationDataDirectory() / "devmenu_drawn.txt"; }
-
-bool Drawn(const std::string& id, uint32_t scene) { return g_drawn.count({id, Lower(IdString(scene))}) > 0; }
-
-std::string DrawnScenes(const std::string& id) {
-    std::string out;
-    for (const auto& [did, scene] : g_drawn)
-        if (did == id) out += (out.empty() ? "" : " ") + scene;
-    return out;
+void RefreshLevelTextures() {
+    const uint32_t generation = aurora_texture_drawn_generation();
+    if (generation == g_levelTexturesGeneration) return;
+    g_levelTexturesGeneration = generation;
+    g_levelTextures.resize(aurora_texture_drawn(nullptr, 0));
+    const size_t n = aurora_texture_drawn(g_levelTextures.data(), g_levelTextures.size());
+    g_levelTextures.resize(std::min(n, g_levelTextures.size()));
+    std::sort(g_levelTextures.begin(), g_levelTextures.end(),
+              [](const AuroraDrawnTexture& a, const AuroraDrawnTexture& b) { return std::strcmp(a.name, b.name) < 0; });
 }
 
-void LoadSuspects() {
-    if (g_suspectsLoaded) return;
-    g_suspectsLoaded = true;
-    std::ifstream drawn(DrawnPath());
-    for (std::string line; std::getline(drawn, line);) {
-        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
-        const size_t tab = line.find('\t');
-        if (line.empty() || line[0] == '#' || tab == std::string::npos) continue;
-        g_drawn.insert({line.substr(0, tab), line.substr(tab + 1)});
-    }
-    std::ifstream verdicts(VerdictsPath());
-    for (std::string line; std::getline(verdicts, line);) {
-        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
-        std::vector<std::string> f;
-        std::istringstream ss(line);
-        for (std::string field; std::getline(ss, field, '\t');) f.push_back(field);
-        if (f.size() < 3 || f[0].empty() || f[0][0] == '#') continue;
-        g_verdicts[{f[0], f[1]}] = f[2];
-    }
-    std::ifstream in(RuntimeConfigFile::ApplicationDataDirectory() / "devmenu_textures.txt");
-    for (std::string line; std::getline(in, line);) {
-        std::vector<std::string> f;
-        std::istringstream ss(line);
-        for (std::string field; std::getline(ss, field, '\t');) f.push_back(field);
-        if (f.size() < 6 || f[0].empty() || f[0][0] == '#') continue;
-        Suspect s{f[0], f[1], f[2], f[3], f[5], {}};
-        std::istringstream sc(f[4]);
-        for (std::string id; sc >> id;) s.scenes.push_back(IdFromString(id));
-        s.effect = f.size() > 6 && IsEffectEntry(f[6]);
-        g_suspects.push_back(std::move(s));
-    }
+// Draws that texture solid magenta wherever it is used (any texture, with HD textures on or off); "" = off.
+void SetFind(const std::string& name) {
+    g_findName = name;
+    aurora_texture_replacement_highlight(name.c_str());
+    g_status = name.empty() ? "Find off" : "Finding " + name + " (magenta)";
 }
 
 void UpdateDrawn() {
-    static uint32_t tick = 0;
+    static bool tracking = false;
+    if (!tracking) {
+        aurora_texture_track_drawn(true);
+        tracking = true;
+    }
     if (!InPlay()) return;
     const uint32_t scene = CurrentSceneId();
     if (scene != g_drawnScene) {  // new level: forget the last one's textures
         g_drawnScene = scene;
         aurora_texture_replacement_reset_used();
-        return;
     }
-    if (++tick % 30 != 0) return;
-    LoadSuspects();
-    const std::string sceneName = Lower(IdString(scene));
-    bool added = false;
-    for (const Suspect& s : g_suspects)
-        if (aurora_texture_replacement_used(s.key.c_str())) added |= g_drawn.insert({s.id, sceneName}).second;
-    if (!added) return;
-    std::ofstream out(DrawnPath(), std::ios::trunc);
-    out << "# id\tscene  (dev menu: suspect texture drawn in that level)\n";
-    for (const auto& [id, dscene] : g_drawn) out << id << '\t' << dscene << '\n';
 }
 
 // Spots are per scene: a name can be saved once in each scene. This scene's spot with that name, else the first one.
@@ -1414,8 +1336,8 @@ void DrawDiagnostics() {
 //   monsters [on|off]   list this scene's monsters; all monsters off (every scene) / back on
 //   monster N|NAME on|off
 //   ents                log the scene's entity list
-//   textures            log which suspect textures (devmenu_textures.txt) have been drawn in this level
-//   find ID|off         draw that suspect's texture solid magenta / back to normal
+//   textures            log the texture pack files drawn in this level (count, then their names)
+//   find NAME|off       draw that texture (pack file name, extension optional) solid magenta / back to normal
 //   texreload           read the texture folders and packs again (files added, removed or edited); console.log lists
 //                       them
 //   freecam on|off      free camera (starts at the game camera)
@@ -1552,10 +1474,17 @@ void PollCommandFile() {
             aurora_texture_replacement_reload();
             g_status = "Texture packs reloading (console.log lists them)";
         } else if (cmd == "textures") {
-            LoadSuspects();
-            g_status = "drawn suspects:";
-            for (const Suspect& s : g_suspects)
-                if (Drawn(s.id, CurrentSceneId())) g_status += " " + s.id;
+            RefreshLevelTextures();
+            std::string names;
+            size_t packs = 0;
+            for (const AuroraDrawnTexture& t : g_levelTextures) {
+                if (!t.pack) continue;
+                names += ' ';
+                names += t.name;
+                ++packs;
+            }
+            g_status = "pack textures drawn in this level (" + std::to_string(packs) + " of " +
+                       std::to_string(g_levelTextures.size()) + "):" + names;
         } else if (cmd == "cutout") {
 #ifdef AURORA_HAS_CUTOUT_MODE
             if (!arg.empty()) aurora_set_cutout_mode(std::atoi(arg.c_str()));
@@ -1660,15 +1589,10 @@ void PollCommandFile() {
             g_status = "camera move " + arg + " per frame" + (g_cam.on ? "" : " (no free camera here)");
             if (!g_cam.on) ClearCamMotion();
         } else if (cmd == "find") {
-            LoadSuspects();
-            const auto it = std::find_if(g_suspects.begin(), g_suspects.end(), [&](const Suspect& s) { return s.id == arg; });
-            if (arg == "off") {
-                SetFind(nullptr);
-            } else if (it != g_suspects.end()) {
-                SetFind(&*it);
-            } else {
-                g_status = "No suspect " + arg;
-            }
+            std::string name = Lower(arg);
+            for (const char* ext : {".dds", ".png"})
+                if (name.size() > 4 && name.compare(name.size() - 4, 4, ext) == 0) name.resize(name.size() - 4);
+            SetFind(name == "off" ? "" : name);
         } else if (cmd == "ents") {
             const uint32_t scene = CurrentScenePtr();
             const uint32_t list = scene ? Read32Or0(scene + 0x78) : 0, count = scene ? Read32Or0(scene + 0x74) : 0;
@@ -2057,89 +1981,12 @@ void DrawPlayer() {
     }
 }
 
-// Textures tab (Suspect / LoadSuspects above PollCommandFile). "Save spot" saves Scooby's position under the suspect's ID
-// in this scene (other scenes keep theirs).
-void SaveSpotAs(const std::string& name) {
-    Spot s;
-    if (!ReadPlayer(s) || !s.scene) {
-        g_status = "Player not found.";
-        return;
-    }
-    s.name = name;
-    AddCam(s);
-    g_spots.erase(std::remove_if(g_spots.begin(), g_spots.end(),
-                                 [&](const Spot& o) { return o.name == name && o.scene == s.scene; }),
-                  g_spots.end());
-    g_spots.push_back(s);
-    SaveSpots();
-    g_status = "Saved " + name + " in " + Lower(IdString(s.scene));
-}
-
-// Toggles keep their label and turn this colour while on (a changing label would shift the table).
-const ImVec4 kFindColor(0.75f, 0.2f, 0.75f, 1.0f);
-const ImVec4 kFineColor(0.2f, 0.6f, 0.25f, 1.0f);
-const ImVec4 kSavedColor(0.2f, 0.4f, 0.75f, 1.0f);
-
-bool ToggleButton(const char* label, bool on, const ImVec4& col) {
-    if (on) {
-        ImGui::PushStyleColor(ImGuiCol_Button, col);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(col.x * 1.2f, col.y * 1.2f, col.z * 1.2f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(col.x * 1.4f, col.y * 1.4f, col.z * 1.4f, 1.0f));
-    }
-    const bool pressed = ImGui::SmallButton(label);
-    if (on) ImGui::PopStyleColor(3);
-    return pressed;
-}
-
-// This level's verdict, one button cycling Unset -> Fine -> Bugged -> Fixed -> Unset; fixed width so the table doesn't
-// move, and one ID whatever it says ("###verdict") so the nav cursor stays on it.
-const ImVec4 kBuggedColor(0.75f, 0.2f, 0.2f, 1.0f);
-const ImVec4 kFixedColor(0.25f, 0.45f, 0.8f, 1.0f);
-
-std::string NextVerdict(const std::string& mark) {
-    return mark.empty() ? "fine" : mark == "fine" ? "bugged" : mark == "bugged" ? "fixed" : "";
-}
-
-bool VerdictButton(const std::string& mark) {
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const float width = ImGui::CalcTextSize("Bugged").x + style.FramePadding.x * 2.0f;
-    const bool on = !mark.empty();
-    const ImVec4 col = mark == "fine" ? kFineColor : mark == "bugged" ? kBuggedColor : kFixedColor;
-    if (on) {
-        ImGui::PushStyleColor(ImGuiCol_Button, col);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(col.x * 1.2f, col.y * 1.2f, col.z * 1.2f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(col.x * 1.4f, col.y * 1.4f, col.z * 1.4f, 1.0f));
-    }
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, 0.0f));  // SmallButton height
-    const char* label = mark == "fine"     ? "Fine###verdict"
-                        : mark == "bugged" ? "Bugged###verdict"
-                        : mark == "fixed"  ? "Fixed###verdict"
-                                           : "Unset###verdict";
-    const bool pressed = ImGui::Button(label, ImVec2(width, 0.0f));
-    ImGui::PopStyleVar();
-    if (on) ImGui::PopStyleColor(3);
-    return pressed;
-}
-
 // Scenes from the level table (menus and boot aren't scenes you can load into or mark).
 bool IsPlayable(uint32_t id) {
     for (const Level& level : g_levels)
         for (const Scene& scene : level.scenes)
             if (scene.id == id) return true;
     return false;
-}
-
-bool Done(const std::string& verdict) { return verdict == "fine" || verdict == "fixed"; }
-
-// Fine or fixed in how many of the playable scenes that use it, and how many of those there are.
-std::pair<int, int> FineCount(const Suspect& s) {
-    int fine = 0, total = 0;
-    for (uint32_t id : s.scenes) {
-        if (!IsPlayable(id)) continue;
-        ++total;
-        fine += Done(Verdict(s.id, id));
-    }
-    return {fine, total};
 }
 
 // Texture log (Textures tab checkbox, or NO100F_TEXLOG=1 at start): every texture's draw states go to
@@ -2158,138 +2005,78 @@ void UpdateTexLog() {
     aurora_texture_log(want.c_str());
 }
 
-// Rows marked since the menu opened stay listed with "Hide fine/fixed" on, so the cursor isn't lost mid-cycle.
-std::set<std::string> g_markedOpen;
-
-// Textures tab (effects = false) / Effects tab (effects = true: drawn at runtime, e.g. on a kill or a bonk).
-void DrawTextures(bool effects) {
-    bool& thisScene = g_suspectsThisScene[effects ? 1 : 0];
-    bool& hideFine = g_hideFine[effects ? 1 : 0];
-    if (effects)
-        ImGui::TextWrapped("Textures drawn at runtime (bonks, pickups, particles). This is not a gameplay-effects toggle.");
-    if (ImGui::Button("Reload devmenu_textures.txt")) {
-        g_suspects.clear();
-        g_suspectsLoaded = false;
-    }
-    ImGui::SameLine();
+// Textures tab: every texture drawn in this level, with "HD" for those drawn from a texture pack file. Clicking one draws
+// it solid magenta wherever it is used (Find), so you can see where it goes.
+void DrawTextures() {
     if (ImGui::Button("Reload texture packs")) {
         aurora_texture_replacement_reload();
         g_status = "Texture packs reloading (console.log lists them)";
     }
-    LoadSuspects();
-    LoadSpots();
-    LoadLevels();
     OverlayTheme::Toggle("Log every texture (devmenu_texlog.csv)", &g_texLog);
 #ifdef AURORA_HAS_CUTOUT_MODE
     // Branches with aurora's cut-out modes (feat/hd-cutout-twopass): switch live to compare.
     static const char* const kCutoutModes[] = {"Game (alpha > 0)", "Cut (HD: alpha > 127)", "Two-pass (HD)",
                                                "Two-pass (all textures)"};
     int cutout = aurora_get_cutout_mode();
-    if (!effects) {
-        ImGui::SetNextItemWidth(OverlayTheme::Px(220.0f));
-        if (ImGui::Combo("Cut-outs (F7 cycles)", &cutout, kCutoutModes, 4)) aurora_set_cutout_mode(cutout);
-    }
+    ImGui::SetNextItemWidth(OverlayTheme::Px(220.0f));
+    if (ImGui::Combo("Cut-outs (F7 cycles)", &cutout, kCutoutModes, 4)) aurora_set_cutout_mode(cutout);
 #endif
-    if (g_suspects.empty()) {
-        ImGui::TextWrapped("No list loaded: put devmenu_textures.txt in UserData (e.g. from autotest\\texhunt), then Reload. Effects entries have 'effect' in the seventh column.");
+    RefreshLevelTextures();
+    static char filter[64] = "";
+    static bool packOnly = false;
+    ImGui::SetNextItemWidth(OverlayTheme::Px(220.0f));
+    ImGui::InputTextWithHint("##filter", "Filter by name", filter, sizeof filter);
+    ImGui::SameLine();
+    OverlayTheme::Toggle("Pack textures only", &packOnly);
+    const size_t packs = std::count_if(g_levelTextures.begin(), g_levelTextures.end(),
+                                       [](const AuroraDrawnTexture& t) { return t.pack; });
+    ImGui::TextDisabled("%zu drawn in this level, %zu from texture packs (HD). Click one to draw it magenta.",
+                        g_levelTextures.size(), packs);
+    const ImVec4 kMagenta(1.0f, 0.4f, 1.0f, 1.0f);
+    if (!g_findName.empty()) {
+        ImGui::TextColored(kMagenta, "Finding %s", g_findName.c_str());
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Find off")) SetFind("");
+    }
+    if (g_levelTextures.empty()) {
+        ImGui::TextWrapped("Nothing drawn yet in this level.");
         return;
     }
-    OverlayTheme::Toggle("This level only", &thisScene);
-    ImGui::SameLine();
-    OverlayTheme::Toggle("Hide fine/fixed", &hideFine);
-    ImGui::SameLine();
-    ImGui::TextDisabled("drawn = seen on screen in this level");
-    const uint32_t cur = CurrentSceneId();
-    // boot.HIP textures are loaded for every scene
-    const auto isHere = [&](const Suspect& s) {
-        return std::find(s.scenes.begin(), s.scenes.end(), cur) != s.scenes.end() ||
-               std::find(s.scenes.begin(), s.scenes.end(), IdFromString("BOOT")) != s.scenes.end();
-    };
-    // "fine" = fine/fixed in this scene (this scene only) / in all its scenes (all scenes)
-    const auto isFine = [&](const Suspect& s) {
-        const auto [fineScenes, totalScenes] = FineCount(s);
-        return thisScene ? Done(Verdict(s.id, cur)) : totalScenes > 0 && fineScenes == totalScenes;
-    };
-    const auto shown = [&](const Suspect& s) {
-        return s.effect == effects && (!thisScene || isHere(s)) && !(hideFine && isFine(s) && !g_markedOpen.count(s.id));
-    };
-    if (std::none_of(g_suspects.begin(), g_suspects.end(), shown)) {
-        ImGui::TextWrapped("Nothing to show: untick 'This level only' or 'Hide fine/fixed'.");
-        return;
-    }
-    std::string lastLevel;
+    const std::string needle = Lower(filter);
     constexpr ImGuiTableFlags kTableFlags =
         ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY;
-    if (!ImGui::BeginTable("suspects", 7, kTableFlags)) return;
-    for (size_t i = 0; i < g_suspects.size(); ++i) {
-        const Suspect& s = g_suspects[i];
-        if (!shown(s)) continue;
-        const bool here = isHere(s);
-        const std::string verdict = Verdict(s.id, cur);
-        const auto [fineScenes, totalScenes] = FineCount(s);
-        const bool fine = isFine(s);
-        if (!thisScene && s.level != lastLevel) {
-            lastLevel = s.level;
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextUnformatted(s.level.c_str());
-        }
+    if (!ImGui::BeginTable("leveltextures", 3, kTableFlags)) return;
+    ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupColumn("HD");
+    ImGui::TableSetupColumn("Texture");
+    ImGui::TableSetupColumn("Size");
+    ImGui::TableHeadersRow();
+    for (size_t i = 0; i < g_levelTextures.size(); ++i) {
+        const AuroraDrawnTexture& t = g_levelTextures[i];
+        if (packOnly && !t.pack) continue;
+        if (!needle.empty() && std::strstr(t.name, needle.c_str()) == nullptr) continue;
         ImGui::PushID(static_cast<int>(i));
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        const ImVec4 col = s.severity == "high" ? ImVec4(1.0f, 0.42f, 0.42f, 1.0f)
-                           : s.severity == "medium" ? ImVec4(1.0f, 0.72f, 0.3f, 1.0f)
-                                                    : ImVec4(0.6f, 0.67f, 0.73f, 1.0f);
-        if (fine) {  // crossed out
-            ImGui::TextDisabled("%s", s.id.c_str());
-            const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
-            const float y = (a.y + b.y) * 0.5f;
-            ImGui::GetWindowDrawList()->AddLine(ImVec2(a.x, y), ImVec2(b.x, y), ImGui::GetColorU32(ImGuiCol_TextDisabled));
-        } else {
-            ImGui::TextColored(col, "%s", s.id.c_str());
-        }
+        if (t.pack) ImGui::TextColored(ImVec4(0.45f, 0.86f, 0.45f, 1.0f), "HD");
         ImGui::TableNextColumn();
-        ImGui::TextUnformatted(s.asset.c_str());
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n%s", s.key.c_str(), s.level.c_str());
-        ImGui::TableNextColumn();
-        if (Drawn(s.id, cur)) {
-            ImGui::TextColored(ImVec4(0.45f, 0.86f, 0.45f, 1.0f), "drawn");
-        } else {
-            ImGui::TextDisabled("not yet");
-        }
+        const bool finding = g_findName == t.name;
+        if (finding) ImGui::PushStyleColor(ImGuiCol_Text, kMagenta);
+        if (ImGui::Selectable(t.name, finding, ImGuiSelectableFlags_SpanAllColumns)) SetFind(finding ? "" : t.name);
+        if (finding) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) {
-            const std::string where = DrawnScenes(s.id);
-            ImGui::SetTooltip("drawn in: %s", where.empty() ? "no level yet" : where.c_str());
+            std::string tip = t.pack ? "Drawn from a texture pack file" : "The game's own texture";
+            if (t.pack && t.file_width) tip += " (" + std::to_string(t.file_width) + "x" + std::to_string(t.file_height) + ")";
+            if (t.versions > 1)
+                tip += "\nThe game rewrites it while drawing (" + std::to_string(t.versions) +
+                       " versions so far): Find only catches the version it was clicked on.";
+            ImGui::SetTooltip("%s", tip.c_str());
         }
         ImGui::TableNextColumn();
-        const Spot* spot = FindSpot(s.id, cur);
-        if (here && ToggleButton("Save spot", spot && spot->scene == cur, kSavedColor)) SaveSpotAs(s.id);
-        if (!here) {
-            const auto it = std::find_if(s.scenes.begin(), s.scenes.end(), IsPlayable);
-            if (it != s.scenes.end()) {
-                const std::string label = "Go " + Lower(IdString(*it));
-                if (ImGui::SmallButton(label.c_str())) GoToScene(*it);
-            } else {
-                ImGui::TextDisabled("menu");
-            }
-        }
-        ImGui::TableNextColumn();
-        if (spot) {
-            const std::string label = spot->scene == cur ? "Go to spot" : "Go to spot " + Lower(IdString(spot->scene));
-            if (ImGui::SmallButton(label.c_str())) GoToSpot(*spot);
-        }
-        ImGui::TableNextColumn();
-        const bool finding = g_findId == s.id;
-        if (ToggleButton("Find", finding, kFindColor)) SetFind(finding ? nullptr : &s);
-        ImGui::TableNextColumn();
-        if (totalScenes > 1) {
-            ImGui::TextDisabled("%d/%d", fineScenes, totalScenes);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("fine or fixed in %d of its %d levels", fineScenes, totalScenes);
+        ImGui::Text("%ux%u", t.width, t.height);
+        if (t.versions > 1) {
             ImGui::SameLine();
-        }
-        if (here && IsPlayable(cur) && VerdictButton(verdict)) {
-            SetVerdict(s.id, cur, NextVerdict(verdict));
-            g_markedOpen.insert(s.id);
+            ImGui::TextDisabled("x%u", t.versions);
         }
         ImGui::PopID();
     }
@@ -2298,7 +2085,7 @@ void DrawTextures(bool effects) {
 
 // While Find is on: a label at the bottom centre (also with the menu closed); takes no input or focus.
 void DrawFindToast() {
-    if (g_findId.empty()) return;
+    if (g_findName.empty()) return;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y - 40.0f),
                             ImGuiCond_Always, ImVec2(0.5f, 1.0f));
@@ -2308,7 +2095,7 @@ void DrawFindToast() {
                                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
                                         ImGuiWindowFlags_NoDocking;
     if (ImGui::Begin("##devmenu_find", nullptr, kFlags))
-        ImGui::TextColored(ImVec4(1.0f, 0.4f, 1.0f, 1.0f), "Finding %s: drawn solid magenta", g_findId.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.4f, 1.0f, 1.0f), "Finding %s: drawn solid magenta", g_findName.c_str());
     ImGui::End();
 }
 
@@ -2536,7 +2323,6 @@ void Draw() noexcept {
     g_focused = false;
     if (!g_open) {
         g_toggleFocus = false;
-        g_markedOpen.clear();
         return;
     }
     using OverlayTheme::Px;
@@ -2603,15 +2389,7 @@ void Draw() noexcept {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Textures")) {
-                ImGui::PushID("textures");  // both tabs draw the same widgets: keep their IDs apart
-                DrawTextures(false);
-                ImGui::PopID();
-                ImGui::EndTabItem();
-            }
-            if (ImGui::BeginTabItem("Effects")) {
-                ImGui::PushID("effects");
-                DrawTextures(true);
-                ImGui::PopID();
+                DrawTextures();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();

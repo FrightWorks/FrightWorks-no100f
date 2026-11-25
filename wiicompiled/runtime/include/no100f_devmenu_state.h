@@ -66,17 +66,7 @@ inline SkipControl SkipControlFor(uint32_t mode, uint32_t state, bool recordedCu
     return SkipControl::None;
 }
 
-// devmenu_textures.txt: the seventh column marks Effects-tab entries. Accept any case, leading spaces and suffixes
-// ("effect", " EFFECT\r", "effect:particle").
-inline bool IsEffectEntry(std::string_view category) {
-    while (!category.empty() && std::isspace(static_cast<unsigned char>(category.front())))
-        category.remove_prefix(1);
-    constexpr std::string_view prefix = "effect";
-    if (category.size() < prefix.size()) return false;
-    for (size_t i = 0; i < prefix.size(); ++i)
-        if (std::tolower(static_cast<unsigned char>(category[i])) != prefix[i]) return false;
-    return true;
-}
+
 
 // One queued scene change: waits until the game is in play with no cutscene and no portal pending, submits once,
 // then reports arrival; gives up after 60 s.

@@ -35,6 +35,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <cstring>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -2690,11 +2691,38 @@ size_t aurora_get_button_icon_folder(char* out, size_t size) {
   }
   return folder.size();
 }
-bool aurora_texture_replacement_used(const char* name) {
+void aurora_texture_track_drawn(bool on) {
 #ifdef AURORA_ENABLE_GX
-  return aurora::gfx::texture_replacement::replacement_used(name);
+  aurora::gfx::texture_replacement::track_drawn(on);
+#endif
+}
+size_t aurora_texture_drawn(AuroraDrawnTexture* out, size_t capacity) {
+#ifdef AURORA_ENABLE_GX
+  const auto list = aurora::gfx::texture_replacement::drawn_textures();
+  for (size_t i = 0; i < list.size() && i < capacity; ++i) {
+    const auto& t = list[i];
+    AuroraDrawnTexture& o = out[i];
+    const size_t n = std::min(t.name.size(), sizeof(o.name) - 1);
+    std::memcpy(o.name, t.name.data(), n);
+    o.name[n] = '\0';
+    o.width = t.width;
+    o.height = t.height;
+    o.format = t.format;
+    o.versions = t.versions;
+    o.file_width = t.fileWidth;
+    o.file_height = t.fileHeight;
+    o.pack = t.pack;
+  }
+  return list.size();
 #else
-  return false;
+  return 0;
+#endif
+}
+uint32_t aurora_texture_drawn_generation() {
+#ifdef AURORA_ENABLE_GX
+  return aurora::gfx::texture_replacement::drawn_generation();
+#else
+  return 0;
 #endif
 }
 void aurora_texture_replacement_reset_used() {

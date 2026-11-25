@@ -426,11 +426,6 @@ int main() {
     assert(no100f_devmenu::SkipControlFor(2, 2, false) == SkipControl::None);
     assert(no100f_devmenu::SkipControlFor(11, 1, true) == SkipControl::Confirm);
     assert(no100f_devmenu::SkipControlFor(11, 1, false) == SkipControl::None);
-    assert(no100f_devmenu::IsEffectEntry("effect"));
-    assert(no100f_devmenu::IsEffectEntry(" EFFECT\r"));
-    assert(no100f_devmenu::IsEffectEntry("effect:particle"));
-    assert(!no100f_devmenu::IsEffectEntry(""));
-    assert(!no100f_devmenu::IsEffectEntry("texture"));
     using no100f_devmenu::SceneRequest;
     using Action = SceneRequest::Action;
     SceneRequest travel;

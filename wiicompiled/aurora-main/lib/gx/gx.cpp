@@ -601,13 +601,19 @@ namespace {
 
 // Dev menu (F8): name the texture by its replacement key for the texture log (the shared magenta highlight
 // texture is renamed for whichever key Find highlights).
+// Also notes the texture for the dev menu's drawn list while it is on (every resolve: the caches are dropped when the
+// list is reset, so everything on screen comes through here again).
 static void note_debug_key(const gfx::TextureHandle& handle, const GXTexObj_& obj,
                            const GXTlutObj_* tlut = nullptr) noexcept {
-  if (!handle || (!handle->debugKey.empty() && !gfx::texture_replacement::is_highlight_handle(handle))) {
+  if (!handle) {
     return;
   }
-  const auto name = gfx::texture_replacement::build_texture_replacement_name(obj, tlut);
-  handle->debugKey = name.substr(0, name.rfind('.'));
+  const bool keep = !handle->debugKey.empty() && !gfx::texture_replacement::is_highlight_handle(handle);
+  if (keep && !gfx::texture_replacement::tracking_drawn()) {
+    return;
+  }
+  auto name = gfx::texture_replacement::note_drawn_texture(obj, tlut, handle);
+  if (!keep) handle->debugKey = std::move(name);
 }
 
 gfx::TextureHandle resolve_static_texture(const GXTexObj_& obj) {
