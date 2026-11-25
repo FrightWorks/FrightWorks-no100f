@@ -58,6 +58,8 @@ struct Camera {
   // Moon shadows: view space to the moon's shadow map's clip space (rows of a 4x4), when the frame has them.
   std::array<float, 16> shadow{};
   bool hasShadow = false;
+  // Reimagined sky: the file's moon texture ("moontex KEY"), found at the capture (texture packs can replace it).
+  TextureHandle moonTexture;
 };
 void note_camera(const Mat4x4<float>& projection, const webgpu::Viewport& viewport) noexcept;
 // A solid perspective draw's position matrix (12 floats, rows of a 3x4): a vote for the view matrix.

@@ -1,6 +1,7 @@
 #include "scene_stage.hpp"
 
 #include "bloom.hpp"
+#include "texture_replacement.hpp"
 #include "../gx/gx.hpp"
 #include "../internal.hpp"
 #include "tracy/Tracy.hpp"
@@ -73,6 +74,8 @@ Camera g_camera;
 //   move ID X Y Z [YAW]          (read by the runtime: an entity moved there, no100f_devmenu.cpp)
 //   sky ZR ZG ZB HR HG HB        (a night sky behind everything: zenith and horizon colours; hide the game's band)
 //   moondisc RADIUS_DEG R G B    (the moon drawn in the sky at the moon's direction; radius 0 = none)
+//   moontex KEY                  (the moon's picture: a texture name, looked up like the game's, so a pack can
+//                                 replace it; the disc's colour multiplies it; none or missing: a drawn disc)
 //   stars DENSITY                (0 to about 0.1)
 constexpr size_t kMaxRelightLights = 32;
 struct RelightLight {
@@ -101,6 +104,7 @@ struct RelightScene {
   float skyHorizon[3] = {0.08f, 0.2f, 0.19f};
   float moonRadiusDeg = 2.0f;
   float moonDisc[3] = {0.93f, 0.93f, 0.86f};
+  std::string moonTexture;
   float starDensity = 0.035f;
 };
 
@@ -131,6 +135,10 @@ RelightScene load_relight_scene() {
       }
       if (w == "hide" && std::sscanf(line, "%15s %127s", word, key) == 2) {
         s.hidden.emplace(key);
+        continue;
+      }
+      if (w == "moontex" && std::sscanf(line, "%15s %127s", word, key) == 2) {
+        s.moonTexture = key;
         continue;
       }
       if (w == "opaque" && std::sscanf(line, "%15s %127s", word, key) == 2) {
@@ -830,6 +838,8 @@ struct Sky {
     moon_color: vec4f, // the disc; w = star density
 };
 @group(0) @binding(0) var<uniform> sky: Sky;
+@group(0) @binding(1) var moon_tex: texture_2d<f32>;
+@group(0) @binding(2) var moon_sampler: sampler;
 
 @vertex
 fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
@@ -888,15 +898,24 @@ fn fs_sky(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let angle = acos(c);
         let halo = exp(-max(angle - r, 0.0) / (r * 2.0)) * 0.30 + exp(-angle / 0.30) * 0.07;
         col += sky.moon_color.rgb * vec3f(0.75, 0.82, 1.0) * halo;
-        if (angle < r * 1.05) {
+        if (angle < r * 1.5) {
             let t1 = normalize(cross(select(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), abs(m.y) > 0.99), m));
             let t2 = cross(m, t1);
             let q = vec2f(dot(d, t1), dot(d, t2)) / sin(r);
             let limb = sqrt(max(1.0 - dot(q, q), 0.0));
-            let patches = smoothstep(0.42, 0.66, fbm2(q * 2.6 + vec2f(4.0, 9.0)));
-            let shade = (0.78 + 0.22 * limb) * (1.0 - 0.22 * patches);
-            let disc = 1.0 - smoothstep(r * 0.94, r, angle);
-            col = mix(col, sky.moon_color.rgb * shade, disc);
+            if (sky.zenith.w > 0.5) {
+                // The moon's picture over the disc's square: texture up = sky up, right = the viewer's right.
+                let uv = vec2f(0.5 - q.x * 0.5, 0.5 - q.y * 0.5);
+                if (all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0))) {
+                    let t = textureSampleLevel(moon_tex, moon_sampler, uv, 0.0);
+                    col = mix(col, t.rgb * sky.moon_color.rgb, t.a);
+                }
+            } else {
+                let patches = smoothstep(0.42, 0.66, fbm2(q * 2.6 + vec2f(4.0, 9.0)));
+                let shade = (0.78 + 0.22 * limb) * (1.0 - 0.22 * patches);
+                let disc = 1.0 - smoothstep(r * 0.94, r, angle);
+                col = mix(col, sky.moon_color.rgb * shade, disc);
+            }
         }
     }
     return vec4f(clamp(col, vec3f(0.0), vec3f(1.0)), 1.0);
@@ -914,6 +933,9 @@ struct SkyPipelines {
 };
 SkyPipelines g_sky;
 wgpu::Buffer g_skyParams;
+wgpu::Sampler g_skySampler;
+wgpu::Texture g_skyNoMoon;  // 1x1 stand-in when the moon has no picture
+wgpu::TextureView g_skyNoMoonView;
 
 bool is_hidden_texture(const std::string& key) noexcept {
   const auto& hidden = relight_scene().hidden;
@@ -1024,15 +1046,40 @@ void encode_sky(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu:
   p.v[3] = {1.f / P.m0.m[0], 1.f / P.m1.m[1], P.m0.m[2], P.m1.m[2]};
   const auto& vp = camera.viewport;
   p.v[4] = {vp.left, vp.top, vp.width, vp.height};
-  p.v[5] = {scene.skyZenith[0], scene.skyZenith[1], scene.skyZenith[2], 0.f};
+  const bool moonPicture = camera.moonTexture && camera.moonTexture->sampleTextureView;
+  p.v[5] = {scene.skyZenith[0], scene.skyZenith[1], scene.skyZenith[2], moonPicture ? 1.f : 0.f};
   p.v[6] = {scene.skyHorizon[0], scene.skyHorizon[1], scene.skyHorizon[2], 0.f};
   const float radius = scene.hasMoon ? scene.moonRadiusDeg * 3.14159265f / 180.f : 0.f;
   p.v[7] = {scene.moonDir[0], scene.moonDir[1], scene.moonDir[2], radius};
   p.v[8] = {scene.moonDisc[0], scene.moonDisc[1], scene.moonDisc[2], scene.starDensity};
   g_queue.WriteBuffer(g_skyParams, 0, &p, sizeof(p));
-  const wgpu::BindGroupEntry entry{.binding = 0, .buffer = g_skyParams, .size = sizeof(SkyParams)};
+  if (!g_skySampler) {
+    const wgpu::SamplerDescriptor samplerDescriptor{
+        .label = "Relight sky moon",
+        .addressModeU = wgpu::AddressMode::ClampToEdge,
+        .addressModeV = wgpu::AddressMode::ClampToEdge,
+        .magFilter = wgpu::FilterMode::Linear,
+        .minFilter = wgpu::FilterMode::Linear,
+        .mipmapFilter = wgpu::MipmapFilterMode::Linear,
+    };
+    g_skySampler = g_device.CreateSampler(&samplerDescriptor);
+    const wgpu::TextureDescriptor textureDescriptor{
+        .label = "Relight sky no moon",
+        .usage = wgpu::TextureUsage::TextureBinding,
+        .size = {1, 1, 1},
+        .format = wgpu::TextureFormat::RGBA8Unorm,
+    };
+    g_skyNoMoon = g_device.CreateTexture(&textureDescriptor);
+    g_skyNoMoonView = g_skyNoMoon.CreateView();
+  }
+  const std::array entries{
+      wgpu::BindGroupEntry{.binding = 0, .buffer = g_skyParams, .size = sizeof(SkyParams)},
+      wgpu::BindGroupEntry{.binding = 1,
+                           .textureView = moonPicture ? camera.moonTexture->sampleTextureView : g_skyNoMoonView},
+      wgpu::BindGroupEntry{.binding = 2, .sampler = g_skySampler},
+  };
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
-      .layout = g_sky.pipeline.GetBindGroupLayout(0), .entryCount = 1, .entries = &entry};
+      .layout = g_sky.pipeline.GetBindGroupLayout(0), .entryCount = entries.size(), .entries = entries.data()};
   const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
   pass.SetViewport(0.f, 0.f, static_cast<float>(size.width), static_cast<float>(size.height), 0.f, 1.f);
   pass.SetPipeline(g_sky.pipeline);
@@ -1096,6 +1143,20 @@ const Camera& camera() noexcept {
   g_camera.hasShadow = g_camera.hasView && scene.hasMoon && scene.shadowRadius > 0.f;
   if (g_camera.hasShadow)
     g_camera.shadow = shadow_matrix(g_camera.view, scene.moonDir, scene.shadowRadius, scene.shadowSize);
+  // The moon's picture, looked up once per name (and again after a reload).
+  static std::string s_moonName;
+  static const RelightScene* s_moonScene = nullptr;
+  static TextureHandle s_moon;
+  if (relighting() && scene.hasSky && (&scene != s_moonScene || scene.moonTexture != s_moonName)) {
+    s_moonScene = &scene;
+    s_moonName = scene.moonTexture;
+    s_moon = {};
+    if (!s_moonName.empty()) {
+      if (auto found = texture_replacement::find_replacement_by_name(s_moonName); found.has_value()) s_moon = *found;
+      Log.info("Reimagined: moon texture {} {}", s_moonName, s_moon ? "found" : "not found (drawn disc instead)");
+    }
+  }
+  g_camera.moonTexture = relighting() && scene.hasSky ? s_moon : TextureHandle{};
   return g_camera;
 }
 
@@ -1234,6 +1295,9 @@ void shutdown() noexcept {
   g_relightParams = {};
   g_sky = {};
   g_skyParams = {};
+  g_skySampler = {};
+  g_skyNoMoon = {};
+  g_skyNoMoonView = {};
   g_shadowTextures = {};
   g_shadowTargets = {};
   g_shadowSamples = 0;

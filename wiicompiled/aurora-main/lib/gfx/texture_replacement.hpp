@@ -16,6 +16,9 @@ void load_tlut(const GXTlutObj* obj, uint32_t idx) noexcept;
 std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlutObj_* tlut = nullptr) noexcept;
 // `tlut`: as for find_replacement; a palette texture's palette hash comes from it when the TLUT mirror has none.
 std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj_* tlut = nullptr) noexcept;
+// A replacement texture by its file name without extension ("tex1_64x64_..._5"), from the same folders and in the
+// same order as the game's textures (a pack's file wins), whether or not the game draws it. Recording thread only.
+std::optional<TextureHandle> find_replacement_by_name(std::string_view name) noexcept;
 // Dev menu (F8): a static texture was uploaded (gx.cpp, every texture resolve): returns its name (pack file name without
 // the extension, as build_texture_replacement_name) and, while track_drawn is on, adds it to the drawn list. `handle`:
 // what was uploaded for it.

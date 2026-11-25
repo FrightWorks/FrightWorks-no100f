@@ -1422,4 +1422,16 @@ std::string build_texture_replacement_name(const GXTexObj_& obj, const GXTlutObj
   return unknown_palette_name(obj);
 }
 
+std::optional<gfx::TextureHandle> find_replacement_by_name(std::string_view name) noexcept {
+  const auto key = parse_replacement_filename(std::string(name) + ".png");
+  if (!key.has_value()) return std::nullopt;
+  if (const auto* cached = find_cached_replacement(*key); cached != nullptr) return *cached;
+  const auto* path = find_replacement_path(*key);
+  if (path == nullptr) return std::nullopt;
+  auto handle = load_replacement_texture(*key, *path);
+  if (!handle) return std::nullopt;
+  cache_replacement(*key, handle);
+  return handle;
+}
+
 } // namespace aurora::gfx::texture_replacement
