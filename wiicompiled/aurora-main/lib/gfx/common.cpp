@@ -2057,11 +2057,29 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
   // Per-invocation, not per-process: two encoders can be recording at once.
   gx::DrawEncodeState encodeState{};
   encodeState.boundTextureBindGroup = gx::g_emptyTextureBindGroup.Get();
-  // Reimagined: the sky, then the pass's own state put back (the clear before it left the full viewport).
+  // Reimagined: the sky, then the pass's own state put back: the game's last viewport and scissor (set before the
+  // sky and not set again until the game changes them), the pipeline and bind groups.
+  const Command* lastViewport = nullptr;
+  const Command* lastScissor = nullptr;
   const auto drawSky = [&] {
     const auto& size = renderPasses[idx].targetSize;
     scene_stage::encode_sky(pass, *sky->camera, size, renderPasses[idx].msaaSamples, sky->motion);
-    pass.SetViewport(0.f, 0.f, static_cast<float>(size.width), static_cast<float>(size.height), 0.f, 1.f);
+    if (lastViewport != nullptr) {
+      const auto& vp = lastViewport->data.setViewport;
+      pass.SetViewport(vp.left, vp.top, vp.width, vp.height, gx::UseReversedZ ? 1.0f - vp.zfar : vp.znear,
+                       gx::UseReversedZ ? 1.0f - vp.znear : vp.zfar);
+    } else {
+      pass.SetViewport(0.f, 0.f, static_cast<float>(size.width), static_cast<float>(size.height), 0.f, 1.f);
+    }
+    if (lastScissor != nullptr) {
+      const auto& sc = lastScissor->data.setScissor;
+      const auto left = std::clamp(sc.x, 0, static_cast<int32_t>(size.width));
+      const auto top = std::clamp(sc.y, 0, static_cast<int32_t>(size.height));
+      const auto right = std::clamp(sc.x + sc.width, left, static_cast<int32_t>(size.width));
+      const auto bottom = std::clamp(sc.y + sc.height, top, static_cast<int32_t>(size.height));
+      pass.SetScissorRect(static_cast<uint32_t>(left), static_cast<uint32_t>(top),
+                          static_cast<uint32_t>(right - left), static_cast<uint32_t>(bottom - top));
+    }
     pass.SetBindGroup(0, g_staticBindGroup);
     pass.SetBindGroup(2, gx::g_emptyTextureBindGroup);
     encodeState = {};
@@ -2083,6 +2101,8 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
     if (sky != nullptr && list == &passCommands.commands && commandIndex >= 0 && commandIndex == sky->afterCommand)
       drawSky();
     if (list == &passCommands.commands) ++commandIndex;
+    if (sky != nullptr && cmd.type == CommandType::SetViewport) lastViewport = &cmd;
+    if (sky != nullptr && cmd.type == CommandType::SetScissor) lastScissor = &cmd;
 #ifdef AURORA_GFX_DEBUG_GROUPS
     {
       size_t firstDiff = lastDebugGroupStack.size();

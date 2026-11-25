@@ -290,7 +290,35 @@ struct ReimaginedMove {
     bool moved = false;
     std::vector<uint32_t> mats;      // the frame's matrix and each model instance's (+0x2C list, matrix +0x20)
     std::vector<float> original;     // 12 floats per matrix
+    // "shift ID DX DY DZ": a trigger moved by an offset: the position and box in its asset (+0x1C, +0x50 min,
+    // +0x5C max) and any copy of them in the entity (its bound).
+    bool shift = false;
+    std::vector<uint32_t> floats;    // addresses of the x, y, z floats moved
+    std::vector<float> floatOriginal;
 };
+
+// The floats a shift moves: the asset's position and box, and every copy of one of those points in the entity.
+void FindShiftFloats(ReimaginedMove& m) {
+    m.floats.clear();
+    const uint32_t asset = Read32Or0(m.base + 0x10);
+    if (!IsGuestPtr(asset) || Read32Or0(asset) != m.id) return;
+    std::vector<std::array<float, 3>> points;
+    for (const uint32_t off : {0x1Cu, 0x50u, 0x5Cu}) {
+        for (uint32_t k = 0; k < 3; ++k) m.floats.push_back(asset + off + k * 4);
+        points.push_back({ReadF(asset + off), ReadF(asset + off + 4), ReadF(asset + off + 8)});
+    }
+    for (uint32_t off = 0x14; off + 12 <= 0x200; off += 4) {
+        const uint32_t a = m.base + off;
+        for (const auto& pt : points) {
+            if (std::abs(ReadF(a) - pt[0]) < 1e-4f && std::abs(ReadF(a + 4) - pt[1]) < 1e-4f &&
+                std::abs(ReadF(a + 8) - pt[2]) < 1e-4f) {
+                for (uint32_t k = 0; k < 3; ++k) m.floats.push_back(a + k * 4);
+                off += 8;
+                break;
+            }
+        }
+    }
+}
 
 // The matrices that place an entity: its frame's (+0x40) and its model instances' (they aren't rebuilt from the frame
 // while the entity stands still, so both are written).
@@ -319,7 +347,9 @@ void LoadReimaginedMoves() {
         std::istringstream ls(line.substr(0, line.find('#')));
         std::string word, id;
         ReimaginedMove m;
-        if (!(ls >> word >> id) || word != "move" || !(ls >> m.pos[0] >> m.pos[1] >> m.pos[2])) continue;
+        if (!(ls >> word >> id) || (word != "move" && word != "shift") || !(ls >> m.pos[0] >> m.pos[1] >> m.pos[2]))
+            continue;
+        m.shift = word == "shift";
         m.id = static_cast<uint32_t>(std::strtoul(id.c_str(), nullptr, 16));
         m.hasYaw = static_cast<bool>(ls >> m.yaw);
         g_reimaginedMoves.push_back(m);
@@ -328,6 +358,12 @@ void LoadReimaginedMoves() {
 }
 
 void RestoreReimaginedMove(ReimaginedMove& m) {
+    if (m.shift) {
+        if (m.moved)
+            for (size_t i = 0; i < m.floats.size(); ++i) WriteF(m.floats[i], m.floatOriginal[i]);
+        m.moved = false;
+        return;
+    }
     if (m.moved)
         for (size_t i = 0; i < m.mats.size(); ++i)
             for (uint32_t k = 0; k < 12; ++k) WriteF(m.mats[i] + (k / 3) * 0x10 + (k % 3) * 4, m.original[i * 12 + k]);
@@ -366,6 +402,22 @@ void UpdateReimagined() {
                 }
             }
             if (m.base == 0) continue;
+        }
+        if (m.shift) {
+            if (!on) {
+                RestoreReimaginedMove(m);
+                continue;
+            }
+            if (!m.moved) {
+                FindShiftFloats(m);
+                m.floatOriginal.clear();
+                for (const uint32_t a : m.floats) m.floatOriginal.push_back(ReadF(a));
+                m.moved = true;
+                RT_LOGF(RT_TAG_RUNTIME, "[devmenu] reimagined: shift %08X moves %zu points\n", m.id,
+                        m.floats.size() / 3);
+            }
+            for (size_t i = 0; i < m.floats.size(); ++i) WriteF(m.floats[i], m.floatOriginal[i] + m.pos[i % 3]);
+            continue;
         }
         const uint32_t frame = Read32Or0(m.base + 0x40);
         if (!IsGuestPtr(frame)) continue;
