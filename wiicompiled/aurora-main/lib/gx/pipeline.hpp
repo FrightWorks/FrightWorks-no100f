@@ -23,7 +23,7 @@ struct DrawData {
   bool emitsLight;
 };
 
-constexpr uint32_t GXPipelineConfigVersion = 20;
+constexpr uint32_t GXPipelineConfigVersion = 21;  // 21: ShaderConfig.relight (relighting experiment)
 
 constexpr GXFogType effective_pipeline_fog_type(GXFogType fogType, GXZTexOp zTextureOp,
                                                 bool zCompLocBeforeTex, GXBlendMode blendMode,

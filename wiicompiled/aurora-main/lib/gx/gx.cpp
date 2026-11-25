@@ -14,6 +14,7 @@ extern "C" unsigned g_gxAudit[8];
 #include "../gfx/texture.hpp"
 #include "../gfx/texture_convert.hpp"
 #include "../gfx/texture_replacement.hpp"
+#include "../gfx/scene_stage.hpp"
 #include "gx_fmt.hpp"
 
 #include <absl/container/flat_hash_map.h>
@@ -2369,6 +2370,14 @@ void populate_pipeline_config(PipelineConfig& config, GXPrimitive primitive, GXV
   config.alphaUpdate = effective_alpha_update(g_gxState.pixelFmt, g_gxState.alphaUpdate);
   config.colorUpdate = g_gxState.colorUpdate;
   config.shaderConfig.motionRole = config.shaderConfig.motionVectors ? motion_role(config, g_gxState.projType) : 0;
+  // Relighting experiment (or NO100F_RELIGHT_FLAT=1 to only look at it): solid perspective draws lose their baked
+  // vertex colours; see-through effects keep theirs.
+  static const bool relightFlat = [] {
+    const char* v = std::getenv("NO100F_RELIGHT_FLAT");
+    return v != nullptr && *v != '\0' && std::string_view(v) != "0";
+  }();
+  config.shaderConfig.relight = (relightFlat || gfx::scene_stage::relighting()) &&
+                                g_gxState.projType == GX_PERSPECTIVE && g_gxState.depthUpdate;
 }
 
 // Cut-outs: materials like leaves, grass and webs are drawn with alpha compare "alpha > 0" (or another low ref),

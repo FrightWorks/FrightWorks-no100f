@@ -3,6 +3,8 @@
 #include "common.hpp"
 #include "../webgpu/gpu.hpp"
 
+#include <array>
+
 namespace aurora::gfx::scene_stage {
 // The scene stage: a point in each frame where the game's solid scene is finished and its see-through world draws
 // (the world's second, blended pass, fog, particles, glow) have not been drawn yet, nor its HUD. Effects that belong
@@ -36,7 +38,7 @@ float ambient_occlusion() noexcept;
 void set_ink_outlines(int level) noexcept;
 int ink_outlines() noexcept;
 
-// Debug view: 0 off, 1 tint (everything drawn before the stage is tinted blue; what is drawn after keeps its colour),
+// Debug view (5 = the relighting's light alone): 0 off, 1 tint (everything drawn before the stage is tinted blue; what is drawn after keeps its colour),
 // 2 depth (the solid scene's distance from the camera, near = white), 3 the ambient occlusion alone (white = none),
 // 4 the ink outlines alone (black on white; Bold when the setting is off), all with what is drawn after the stage on
 // top.
@@ -48,9 +50,19 @@ int view() noexcept;
 struct Camera {
   Mat4x4<float> projection{};
   webgpu::Viewport viewport{0.f, 0.f, 1.f, 1.f, 0.f, 1.f};
+  // Relighting experiment: the world-to-view matrix (rows of a 3x4), the position matrix most of this frame's solid
+  // perspective draws use (the level is drawn in world space with the camera's view matrix).
+  std::array<float, 12> view{};
+  bool hasView = false;
 };
 void note_camera(const Mat4x4<float>& projection, const webgpu::Viewport& viewport) noexcept;
+// A solid perspective draw's position matrix (12 floats, rows of a 3x4): a vote for the view matrix.
+void note_world_matrix(const float* matrix) noexcept;
 const Camera& camera() noexcept;
+
+// Relighting experiment (NO100F_RELIGHT=<light file>): solid perspective draws lose their baked vertex colours
+// (shader.cpp) and the stage lights the solid scene from the file's ambient, moon and point lights (world space).
+bool relighting() noexcept;
 
 // The stage itself, encoded between the two EFB passes: draws over `color` (the EFB, `samples` per pixel, `size`),
 // reading `depth` (its depth buffer).

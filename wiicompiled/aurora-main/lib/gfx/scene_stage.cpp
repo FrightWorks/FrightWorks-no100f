@@ -9,8 +9,11 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -18,6 +21,7 @@ namespace aurora::gfx::scene_stage {
 namespace {
 using webgpu::g_device;
 using webgpu::g_queue;
+Module Log("aurora::gfx::scene_stage");
 
 // ----- Tuning (world units are the game's; Scooby is about 1.3 tall)
 // How far around a surface other surfaces darken it.
@@ -54,6 +58,88 @@ std::atomic<float> g_aoStrength{0.f};
 std::atomic_int g_inkLevel{0};
 Camera g_camera;
 
+// ----- Relighting experiment (NO100F_RELIGHT=<file>). The file, one item per line ('#' comments), world space:
+//   ambient R G B
+//   moon DX DY DZ R G B          (direction toward the moon)
+//   light X Y Z RADIUS R G B
+//   scale RADIUS_SCALE POINT_INTENSITY
+constexpr size_t kMaxRelightLights = 32;
+struct RelightLight {
+  float pos[3];
+  float radius;
+  float color[3];
+};
+struct RelightScene {
+  bool loaded = false;
+  float ambient[3] = {0.3f, 0.3f, 0.35f};
+  bool hasMoon = false;
+  float moonDir[3] = {0.f, 1.f, 0.f};
+  float moonColor[3] = {0.5f, 0.55f, 0.7f};
+  float radiusScale = 1.f;
+  float pointIntensity = 1.f;
+  std::vector<RelightLight> lights;
+};
+
+const RelightScene& relight_scene() {
+  static const RelightScene scene = [] {
+    RelightScene s;
+    const char* path = std::getenv("NO100F_RELIGHT");
+    if (path == nullptr || *path == '\0') {
+      return s;
+    }
+    FILE* f = std::fopen(path, "r");
+    if (f == nullptr) {
+      Log.warn("Relight: can't open {}", path);
+      return s;
+    }
+    char line[256];
+    while (std::fgets(line, sizeof line, f) != nullptr) {
+      char word[16] = {};
+      float v[7] = {};
+      const int n = std::sscanf(line, "%15s %f %f %f %f %f %f %f", word, &v[0], &v[1], &v[2], &v[3], &v[4], &v[5],
+                                &v[6]);
+      if (n < 1 || word[0] == '#') continue;
+      const std::string_view w(word);
+      if (w == "ambient" && n >= 4) {
+        std::copy(v, v + 3, s.ambient);
+      } else if (w == "moon" && n >= 7) {
+        const float len = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        if (len > 0.f) {
+          for (int i = 0; i < 3; ++i) s.moonDir[i] = v[i] / len;
+          std::copy(v + 3, v + 6, s.moonColor);
+          s.hasMoon = true;
+        }
+      } else if (w == "light" && n >= 8 && s.lights.size() < kMaxRelightLights) {
+        s.lights.push_back({{v[0], v[1], v[2]}, v[3], {v[4], v[5], v[6]}});
+      } else if (w == "scale" && n >= 3) {
+        s.radiusScale = v[0];
+        s.pointIntensity = v[1];
+      }
+    }
+    std::fclose(f);
+    s.loaded = true;
+    Log.info("Relight: {} lights, moon {}, from {}", s.lights.size(), s.hasMoon ? "on" : "off", path);
+    return s;
+  }();
+  return scene;
+}
+
+struct RelightParams {
+  std::array<float, 4> moonDir;   // view space, toward the moon; w = 1 when there is a moon
+  std::array<float, 4> moonColor;
+  std::array<float, 4> ambient;
+  std::array<float, 4> info;      // light count
+  std::array<std::array<float, 4>, kMaxRelightLights * 2> lights; // (view pos, radius), (colour, 0)
+};
+
+// View matrix votes: this frame's solid perspective draws' position matrices.
+struct MatrixVote {
+  std::array<float, 12> m;
+  uint32_t n;
+};
+std::array<MatrixVote, 16> g_votes;
+size_t g_voteCount = 0;
+
 // Every pass's parameters.
 struct Params {
   Mat4x4<float> inverseProjection; // clip -> view, used as vec4f(ndc, 1.0) * inv_proj like the GX shader's proj
@@ -85,6 +171,14 @@ struct Params {
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var depth_tex: EfbDepth;
 @group(0) @binding(2) var ao_tex: texture_2d<f32>;
+struct Relight {
+    moon_dir: vec4f,
+    moon_color: vec4f,
+    ambient: vec4f,
+    info: vec4f,
+    lights: array<vec4f, 64>,
+};
+@group(0) @binding(3) var<uniform> relight: Relight;
 
 const SAMPLES = 12;
 const TURNS = 7.0;
@@ -297,6 +391,42 @@ fn fs_ink_view(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     return vec4f(k, k, k, 1.0);
 }
 
+// Relighting: the light falling on the solid scene's surface at EFB pixel `p` (1 = the texture as drawn), from the
+// ambient, the moon and the point lights; where nothing solid is drawn, 1.
+fn light_at(p: vec2i) -> vec3f {
+    let c4 = view_pos(p);
+    if (c4.w == 0.0) {
+        return vec3f(1.0);
+    }
+    let c = c4.xyz;
+    let n = normal_at(p, c);
+    var light = relight.ambient.rgb;
+    if (relight.moon_dir.w > 0.0) {
+        light += relight.moon_color.rgb * max(dot(n, relight.moon_dir.xyz), 0.0);
+    }
+    let count = i32(relight.info.x);
+    for (var i = 0; i < count; i++) {
+        let lp = relight.lights[i * 2];
+        let to_light = lp.xyz - c;
+        let d = length(to_light);
+        let f = clamp(1.0 - (d * d) / (lp.w * lp.w), 0.0, 1.0);
+        light += relight.lights[i * 2 + 1].rgb * f * f * max(dot(n, to_light / max(d, 1e-4)), 0.0);
+    }
+    return light;
+}
+
+// Multiplied into the solid scene at up to twice its brightness (the blend doubles: source x destination x 2).
+@fragment
+fn fs_relight(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return vec4f(clamp(light_at(vec2i(pos.xy)) * 0.5, vec3f(0.0), vec3f(1.0)), 1.0);
+}
+
+// Debug view: the light alone (white = the texture as drawn, brighter clips).
+@fragment
+fn fs_relight_view(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    return vec4f(clamp(light_at(vec2i(pos.xy)) * 0.5, vec3f(0.0), vec3f(1.0)), 1.0);
+}
+
 @fragment
 fn fs_tint(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     _ = params.misc;
@@ -314,7 +444,7 @@ fn fs_depth(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 )""";
 
-enum class Kind { Occlusion, BlurH, BlurV, Apply, AoView, Tint, Depth, Ink, InkView, Count };
+enum class Kind { Occlusion, BlurH, BlurV, Apply, AoView, Tint, Depth, Ink, InkView, Relight, RelightView, Count };
 
 struct Pipelines {
   uint32_t samples = 0;
@@ -323,6 +453,7 @@ struct Pipelines {
 };
 Pipelines g_pipelines;
 wgpu::Buffer g_params;
+wgpu::Buffer g_relightParams;
 // The occlusion at half the EFB's size, and the blur's other half.
 std::array<webgpu::TextureWithSampler, 2> g_aoTargets;
 
@@ -347,11 +478,20 @@ void build_pipelines(wgpu::TextureFormat format, uint32_t samples) {
                 .srcFactor = wgpu::BlendFactor::Zero,
                 .dstFactor = wgpu::BlendFactor::One},
   };
-  const auto make = [&](const char* entry, bool efb, bool multiplies) {
+  // source x destination x 2: the relighting can brighten up to twice what was drawn.
+  const wgpu::BlendState multiply2x{
+      .color = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::Dst,
+                .dstFactor = wgpu::BlendFactor::Src},
+      .alpha = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::Zero,
+                .dstFactor = wgpu::BlendFactor::One},
+  };
+  const auto make = [&](const char* entry, bool efb, bool multiplies, bool doubles = false) {
     // Over the EFB: its format and sample count, and never its alpha (the game blends with it).
     const wgpu::ColorTargetState target{
         .format = efb ? format : kAoFormat,
-        .blend = multiplies ? &multiply : nullptr,
+        .blend = doubles ? &multiply2x : multiplies ? &multiply : nullptr,
         .writeMask = efb ? wgpu::ColorWriteMask::Red | wgpu::ColorWriteMask::Green | wgpu::ColorWriteMask::Blue
                          : wgpu::ColorWriteMask::All,
     };
@@ -375,6 +515,8 @@ void build_pipelines(wgpu::TextureFormat format, uint32_t samples) {
   p[static_cast<size_t>(Kind::Depth)] = make("fs_depth", true, false);
   p[static_cast<size_t>(Kind::Ink)] = make("fs_ink", true, true);
   p[static_cast<size_t>(Kind::InkView)] = make("fs_ink_view", true, false);
+  p[static_cast<size_t>(Kind::Relight)] = make("fs_relight", true, true, true);
+  p[static_cast<size_t>(Kind::RelightView)] = make("fs_relight_view", true, false);
   g_pipelines.samples = samples;
   g_pipelines.format = format;
 }
@@ -409,6 +551,8 @@ void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureVie
     entries.push_back(wgpu::BindGroupEntry{.binding = 1, .textureView = *depth});
   if (ao != nullptr)
     entries.push_back(wgpu::BindGroupEntry{.binding = 2, .textureView = *ao});
+  if (kind == Kind::Relight || kind == Kind::RelightView)
+    entries.push_back(wgpu::BindGroupEntry{.binding = 3, .buffer = g_relightParams, .size = sizeof(RelightParams)});
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .layout = pipeline.GetBindGroupLayout(0),
       .entryCount = entries.size(),
@@ -473,9 +617,25 @@ std::optional<Mat4x4<float>> inverse(const Mat4x4<float>& matrix) {
 }
 } // namespace
 
+bool relighting() noexcept { return relight_scene().loaded; }
+
 bool wanted() noexcept {
   return g_viewMode.load(std::memory_order_relaxed) != 0 || g_aoStrength.load(std::memory_order_relaxed) > 0.f ||
-         g_inkLevel.load(std::memory_order_relaxed) != 0 || bloom::wanted();
+         g_inkLevel.load(std::memory_order_relaxed) != 0 || bloom::wanted() || relighting();
+}
+
+void note_world_matrix(const float* matrix) noexcept {
+  for (size_t i = 0; i < g_voteCount; ++i) {
+    if (std::equal(matrix, matrix + 12, g_votes[i].m.begin())) {
+      ++g_votes[i].n;
+      return;
+    }
+  }
+  if (g_voteCount < g_votes.size()) {
+    auto& v = g_votes[g_voteCount++];
+    std::copy(matrix, matrix + 12, v.m.begin());
+    v.n = 1;
+  }
 }
 
 void set_ink_outlines(int level) noexcept {
@@ -483,7 +643,10 @@ void set_ink_outlines(int level) noexcept {
 }
 int ink_outlines() noexcept { return g_inkLevel.load(std::memory_order_relaxed); }
 
-void begin_frame() noexcept { g_solidSurfaces.clear(); }
+void begin_frame() noexcept {
+  g_solidSurfaces.clear();
+  g_voteCount = 0;
+}
 void note_solid_surface(HashType surface) noexcept { g_solidSurfaces.insert(surface); }
 bool is_solid_surface(HashType surface) noexcept { return g_solidSurfaces.contains(surface); }
 
@@ -492,21 +655,31 @@ void set_ambient_occlusion(float strength) noexcept {
 }
 float ambient_occlusion() noexcept { return g_aoStrength.load(std::memory_order_relaxed); }
 
-void set_view(int mode) noexcept { g_viewMode.store(mode >= 0 && mode <= 4 ? mode : 0, std::memory_order_relaxed); }
+void set_view(int mode) noexcept { g_viewMode.store(mode >= 0 && mode <= 5 ? mode : 0, std::memory_order_relaxed); }
 int view() noexcept { return g_viewMode.load(std::memory_order_relaxed); }
 
 void note_camera(const Mat4x4<float>& projection, const webgpu::Viewport& viewport) noexcept {
   g_camera.projection = projection;
   g_camera.viewport = viewport;
 }
-const Camera& camera() noexcept { return g_camera; }
+const Camera& camera() noexcept {
+  const MatrixVote* best = nullptr;
+  for (size_t i = 0; i < g_voteCount; ++i) {
+    if (best == nullptr || g_votes[i].n > best->n) best = &g_votes[i];
+  }
+  g_camera.hasView = best != nullptr;
+  if (best != nullptr) g_camera.view = best->m;
+  return g_camera;
+}
 
 void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, const wgpu::TextureView& depth,
             wgpu::Extent3D size, uint32_t samples, const Camera& camera) {
   const int mode = view();
   const float strength = ambient_occlusion();
   const int ink = ink_outlines();
-  if ((mode == 0 && strength <= 0.f && ink == 0) || !color || !depth || size.width == 0 || size.height == 0) {
+  const bool relight = relighting() && camera.hasView;
+  if ((mode == 0 && strength <= 0.f && ink == 0 && !relight) || !color || !depth || size.width == 0 ||
+      size.height == 0) {
     return;
   }
   // Without a camera that can be inverted (no perspective draw has written depth yet) no position can be worked out,
@@ -548,6 +721,41 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       .ink2 = {kInkFadeEnd, 0.f, 0.f, 0.f},
   };
   g_queue.WriteBuffer(g_params, 0, &params, sizeof(params));
+  if (relight || mode == 5) {
+    const auto& scene = relight_scene();
+    const auto& v = camera.view;  // rows: view = R * world + t
+    const auto toView = [&](const float* p, float w, float* out) {
+      for (int r = 0; r < 3; ++r) out[r] = v[r * 4] * p[0] + v[r * 4 + 1] * p[1] + v[r * 4 + 2] * p[2] + v[r * 4 + 3] * w;
+    };
+    RelightParams rp{};
+    if (scene.hasMoon) {
+      toView(scene.moonDir, 0.f, rp.moonDir.data());
+      rp.moonDir[3] = 1.f;
+    }
+    std::copy(scene.moonColor, scene.moonColor + 3, rp.moonColor.begin());
+    std::copy(scene.ambient, scene.ambient + 3, rp.ambient.begin());
+    rp.info[0] = static_cast<float>(scene.lights.size());
+    for (size_t i = 0; i < scene.lights.size(); ++i) {
+      const auto& l = scene.lights[i];
+      toView(l.pos, 1.f, rp.lights[i * 2].data());
+      rp.lights[i * 2][3] = l.radius * scene.radiusScale;
+      for (int c = 0; c < 3; ++c) rp.lights[i * 2 + 1][c] = l.color[c] * scene.pointIntensity;
+    }
+    if (!g_relightParams) {
+      const wgpu::BufferDescriptor descriptor{
+          .label = "Scene stage relighting",
+          .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+          .size = sizeof(RelightParams),
+      };
+      g_relightParams = g_device.CreateBuffer(&descriptor);
+    }
+    g_queue.WriteBuffer(g_relightParams, 0, &rp, sizeof(rp));
+    if (mode == 5) {
+      draw(encoder, Kind::RelightView, color, size, &depth, nullptr);
+      return;
+    }
+    draw(encoder, Kind::Relight, color, size, &depth, nullptr);
+  }
   if (mode == 1) {
     draw(encoder, Kind::Tint, color, size, nullptr, nullptr);
     return;
@@ -586,6 +794,7 @@ bool holds_targets() noexcept { return static_cast<bool>(g_aoTargets[0].texture)
 void shutdown() noexcept {
   g_pipelines = {};
   g_params = {};
+  g_relightParams = {};
   g_aoTargets = {};
 }
 } // namespace aurora::gfx::scene_stage

@@ -646,6 +646,10 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
   if (g_gxState.projType == GX_PERSPECTIVE && g_gxState.depthCompare && g_gxState.depthUpdate &&
       gfx::scene_stage::wanted()) {
     gfx::scene_stage::note_camera(effectiveProj, g_gxState.renderViewport);
+    if (gfx::scene_stage::relighting()) {
+      gfx::scene_stage::note_world_matrix(reinterpret_cast<const float*>(
+          &g_gxState.pnMtx[std::min<u32>(g_gxState.currentPnMtx, MaxPnMtx - 1)].pos));
+    }
   }
 
   const size_t positionOffset = stagedSize;
