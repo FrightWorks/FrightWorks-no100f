@@ -42,15 +42,21 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
 & "Play\FrightWorks Game.exe"
 ```
 
-- Every build also puts the HD texture pack (`texture_pack\ScoobyHD`, downloaded from the Internet Archive by the first
-  build, plus `tools\hd-pack-additions`) and the button prompt icons into `Play\texture_replacements\ScoobyHD` and
-  `Play\button_icons`, beside the game like a release (`tools\stage-assets.ps1`; only what changed is copied or
-  rebuilt; old copies in `Play\UserData` are removed). The game indexes `UserData\texture_replacements` and mods
-  first, so those win over the built-in pack. The icons need Python and ImageMagick; without them the build warns and
-  goes on. The staged copy of the pack is then fixed by `tools\hd-pack-fixes.py` (Python, standard library only): it edits
-  dogerki's file for the Smuggler's Cove sign (#107: no alpha channel, so the small ship's sails on its roof drew as opaque planks) by SHA-256,
-  taking the alpha from the disc's own texture in `Disc\DATA` (nothing from the pack or the game is in git; `texture_pack`
-  stays as downloaded). A skipped fix is a log line, or a failure when packaging (`-Required`).
+- Every build also puts the button prompt icons into `Play\button_icons`, beside the game like a release
+  (`tools\stage-assets.ps1`; only what changed is rebuilt). The icons need Python and ImageMagick; without them the
+  build warns and goes on. No build ships an HD texture pack (2026-11-24); an older build's staged
+  `Play\texture_replacements\ScoobyHD` is removed (links the debug kit made are left alone).
+- **HD texture packs** are an opt-in download in the launcher (**Extras > Textures**, `launcher\TexturePacks.cs`):
+  it downloads the pack, checks its hash, unpacks it (RAR through Windows' `tar.exe`, bsdtar, 7-Zip or unrar) into
+  `UserData\texture_packs\<NN-name>` (Scooby-HD is `50-scoobyhd`, the menu pack `40-menu`) and sets `[video] texture_replacements = true`.
+  The game indexes `UserData\texture_replacements` and mods first, then the packs, lower folder name first (it wins);
+  a `disabled` file in a pack's folder skips it, and the log names each pack it uses (`Texture pack: 50-scoobyhd`).
+  dogerki's Smuggler's Cove sign has no alpha channel (#107: the small ship's sails on its roof drew as opaque planks):
+  the game adds the alpha from the disc's own texture as it loads (`add_original_alpha` in `texture_replacement.cpp`,
+  log line "Smuggler's Cove sign: alpha from the original added").
+- For HD runs from the debug kit, `python tools\debug\get-hd-pack.py` fetches dogerki's pack into `texture_pack\ScoobyHD`
+  (not in git); `manual-session.ps1 -HdTextures`, `play-patched.ps1 -HdTextures`, the test kit and the smoke test link it
+  beside the game.
 - `-SkipTools` skips the toolchain and dependency checks (fine once the first build has downloaded them).
 - `-SkipTranslate` reuses the translated game code. Only use it when you changed native code (`wiicompiled/runtime`,
   `wiicompiled/aurora-main`). **Do a full build** (no `-SkipTranslate`) when you add or remove a native override
@@ -63,11 +69,10 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   (`~/.local/share/WiiCompiled`) with the saves in its `Saves`, and F2 / F3 in `Pictures/FrightWorks` / `Videos/FrightWorks`
   (the XDG Pictures and Videos folders, `~/Pictures` and `~/Videos` when xdg-user-dirs isn't set up). `[paths] saves_dir`
   in Config.toml moves the saves in either layout (the launcher's **Extras > Folders** sets it). To test the installed layout without an installer,
-  copy `Play\`'s exe, DLLs, `dsp_coef.bin`, `button_icons` and `texture_replacements` into a folder named `data`
+  copy `Play\`'s exe, DLLs, `dsp_coef.bin` and `button_icons` into a folder named `data`
   (no `portable.txt`), with `FrightWorks.exe` beside it.
 - Packaging a release zip: `tools\package-scooby.ps1 -Build -Zip` → `dist\` (`-Build` also brings the pinned dependencies up to date). It also needs ImageMagick (`magick`) on
-  PATH, the HD texture pack in `texture_pack\ScoobyHD` (not in git) and the extracted disc in `Disc\DATA`: the pack fix
-  (`tools\hd-pack-fixes.py`, run with `--required`) stops the packaging if it can't be applied.
+  PATH. No HD texture pack and no disc data go into the package.
 - **Installer** (Velopack): `tools\package-scooby.ps1 -Installer` → `dist\installer\`: `FrightWorks-win-Setup.exe`,
   `FrightWorks-<ver>-full.nupkg`, a `-delta.nupkg` against the previous release, and `releases.win.json` /
   `assets.win.json`. It first runs `vpk download github` so the delta can be made against the latest GitHub release.
@@ -109,8 +114,8 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   commit first, and for a release tag first (a clean checkout at `v<version>` gives the plain version as the build ID).
   The clone, the Linux toolchain (CMake, .NET SDK, vpk) and the build folders live in the Docker volume
   `frightworks-linux-build` (`-Volume` renames it), so a second run only recompiles what changed; `-Clean` starts from
-  nothing, and `docker volume rm frightworks-linux-build` frees the space. `Disc`, `texture_pack` and `game` are mounted
-  read only (the HD pack is copied: the build adds files to it). The result is in `dist\installer-linux\` (`-Feed`):
+  nothing, and `docker volume rm frightworks-linux-build` frees the space. `Disc` and `game` are mounted
+  read only (no HD pack: no build ships one). The result is in `dist\installer-linux\` (`-Feed`):
   `FrightWorks.AppImage`, `FrightWorks-<ver>-linux-full.nupkg`, a `-delta.nupkg` against the previous Linux release once
   there is one, and `releases.linux.json`, `assets.linux.json` and `RELEASES-linux`. They sit beside the Windows files in the same GitHub release (the Windows
   feed is `releases.win.json`), and old files in the feed folder are kept for the delta, so clear test builds out first.
@@ -411,7 +416,7 @@ A file is refused when:
 - it is the root `AGENTS.md` or `CLAUDE.md`;
 - it is over 16 MiB;
 - its first bytes are the magic number of one of those formats, whatever it is called.
-`tools/hd-pack-additions/` (our own Creeper frames) is exempt from the path, type and size rules, not from the header check.
+There are no exceptions (the Creeper frames that were one moved to the private menu pack repo, 2026-11-24).
 Case and `\` spellings are normalised, so Windows and Linux give the same answer.
 Exit codes: 0 clean, 1 something refused (it prints each file and why), 2 could not run (not a repository, no base to compare with).
 It cannot catch game data that was renamed and re-encoded, split small, or left in a type it does not list, nor a change that edits its own lists, so it is a safety net: the lists are in the script and the maintainers review changes to them.
@@ -454,7 +459,7 @@ branches from before the dev menu was built in, applies
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1              # dev menu
-powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1 -HdTextures  # with the HD pack, like the release
+powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1 -HdTextures  # with the HD pack
 ```
 
 In game, **F8**: current level and Scooby's position, go to any level (Levels tab), save spots and go back to them, god mode,
@@ -544,7 +549,7 @@ useful:
   `PLUS` (Start), `ONE` (X), `TWO` (Y), `MINUS` (Z), `UP`/`DOWN`/`LEFT`/`RIGHT`.
 - **Button prompts**: `$env:BUTTON_ICONS = 'xbox'` (or `playstation`, `nintendo`) forces a prompt set; the game puts
   the prompt picture together from one icon per pad button, following player 1's mapping. The icons are built by
-  `python tools\make-button-icons.py --out Play\button_icons` (needs ImageMagick and the HD pack).
+  `python tools\make-button-icons.py --out Play\button_icons` (needs ImageMagick).
 - **Audio capture**: `$env:AUDIO_RAW_DUMP = 'C:\temp\out.raw'` writes the mixed output; analysis tools in
   `tools\debug\audio\`.
 - Remove test variables afterwards: `Remove-Item Env:NO100F_*, Env:AX_*, Env:AUDIO_*, Env:BUTTON_ICONS -ErrorAction SilentlyContinue`.

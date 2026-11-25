@@ -136,8 +136,8 @@ Copy-Item -LiteralPath (Join-Path $build 'WiiCompiled.exe') -Destination $playEx
 Get-ChildItem -LiteralPath $build -File | Where-Object { $_.Extension -eq '.dll' -or $_.Name -eq 'dsp_coef.bin' } |
     Copy-Item -Destination (Join-Path $root 'Play') -Force
 Set-Status 'copied to Play\FrightWorks Game.exe (+ runtime DLLs)'
-# Like a release: the HD pack and the button prompt icons beside the game (only what changed is copied or rebuilt).
+# Like a release: the button prompt icons beside the game (rebuilt only when changed). No HD pack: a launcher download.
 $env:PATH = $userPath
 & (Join-Path $PSScriptRoot 'stage-assets.ps1') -GameDir (Join-Path $root 'Play')
-Set-Status 'Play\: HD pack + button icons staged'
+Set-Status 'Play\: button icons staged'
 

@@ -93,7 +93,8 @@ cmake="$root/toolchain/CMake/bin/cmake"
 "$cmake" --build "$sdl_build" --parallel "${FRIGHTWORKS_JOBS:-$(nproc)}" >"$work/sdl-build.log" 2>&1 || { tail -n 40 "$work/sdl-build.log"; exit 1; }
 install -m 755 "$(readlink -f "$sdl_build/libSDL3.so.0")" "$stage/data/libSDL3.so.0"
 echo "Bundled libSDL3.so.0 (SDL built from the vendored source)"
-# The built-in HD texture pack and the button prompt icons: the same files every Play/ build gets, beside the game.
+# The button prompt icons: the same files every Play/ build gets, beside the game (no HD texture pack: the launcher
+# downloads one when the player chooses it).
 python3 "$root/tools/stage-assets.py" --game-dir "$stage/data" --required
 
 # What the game and the launcher load at run time must be on the system or beside the game: list anything ldd can't find (the

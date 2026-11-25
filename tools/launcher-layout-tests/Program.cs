@@ -397,9 +397,10 @@ static class LauncherLayoutTests
             Validate("settings", 2, "controls");
             Validate("mods");
             Validate("extras");
-            Validate("extras", 1, "extras-game");
-            Validate("extras", 2, "extras-folders");
-            Validate("extras", 3, "extras-about");
+            Validate("extras", 1, "extras-textures");
+            Validate("extras", 2, "extras-game");
+            Validate("extras", 3, "extras-folders");
+            Validate("extras", 4, "extras-about");
         }
         Check(File.ReadAllText(config) == initialConfig, "Opening, resizing, or navigation changed configuration");
 

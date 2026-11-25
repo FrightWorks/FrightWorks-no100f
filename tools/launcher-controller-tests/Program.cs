@@ -287,15 +287,15 @@ static class LauncherControllerTests
         Check(Button(w, "Controls").Selected && w.layoutBox.IsEffectivelyVisible && Button(w, "Controls").IsFocused, "RB did not switch to the Controls tab.");
         Press(w, LauncherButtons.Next);
         Check(Button(w, "Controls").Selected && !Button(w, "Display").Selected, "RB on the last tab wrapped or left it.");
-        // Extras has tabs too: Discs, Game, Folders, About.
+        // Extras has tabs too: Discs, Textures, Game, Folders, About.
         w.ShowBoard("extras"); Pump();
         var extras = w.boards["extras"];
         PlankButton Tab(string name) => extras.GetVisualDescendants().OfType<TabBar>().Single().Children.OfType<PlankButton>().Single(b => b.Text == name);
         Check(Tab("Discs").Selected, "Extras did not open on Discs.");
-        foreach (var name in new[] { "Game", "Folders", "About", "About" })
+        foreach (var name in new[] { "Textures", "Game", "Folders", "About", "About" })
         {
             Press(w, LauncherButtons.Next);
-            Check(Tab(name).Selected && Tab(name).IsFocused && extras.SelectedTab == Array.IndexOf(new[] { "Discs", "Game", "Folders", "About" }, name),
+            Check(Tab(name).Selected && Tab(name).IsFocused && extras.SelectedTab == Array.IndexOf(new[] { "Discs", "Textures", "Game", "Folders", "About" }, name),
                   $"RB in Extras did not reach {name} (or wrapped).");
         }
         Press(w, LauncherButtons.Previous);

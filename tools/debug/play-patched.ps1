@@ -5,7 +5,7 @@
 #   ... play-patched.ps1 -SkipTranslate        # faster: only if the last build was from this branch (see AGENTS.md)
 #   ... play-patched.ps1 -Keep                 # leave the patches applied (to work on them; re-export afterwards)
 #   ... play-patched.ps1 -CleanBuild           # after the game closes, rebuild Play\ without the patches
-#   ... play-patched.ps1 -HdTextures           # with the HD texture pack (texture_pack\ScoobyHD, as the release ships it)
+#   ... play-patched.ps1 -HdTextures           # with the HD texture pack (texture_pack\ScoobyHD, fetched by get-hd-pack.py)
 #
 # Steps: git apply each tools\debug\patches\<name>.patch, build, start Play\FrightWorks Game.exe, wait for it to
 # exit, then git apply -R the patches this run applied. A patch that was already applied is left as found. A patch whose
@@ -77,7 +77,8 @@ $rumbleOld = $null; $rumbleSet = $false
 try {
     if ($HdTextures) {
         $pack = Join-Path $root 'texture_pack\ScoobyHD'
-        if (-not (Test-Path $pack)) { throw "no HD texture pack at $pack" }
+        if (-not (Test-Path $pack)) { & python (Join-Path $root 'tools\debug\get-hd-pack.py') | Out-Host }
+        if (-not (Test-Path $pack)) { throw "no HD texture pack at $pack (tools\debug\get-hd-pack.py fetches it)" }
         if (-not (Test-Path $packLink)) {
             New-Item -ItemType Directory -Force (Split-Path $packLink) | Out-Null
             New-Item -ItemType Junction -Path $packLink -Target $pack | Out-Null

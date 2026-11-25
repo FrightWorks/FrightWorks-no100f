@@ -25,7 +25,8 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
 - Up to 4K, in true widescreen (16:9, fill, cinematic 2.39:1) or the original 4:3
 - 30 or 60 fps, MSAA, HDR with brightness calibration
 - Motion blur and cartoon ink outlines; ambient occlusion and bloom (experimental)
-- Built-in HD texture pack by dogerki (can be switched off)
+- Optional HD texture packs, downloaded from the launcher when you choose them (Extras > Textures): Scooby-HD by
+  dogerki, and the menu pack (menu screens at 8x and the HD Creeper window)
 - The Xbox version's Creeper window animation in the Mystic Manor courtyard
 
 **Controls**
@@ -86,7 +87,7 @@ version, developer tools.
 - Original port, [Scooby-Doo: Refrightened](https://github.com/josiahg2502-glitch/Scooby-Doo-Refrightened): JosiahG
 - [WiiCompiled](https://github.com/patchzyy/Wiicompiled) by patchzyy and contributors (GPLv3); Aurora by Luke Street
   (MIT); other components in [`wiicompiled/THIRD-PARTY-NOTICES.md`](wiicompiled/THIRD-PARTY-NOTICES.md)
-- HD texture pack by **dogerki**
+- HD texture pack (optional download) by **dogerki**
   ([Dolphin forums](https://forums.dolphin-emu.org/Thread-scooby-doo-night-of-100-frights-hd-texture-pack-ai))
 - Button prompts from [Kenney's Input Prompts](https://kenney.nl/assets/input-prompts) (CC0)
 - Launcher and in-game menu lettering: [Luckiest Guy](https://fonts.google.com/specimen/Luckiest+Guy) by Astigmatic

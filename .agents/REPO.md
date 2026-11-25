@@ -101,9 +101,12 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 **Never commit** (`python tools/check-assets.py` checks the first four lines, the disc and game data, saves and logs, the HD pack and the local files, by path, file type, size and header)
 - A disc image, `Disc/`, or anything extracted or dumped from the game.
 - Saves or local builds.
-- The HD pack.
-  A pack texture that needs fixing is edited by a script on every build (`tools/hd-pack-fixes.py`), with no pack image data in git.
-  The Creeper frames in `tools/hd-pack-additions` are the only exception.
+- The HD pack, or any picture made from the game's textures (no exceptions).
+  Texture packs are an opt-in launcher download (maintainer, 2026-11-24): no build ships one, nothing is selected by default.
+  The launcher (`launcher/TexturePacks.cs`, Extras > Textures) puts a pack in `<UserData>/texture_packs/<NN-name>`; the game indexes those after the mods, lower folder name first (it wins), and skips one with a `disabled` file.
+  A pack texture that needs fixing is fixed by the game as it loads (the Smuggler's Cove sign: `add_original_alpha` in `texture_replacement.cpp`).
+  The pack files are on archive.org, uploaded by the maintainer; the Creeper frames and menu art are in the private menu pack repo (`Loneranger419/no100f-menu-pack`).
+  `tools/debug/get-hd-pack.py` fetches ScoobyHD into `texture_pack/` for the debug kit.
 - Root `AGENTS.md` or `CLAUDE.md`, logs, recordings, or personal paths.
 - One-off scripts and their output: they stay in the git-ignored `autotest/` folder.
   Only curated tools go in the debug kit, with no game data, logs, recordings or personal paths.
@@ -325,7 +328,7 @@ To build old source there, set only the paths that differ with `git restore --so
 - Cut-outs: `[video] cutout_mode`, default two passes.
   Fringes are deferred and flushed before non-depth-writing and z-ALWAYS draws (#46).
 - Sharp font: `[video] sharp_font`, default on (`gfx/sharp_font.cpp`). The game builds its font sheets in memory from `font.HIP` (256x256, 4-bit palette); each one is redrawn 6x as it loads (Lanczos-enlarged alpha cut at one half, one-pixel soft edge, mips), so no image is shipped.
-  Sheets are matched by size, format and the hash of the palette range they use, taken from the palette passed to `find_replacement` (works with texture replacement off). It wins over the built-in HD pack and the extra folder (the pack's font is an AI upscale with lumpy edges); the player's own folder and mods still win over it.
+  Sheets are matched by size, format and the hash of the palette range they use, taken from the palette passed to `find_replacement` (works with texture replacement off). It wins over the downloaded HD packs (`UserData/texture_packs`), the game's own folder and the extra folder (the pack's font is an AI upscale with lumpy edges); the player's own folder and mods still win over it.
 - Sharp icons: `[video] sharp_icons`, default on (same file). The flat pause menu and map icons of `mnu4.HIP` (room markers, X markers, the big tag, key, warp swirl, portrait frame, token; a fixed list of texture hashes) are redrawn 6x as they load: k-means colour regions, each texel the best mix of two neighbouring regions, every region's membership Lanczos-enlarged and cut like the font, shading inside a region from its own texels.
   Only where no replacement file exists (HD textures off, or a texture the pack lacks): the HD pack keeps its icons (maintainer, 2026-11-24). Left out: `SD_tag_3` (CMPR block noise gives notched outlines) and the lit skull key (shaded art goes blotchy). Painted menu art (title logo and backdrop, map backgrounds, loading screen) was tried offline the same way and with a deblock-and-sharpen pass; both lost clearly to the HD pack, so it is left to the pack.
 - The scene stage (`gfx/scene_stage.cpp`) is where effects on the solid scene go (ambient occlusion, lighting), before the see-through world draws and the HUD; effects on the final picture go at present, like motion blur.

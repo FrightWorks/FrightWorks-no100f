@@ -96,15 +96,11 @@ class CheckAssetsTests(unittest.TestCase):
         self.commit("zip")
         self.assertEqual(len(self.problems()), 3)
 
-    def test_hd_pack_additions_are_exempt_from_size_and_type(self):
+    def test_the_old_hd_pack_additions_folder_is_not_exempt(self):
+        # Exempt until the Creeper frames moved to the menu pack repo (2026-11-24): a big PNG there is refused now.
         self.write("tools/hd-pack-additions/ScoobyHD/big.png", b"\x89PNG" + b"x" * (9 * 1048576))
         self.commit("pack")
-        self.assertEqual(self.problems(), [])
-
-    def test_hd_pack_additions_are_not_exempt_from_the_header_check(self):
-        self.write("tools/hd-pack-additions/ScoobyHD/a.png", b"HIPA\0\0\0\0PACK" + b"\0" * 40)
-        self.commit("pack")
-        self.assertIn("game archive", self.problems()[0])
+        self.assertIn("MiB", self.problems()[0])
 
     def test_file_added_and_removed_in_the_range_is_still_found(self):
         self.write("temp.iso", b"x" * 100)

@@ -97,13 +97,13 @@ setup when the game closes.
 | `gxtex.py` | XXH64 + RWTX reader + GX decoders; names textures like the port (`tex1_WxH_<hash>_<fmt>`) |
 | `where.py [IDs]` | Which assets use a suspect's texture; BSP geometry gets `tp X Y Z` positions |
 | `tint-pack.py --out <dir> (--from <dir> \| --hip <HIP>) [--match s]` | Tinted copies of textures; link them with `look.ps1 -Extra` to see where a texture is drawn |
-| `creeper-frames.py` | The HD Creeper window frames (issue #24) from the disc originals + ScoobyHD's window (needs SciPy) |
 | `skipintro.py <mod dir>` | h001.HIP without the intro cutscene (written into a boot mod, never committed) |
 | `ogexport.py`, `clean.py`, `onoff.py`, `verdicts.py` | Original-vs-HD sheets (local only), cleaned and on/off test packs, dev menu marks ↔ `suspects.csv` |
 
 Patches are against upstream `main` `e600261` unless the table says otherwise. `gx-draw-probes.patch` was rebased onto
 PR #8 `622b97a` and not rebuilt since.
 
-Requirements: Python 3 with numpy + Pillow (+ `capstone` for `dol.py`/`overrides.py`, SciPy for `creeper-frames.py`). The
+Requirements: Python 3 with numpy + Pillow (+ `capstone` for `dol.py`/`overrides.py`). The HD Creeper window frames'
+script (`creeper-frames.py`) is in the private menu pack repo with the frames. The
 `capture\` tools use ffmpeg from PATH; without one, `capture\get-ffmpeg.ps1` downloads the BtbN win64 GPL build once into
 `tools\debug\local\ffmpeg` (SHA-256 checked).

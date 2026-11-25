@@ -318,6 +318,14 @@ class TestGame:
                 return self.play / n
         return self.play / EXE_NAMES[0]
 
+    @property
+    def hd_pack(self):
+        """dogerki's HD pack for hd runs. No build stages it beside the game since 2026-11-24 (players download it in the
+        launcher): the repo's texture_pack/ScoobyHD (git-ignored; tools/debug/get-hd-pack.py fetches it), or the copy an
+        older build staged in the source Play."""
+        staged = self.src_play / "texture_replacements" / "ScoobyHD"
+        return staged if staged.is_dir() else self.repo / "texture_pack" / "ScoobyHD"
+
     def prepare(self):
         """Make the Play copy (first time) and write Config.toml and the boot mod for the current settings."""
         self.play.mkdir(parents=True, exist_ok=True)
@@ -328,10 +336,13 @@ class TestGame:
             for f in self.src_play.iterdir():
                 if f.is_file() and not (self.play / f.name).exists():
                     shutil.copy2(str(f), str(self.play / f.name))
-            for sub in ("button_icons",) + (("texture_replacements",) if self.hd else ()):
-                src, dst = self.src_play / sub, self.play / sub
-                if src.is_dir() and not os.path.lexists(dst):
-                    make_dir_link(dst, src)
+            src, dst = self.src_play / "button_icons", self.play / "button_icons"
+            if src.is_dir() and not os.path.lexists(dst):
+                make_dir_link(dst, src)
+            pack, dst = self.hd_pack, self.play / "texture_replacements" / "ScoobyHD"
+            if self.hd and pack.is_dir() and not os.path.lexists(dst):
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                make_dir_link(dst, pack)
         if not (self.play / "portable.txt").exists():
             (self.play / "portable.txt").write_text("portable\n", encoding="utf-8")
         self.set_boot(self.boot)

@@ -88,9 +88,8 @@ mkdir -p "$play/UserData"
 [[ -f "$play/UserData/Config.toml" ]] || printf "[paths]\ndvd_root = '../../Disc/DATA'\n" >"$play/UserData/Config.toml"
 status "copied to $play/FrightWorks Game"
 
-# 5. HD texture pack (downloaded once into texture_pack/ScoobyHD), its fixes (tools/hd-pack-fixes.py, from the disc's own
-# textures in Disc/DATA) and the button prompt icons: tools/stage-assets.py, the same script the Windows build runs, so a
-# fix to the pack reaches Linux builds too.
+# 5. The button prompt icons: tools/stage-assets.py, the same script the Windows build runs. No HD texture pack: the
+# launcher downloads one when the player chooses it (2026-11-24).
 step stage-assets python3 "$root/tools/stage-assets.py" --game-dir "$play"
-grep -E '^(HD pack|Button icons|WARNING)' "$logs/stage-assets.log" | while IFS= read -r line; do status "$line"; done || true
+grep -E '^(Removed|Button icons|WARNING)' "$logs/stage-assets.log" | while IFS= read -r line; do status "$line"; done || true
 status "DONE: run $play/FrightWorks Game (or the launcher: tools/build-launcher.sh)"

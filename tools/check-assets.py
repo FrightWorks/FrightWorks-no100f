@@ -17,8 +17,8 @@ A file is refused when
   - it is a local-only file (root AGENTS.md or CLAUDE.md, *.log),
   - it is bigger than the size cap (default 16 MiB), or
   - its first bytes are the magic number of one of those formats, whatever the file is called.
-tools/hd-pack-additions/ is the one accepted exception to the path, extension and size rules (our own Creeper frames);
-the magic-number check still applies there.
+There are no exceptions: the Creeper frames that were one (tools/hd-pack-additions/) moved to the separate menu pack
+repo (2026-11-24).
 
 What this cannot catch: game data renamed AND re-encoded (text dumps, base64 or hex in source, a custom container, split
 into pieces under the cap, a changed header), an asset whose type is not in the lists, a single game file with an unlisted
@@ -46,8 +46,6 @@ PLAY_ALLOWED = ("play/portable.txt", "play/run with log.cmd")
 
 # Local-only files by exact (lower case) path or by extension.
 FORBIDDEN_PATHS = ("agents.md", "claude.md")
-
-EXEMPT_PREFIX = "tools/hd-pack-additions/"
 
 FORBIDDEN_EXTENSIONS = {
     # disc images
@@ -204,22 +202,20 @@ def judge(path, note, size, head, max_bytes):
     """The reasons one file (a path as git prints it, its size and first bytes) is refused."""
     reasons = []
     lower = path.lower().replace("\\", "/").strip("/")
-    exempt = lower.startswith(EXEMPT_PREFIX)
-    if not exempt:
-        if (lower.startswith("play/") and lower not in PLAY_ALLOWED) or lower == "play":
-            reasons.append("Play/ is the build output folder")
-        for prefix in FORBIDDEN_PREFIXES:
-            if lower.startswith(prefix) or lower == prefix.rstrip("/"):
-                reasons.append("%s only holds game data or build output" % prefix)
-                break
-        if lower in FORBIDDEN_PATHS:
-            reasons.append("this file is local to one checkout and never committed")
-        name = lower.rsplit("/", 1)[-1].rstrip(". ")  # Windows drops trailing dots and spaces
-        extension = name.rsplit(".", 1)[-1] if "." in name else ""
-        if extension in FORBIDDEN_EXTENSIONS:
-            reasons.append(".%s is a game data, save, log or archive file type" % extension)
-        if size > max_bytes:
-            reasons.append("%.1f MiB is over the %g MiB cap" % (size / 1048576, max_bytes / 1048576))
+    if (lower.startswith("play/") and lower not in PLAY_ALLOWED) or lower == "play":
+        reasons.append("Play/ is the build output folder")
+    for prefix in FORBIDDEN_PREFIXES:
+        if lower.startswith(prefix) or lower == prefix.rstrip("/"):
+            reasons.append("%s only holds game data or build output" % prefix)
+            break
+    if lower in FORBIDDEN_PATHS:
+        reasons.append("this file is local to one checkout and never committed")
+    name = lower.rsplit("/", 1)[-1].rstrip(". ")  # Windows drops trailing dots and spaces
+    extension = name.rsplit(".", 1)[-1] if "." in name else ""
+    if extension in FORBIDDEN_EXTENSIONS:
+        reasons.append(".%s is a game data, save, log or archive file type" % extension)
+    if size > max_bytes:
+        reasons.append("%.1f MiB is over the %g MiB cap" % (size / 1048576, max_bytes / 1048576))
     if len(head) >= 4:
         for offset, magic, what in MAGIC:
             if head[offset:offset + len(magic)] == magic:

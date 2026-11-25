@@ -12,10 +12,12 @@ mapping (hle/input/pad.cpp):
     button_icons/keyboard/<key>.png         the keys on the hotkey guide (f1, f2, f3, f8, f10, f11, escape)
 Icons come from Kenney's Input Prompts (CC0, tools/button-art: only the ones used; the whole pack is not in the repo).
 Every icon is drawn at the size of the biggest GameCube button (A), centred where that button is and kept inside its
-quarter of the atlas; the GameCube B button is smaller. The atlas is the HD pack's size.
+quarter of the atlas; the GameCube B button is smaller. The atlas is the HD pack's size: its size and the four buttons'
+boxes (ATLAS_SIZE, BOXES) were measured once from dogerki's pack (alpha > 128 per quadrant), so the build doesn't need
+the pack (no build ships it since 2026-11-24).
 
     python tools/make-button-icons.py [--out Play/button_icons]
-Needs ImageMagick (magick) to render the SVGs, and the HD pack in texture_pack/ScoobyHD for the layout. Ubuntu 22.04/24.04
+Needs ImageMagick (magick) to render the SVGs. Ubuntu 22.04/24.04
 only package ImageMagick 6, whose command is `convert` (used when there is no `magick`; its SVG reader also needs
 librsvg2-bin).
 """
@@ -50,16 +52,10 @@ EXTRAS = {
 KEYBOARD = ["f1", "f2", "f3", "f8", "f10", "f11", "escape"]
 
 
-def regions(img):
-    """Bounding boxes of the atlas's four buttons, by quadrant: Y top-left, X top-right, A bottom-left, B bottom-right."""
-    a = img.getchannel("A").point(lambda v: 255 if v > 128 else 0)
-    w, h = img.size
-    out = {}
-    for name, (x0, y0) in {"Y": (0, 0), "X": (w // 2, 0), "A": (0, h // 2), "B": (w // 2, h // 2)}.items():
-        box = a.crop((x0, y0, x0 + w // 2, y0 + h // 2)).getbbox()
-        assert box, f"no {name} button in the atlas"
-        out[name] = (x0 + box[0], y0 + box[1], x0 + box[2], y0 + box[3])
-    return out
+# The atlas's size and its four buttons' bounding boxes (x0, y0, x1, y1), by quadrant: Y top-left, X top-right, A
+# bottom-left, B bottom-right.
+ATLAS_SIZE = (384, 384)
+BOXES = {"Y": (6, 30, 186, 162), "X": (216, 12, 342, 186), "A": (6, 198, 186, 377), "B": (235, 235, 336, 336)}
 
 
 def render_svg(svg, size, tmp, dark_symbol):
@@ -80,16 +76,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "Play", "button_icons"))
     a = ap.parse_args()
-    base = Image.open(os.path.join(ROOT, "texture_pack", "ScoobyHD", ATLAS)).convert("RGBA")
-    boxes = regions(base)
-    size = max(min(x1 - x0, y1 - y0) for x0, y0, x1, y1 in boxes.values())
+    width, height = ATLAS_SIZE
+    size = max(min(x1 - x0, y1 - y0) for x0, y0, x1, y1 in BOXES.values())
     os.makedirs(a.out, exist_ok=True)
-    lines = [f"atlas {ATLAS} {base.width} {base.height}", f"icon {size}"]
-    for name, (x0, y0, x1, y1) in boxes.items():
+    lines = [f"atlas {ATLAS} {width} {height}", f"icon {size}"]
+    for name, (x0, y0, x1, y1) in BOXES.items():
         # Centred on the GameCube button, but kept inside its quarter of the atlas.
-        qx, qy = x0 // (base.width // 2) * (base.width // 2), y0 // (base.height // 2) * (base.height // 2)
-        left = min(max((x0 + x1 - size) // 2, qx), qx + base.width // 2 - size)
-        top = min(max((y0 + y1 - size) // 2, qy), qy + base.height // 2 - size)
+        qx, qy = x0 // (width // 2) * (width // 2), y0 // (height // 2) * (height // 2)
+        left = min(max((x0 + x1 - size) // 2, qx), qx + width // 2 - size)
+        top = min(max((y0 + y1 - size) // 2, qy), qy + height // 2 - size)
         lines.append(f"{name} {left} {top}")
     with tempfile.TemporaryDirectory() as tmp:
         for family, buttons in FAMILIES.items():

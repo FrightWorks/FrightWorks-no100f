@@ -1361,7 +1361,7 @@ inline bool TextureDumps(bool fallback = false) {
 }
 
 // [video] sharp_font: aurora redraws the game's font sheets at a high resolution as they load
-// (aurora-main/lib/gfx/sharp_font.cpp), ahead of the built-in HD pack. Read once, at startup.
+// (aurora-main/lib/gfx/sharp_font.cpp), ahead of the downloaded HD packs. Read once, at startup.
 inline bool SharpFont(bool fallback = true) {
     return Get().sharpFont.value_or(fallback);
 }
