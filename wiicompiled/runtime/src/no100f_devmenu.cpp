@@ -2255,6 +2255,14 @@ void HandleSdlEvent(const SDL_Event& event, bool settingsOpen) noexcept {
     if (!Enabled()) return;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F8) g_open = !g_open;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F7) CycleCutoutMode();
+#ifdef AURORA_HAS_SCENE_STAGE
+    // Relighting experiment: F6 switches between the game's lighting and the light file's (NO100F_RELIGHT).
+    if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F6 &&
+        aurora_get_relight() >= 0) {
+        aurora_set_relight(aurora_get_relight() == 1 ? 0 : 1);
+        RT_LOGF(RT_TAG_RUNTIME, "[devmenu] F6: relight %s\n", aurora_get_relight() == 1 ? "on" : "off");
+    }
+#endif
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F3)
         no100f_recorder::Toggle();
     // LB opens and closes the menu like F8 (not mapped on the default controller layouts; it is L on the NSO GameCube
