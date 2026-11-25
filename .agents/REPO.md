@@ -384,6 +384,7 @@ To build old source there, set only the paths that differ with `git restore --so
 - Volume categories, the AX address fix and the stuck-music cause are in the `audio-debug` skill.
 - The player's Xbox sound (`<UserData>\xbox\audio`, `launcher/XboxAudio.cs`): the same sounds as 16-bit PCM. `hle/audio/xbox_audio.cpp` recognises the GameCube ADPCM the game copies into ARAM (`AramCopy` in `gc_hw.cpp`: stream chunks by hash; resident sounds when a voice starts) and `AcceleratorT::ReadSample` returns the Xbox sample for each decoded ADPCM sample there, while the ADPCM predictor keeps running. The game's own loading, streaming and timing don't change. 32 sounds that are shorter on the Xbox (another recording) stay the GameCube's.
 - Stream voices' DVD read callback is wrapped to fix the game's end-of-track check: the wrapper clears the stale value on a stream's first chunk, then the game's callback runs (`hle/no100f_stream_read.h`, issue 14).
+- 3D sounds panned to the wrong side in the game itself: the listener's right vector is the camera's, which points to the screen's left (RenderWare's convention). The listener setter `fn_8003CE50` is wrapped to negate it after the game's code runs; only the pan reads it (`hle/no100f_sound_pan.cpp`).
 - Timing-sensitive bugs: dev menu `scene` warps skip what a player does before the warp, so a clean run from them doesn't clear a bug reported from normal play. Reproduce it with the reporter's route, using timed presses rather than mashing: menus drop presses that arrive too early.
 
 **Gameplay**
