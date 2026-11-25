@@ -1305,6 +1305,124 @@ static void log_texture_draw_states(const ShaderInfo& info) noexcept {
   }
 }
 
+// Lighting probe (investigation, NO100F_LIGHT_LOG=1 together with NO100F_TEXLOG=1 for the scene tag): how the game
+// lights its draws. lightlog_draws.csv: one row per distinct (scene, texture, lighting state). lightlog_frames.csv:
+// every 300th frame, every draw (its texture, vertex count, model origin in view space, lighting) and the lights the
+// lit draws use, so the lights can be followed as the camera moves.
+void log_lighting_probe(const ShaderInfo& info, GXPrimitive prim, u32 vtxCount) noexcept {
+  static const bool on = [] {
+    const char* v = std::getenv("NO100F_LIGHT_LOG");
+    return v != nullptr && *v != '\0' && std::string_view(v) != "0";
+  }();
+  if (!on) {
+    return;
+  }
+  static uint32_t generation = UINT32_MAX;
+  static std::string scene;
+  if (const uint32_t g = gfx::texture_replacement::texture_log_generation(); g != generation) {
+    generation = g;
+    scene = gfx::texture_replacement::texture_log_scene();
+  }
+  if (scene.empty()) {
+    return;
+  }
+  const auto& s = g_gxState;
+  std::string key = "none";
+  for (u32 i = 0; i < MaxTextures; ++i) {
+    if (!info.sampledTextures.test(i)) continue;
+    const auto& bind = s.textures[i];
+    key = !bind ? "unbound" : bind.ref->debugKey.empty() ? "efb" : bind.ref->debugKey;
+    break;
+  }
+  const std::initializer_list<const char*> src{"reg", "vtx"};
+  const std::initializer_list<const char*> diff{"none", "sign", "clamp"};
+  const std::initializer_list<const char*> attn{"spec", "spot", "none"};
+  char chans[256];
+  int at = 0;
+  for (u32 c = 0; c < 3; ++c) {  // COLOR0, ALPHA0, COLOR1
+    const auto& cfg = s.colorChannelConfig[c];
+    at += std::snprintf(chans + at, sizeof chans - at, ",%d,%s,%s,%s,%s,%02lx", cfg.lightingEnabled ? 1 : 0,
+                        gx_name(cfg.matSrc, src), gx_name(cfg.ambSrc, src), gx_name(cfg.diffFn, diff),
+                        gx_name(cfg.attnFn, attn), s.colorChannelState[c].lightMask.to_ulong());
+  }
+  const bool persp = s.projType == GX_PERSPECTIVE;
+  const bool nrm = s.vtxDesc[GX_VA_NRM] != GX_NONE || s.vtxDesc[GX_VA_NBT] != GX_NONE;
+  const bool clr0 = s.vtxDesc[GX_VA_CLR0] != GX_NONE;
+  const bool mtxIdx = s.vtxDesc[GX_VA_PNMTXIDX] != GX_NONE;
+  const bool lit = info.lightingEnabled;
+  {
+    static absl::flat_hash_set<std::string> logged;
+    char row[512];
+    std::snprintf(row, sizeof row, "%s,%s,%s,%u,%d,%d,%d,%lu,%d,%d%s", scene.c_str(), key.c_str(),
+                  persp ? "persp" : "ortho", static_cast<u32>(prim), nrm ? 1 : 0, clr0 ? 1 : 0, mtxIdx ? 1 : 0,
+                  info.sampledColorChannels.to_ulong(), static_cast<int>(s.blendMode), s.depthUpdate ? 1 : 0, chans);
+    if (logged.insert(row).second) {
+      const bool fresh = !std::filesystem::exists("lightlog_draws.csv");
+      if (FILE* f = std::fopen("lightlog_draws.csv", "a")) {
+        if (fresh) {
+          std::fputs("scene,key,proj,prim,has_nrm,has_clr0,pnmtx_per_vtx,chans_sampled,blend,z_write,"
+                     "c0_light,c0_mat,c0_amb,c0_diff,c0_attn,c0_mask,a0_light,a0_mat,a0_amb,a0_diff,a0_attn,a0_mask,"
+                     "c1_light,c1_mat,c1_amb,c1_diff,c1_attn,c1_mask\n",
+                     f);
+        }
+        std::fprintf(f, "%s\n", row);
+        std::fclose(f);
+      }
+    }
+  }
+  const uint32_t frame = gfx::current_frame();
+  if (frame % 300 != 0) {
+    return;
+  }
+  static uint32_t lastFrame = UINT32_MAX;
+  static u32 rows = 0;
+  static std::array<Light, GX::MaxLights> written{};
+  static GX::LightMask writtenMask;
+  if (frame != lastFrame) {
+    lastFrame = frame;
+    rows = 0;
+    writtenMask.reset();
+  }
+  if (rows++ >= 4000) {
+    return;
+  }
+  const bool fresh = !std::filesystem::exists("lightlog_frames.csv");
+  FILE* f = std::fopen("lightlog_frames.csv", "a");
+  if (f == nullptr) {
+    return;
+  }
+  if (fresh) {
+    std::fputs("frame,scene,kind,key_or_light,a,b,c,d,e,f,g,h,i,j,k,l,m,n\n", f);
+  }
+  if (lit) {
+    GX::LightMask mask;
+    for (u32 c = 0; c < 4; ++c)
+      if (s.colorChannelConfig[c].lightingEnabled) mask |= s.colorChannelState[c].lightMask;
+    for (u32 l = 0; l < GX::MaxLights; ++l) {
+      if (!mask.test(l)) continue;
+      const Light& L = s.lights[l];
+      if (writtenMask.test(l) && written[l] == L) continue;
+      writtenMask.set(l);
+      written[l] = L;
+      // light: color rgba, pos xyz, dir xyz, cos att a0..a2, dist att k0..k2 (as GX holds them)
+      std::fprintf(f, "%u,%s,light,%u,%.3f %.3f %.3f %.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,\n",
+                   frame, scene.c_str(), l, L.color.m[0], L.color.m[1], L.color.m[2], L.color.m[3], L.pos.m[0],
+                   L.pos.m[1], L.pos.m[2], L.dir.m[0], L.dir.m[1], L.dir.m[2], L.cosAtt.m[0], L.cosAtt.m[1],
+                   L.cosAtt.m[2], L.distAtt.m[0], L.distAtt.m[1], L.distAtt.m[2]);
+    }
+  }
+  const auto& m = s.pnMtx[std::min<u32>(s.currentPnMtx, MaxPnMtx - 1)].pos;
+  const auto& c0 = s.colorChannelState[GX_COLOR0];
+  // draw: key, vertex count, model origin in view space (translation column), lit, light mask of COLOR0, mat and amb
+  // colour of COLOR0, proj, has normals, blend, z write
+  std::fprintf(f, "%u,%s,draw,%s,%u,%.3f,%.3f,%.3f,%d,%02lx,%.2f %.2f %.2f %.2f,%.2f %.2f %.2f %.2f,%s,%d,%d,%d,,\n",
+               frame, scene.c_str(), key.c_str(), vtxCount, m.m0.m[3], m.m1.m[3], m.m2.m[3], lit ? 1 : 0,
+               c0.lightMask.to_ulong(), c0.matColor.m[0], c0.matColor.m[1], c0.matColor.m[2], c0.matColor.m[3],
+               c0.ambColor.m[0], c0.ambColor.m[1], c0.ambColor.m[2], c0.ambColor.m[3], persp ? "persp" : "ortho",
+               nrm ? 1 : 0, static_cast<int>(s.blendMode), s.depthUpdate ? 1 : 0);
+  std::fclose(f);
+}
+
 static void drop_static_texture_caches() noexcept {
   s_textureObjectCaches.clear();
   s_tlutObjectCaches.clear();

@@ -496,6 +496,8 @@ void set_logical_scissor(const gfx::ClipRect& scissor) noexcept;
 void set_render_scissor(const gfx::ClipRect& scissor) noexcept;
 const gfx::TextureBind& get_texture(GXTexMapID id) noexcept;
 void resolve_sampled_textures(const ShaderInfo& info) noexcept;
+// Investigation only: NO100F_LIGHT_LOG=1 logs how draws are lit (gx.cpp).
+void log_lighting_probe(const ShaderInfo& info, GXPrimitive prim, u32 vtxCount) noexcept;
 
 inline float clear_depth_value() {
   // g_gxState.clearDepth is in GX's own distance terms (0 = near, larger = farther), independent of

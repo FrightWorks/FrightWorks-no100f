@@ -3337,6 +3337,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
 
   const CachedPipelineState* pipelineStatePtr = &resolve_pipeline_state(prim, fmt);
   resolve_sampled_textures(pipelineStatePtr->shaderInfo);
+  log_lighting_probe(pipelineStatePtr->shaderInfo, prim, vtxCount);
   // Only the resolved textures tell whether an HD replacement is drawn. The cut-out variants change the alpha test and
   // depth write only, so the textures, bind groups and uniforms are the same for every pass.
   // The fringe pass's pipeline is copied out at once: a later resolve can rewrite the cache slot it lives in.
