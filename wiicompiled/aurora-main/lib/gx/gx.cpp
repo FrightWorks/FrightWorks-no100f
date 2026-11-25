@@ -1515,6 +1515,7 @@ void resolve_sampled_textures(const ShaderInfo& info) noexcept {
     drop_static_texture_caches();
     s_drawStatesLogged.clear();
   }
+  if (gfx::texture_replacement::take_reload()) drop_static_texture_caches();
 
   for (u32 i = 0; i < MaxTextures; ++i) {
     if (!info.sampledTextures.test(i)) {

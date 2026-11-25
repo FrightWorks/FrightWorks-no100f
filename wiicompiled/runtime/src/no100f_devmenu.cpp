@@ -1416,6 +1416,8 @@ void DrawDiagnostics() {
 //   ents                log the scene's entity list
 //   textures            log which suspect textures (devmenu_textures.txt) have been drawn in this level
 //   find ID|off         draw that suspect's texture solid magenta / back to normal
+//   texreload           read the texture folders and packs again (files added, removed or edited); console.log lists
+//                       them
 //   freecam on|off      free camera (starts at the game camera)
 //   cam X Y Z YAW PITCH free camera at this pose (degrees; pitch > 0 looks down)
 //   camspin DEG         free camera turns DEG degrees every frame (0 stops; turns the free camera on)
@@ -1546,6 +1548,9 @@ void PollCommandFile() {
                 UpdateMonsters();
                 g_status = MonsterList();
             }
+        } else if (cmd == "texreload") {
+            aurora_texture_replacement_reload();
+            g_status = "Texture packs reloading (console.log lists them)";
         } else if (cmd == "textures") {
             LoadSuspects();
             g_status = "drawn suspects:";
@@ -2165,6 +2170,11 @@ void DrawTextures(bool effects) {
     if (ImGui::Button("Reload devmenu_textures.txt")) {
         g_suspects.clear();
         g_suspectsLoaded = false;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reload texture packs")) {
+        aurora_texture_replacement_reload();
+        g_status = "Texture packs reloading (console.log lists them)";
     }
     LoadSuspects();
     LoadSpots();

@@ -309,6 +309,9 @@ bool aurora_texture_replacement_used(const char* name);
 void aurora_texture_replacement_reset_used();
 // Dev menu (F8): draw the replacement with this file name (no extension) solid magenta; nullptr or "" = off.
 void aurora_texture_replacement_highlight(const char* name);
+// Dev menu (F8): read the texture folders and packs again, as at start, and redraw every texture from them. Does
+// nothing when texture replacement was off at start.
+void aurora_texture_replacement_reload();
 // Dev menu (F8): log every texture's draw states to devmenu_texlog.csv, rows tagged with this scene; nullptr or
 // "" = off.
 void aurora_texture_log(const char* scene);
