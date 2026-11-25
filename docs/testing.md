@@ -465,7 +465,7 @@ powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1           
 powershell -ExecutionPolicy Bypass -File tools\debug\play-patched.ps1 -HdTextures  # with the HD pack
 ```
 
-In game, **F8**: current level and Scooby's position, go to any level (Levels tab), save spots and go back to them, god mode,
+In game, **F8** (or **LB** on a pad, except with the Original Xbox layout or while F10 is open; opened with LB it takes the pad straight away): current level and Scooby's position, go to any level (Levels tab), save spots and go back to them, god mode,
 monsters off (all or one by one), power-ups on/off (all at once or one by one), a Textures tab (every texture drawn in the level; click one to see where it is used) and a free camera. Spots are
 saved in `Play\UserData\devmenu_spots.txt`. `tp X Y Z YAW` turns Scooby, not the camera. The power-ups page lists gadgets in the order the game gives them; Flower Pot and Diving Helmet sit under --UNUSED-- and Unlock all leaves them alone; Map is the game's map-received flag (`0x80270FD8`), not a gadget bit. Travel is one transfer at a time: asked for while paused or in a
 cutscene, it waits for normal play (**Cancel travel** drops it). **Skip** presses the game's own skip button for a
@@ -502,8 +502,8 @@ freezes the video until the window is back to its old size. It needs ffmpeg: on 
 `tools\debug\local\ffmpeg`; turning the developer tools on in the launcher offers to download it there (the same
 SHA-256-checked build as `tools\debug\capture\get-ffmpeg.ps1`).
 
-The Textures tab lists every texture drawn in the current level, by its texture pack name (`tex1_...`), with its size
-and **HD** when it was drawn from a texture pack file; textures drawn later (bonks, pickups, particles) join the list
+The Textures tab lists every texture drawn in the current level, by its texture pack name (`tex1_...`), with its size,
+**HD** when it was drawn from a texture pack file and **Xbox** when it came from the player's Xbox textures; textures drawn later (bonks, pickups, particles) join the list
 when they first appear, and a filter box and **Pack textures only** narrow it. A texture the game rewrites while it
 draws (h001's 640x448 copy of the picture) stays one row, with its number of versions. Click a row (or `find NAME` in
 `Play\devmenu.txt`) to draw that texture solid magenta wherever it is used, with HD textures on or off; click it again

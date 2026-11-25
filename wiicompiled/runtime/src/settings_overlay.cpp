@@ -2376,7 +2376,7 @@ void HandleEvents(const AuroraEvent* events) noexcept {
             continue;
         }
         controller_mapping_wizard::HandleSdlEvent(ev->sdl);
-        if (!g_rebind.active) no100f_devmenu::HandleSdlEvent(ev->sdl);
+        if (!g_rebind.active) no100f_devmenu::HandleSdlEvent(ev->sdl, g_topBarVisible);
         if (g_rebind.active && (IsToggleKey(ev->sdl, SDL_SCANCODE_BACKSPACE) ||
                                 IsToggleKey(ev->sdl, SDL_SCANCODE_DELETE))) {
             CompleteRebind(g_rebind.kind == RebindKind::Controller ? PAD_NATIVE_BUTTON_DISABLED

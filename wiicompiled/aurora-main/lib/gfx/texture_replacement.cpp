@@ -75,6 +75,7 @@ struct ReplacementIndexEntry {
   std::filesystem::path path;
   bool buttonIcons = false;  // the button prompt atlas, put together from button_icons (compose_button_icons)
   bool builtIn = false;      // from the game's own texture_replacements or the extra folder: the sharp font wins over it
+  bool xbox = false;         // from the extra folder (the player's Xbox textures): not an HD file
 };
 
 absl::flat_hash_map<RuntimeTextureKey, ReplacementIndexEntry> s_replacementIndex;
@@ -724,7 +725,9 @@ void build_index(bool buttonIcons = true) noexcept {
     roots.clear();
     builtInRoot.clear();
   }
+  size_t extraRoot = SIZE_MAX;
   if (!extraPath.empty() && std::filesystem::is_directory(extraPath, ec)) {
+    extraRoot = roots.size();
     roots.push_back(extraPath);
     builtInRoot.push_back(true);
   }
@@ -765,7 +768,8 @@ void build_index(bool buttonIcons = true) noexcept {
       continue;
     }
 
-    s_replacementIndex.try_emplace(*parsed, ReplacementIndexEntry{.path = path, .builtIn = builtIn});
+    s_replacementIndex.try_emplace(*parsed,
+                                   ReplacementIndexEntry{.path = path, .builtIn = builtIn, .xbox = rootIndex == extraRoot});
   }
   }
 
@@ -980,10 +984,12 @@ bool report_missing_key(const RuntimeTextureKey& key, const GXTexObj_& obj, cons
 }
 
 // Dev menu (F8): names of the replacement files drawn since the last reset_used (this level), for the Textures tab's
-// pack marker and the `textures` command: not the sharp font or icons, which are drawn in place of a file.
+// markers and the `textures` command: HD files (packs, mods, the player's texture_replacements) and the player's Xbox
+// textures apart. Not the sharp font, icons or button prompts, which are drawn in place of a file.
 // find_replacement runs once per texture upload (the GX texture caches keep the handle), so this stays cheap.
 absl::flat_hash_set<RuntimeTextureKey> s_usedKeys;
-absl::flat_hash_set<std::string> s_usedNames;
+absl::flat_hash_set<std::string> s_usedNames;  // HD files
+absl::flat_hash_set<std::string> s_xboxNames;  // the Xbox textures
 std::mutex s_usedMutex;
 
 // Dev menu (F8): every static texture drawn since the last reset_used, for the Textures tab (once track_drawn is on).
@@ -1001,14 +1007,17 @@ absl::flat_hash_map<const void*, size_t> s_drawnByData;  // newest row at that g
 std::atomic<uint32_t> s_drawnGeneration{0};
 std::atomic<bool> s_trackDrawn{false};
 
-void note_used_replacement(const RuntimeTextureKey& key) noexcept {
+void note_used_replacement(const RuntimeTextureKey& key, const ReplacementIndexEntry& entry) noexcept {
+  if (entry.buttonIcons) {
+    return;
+  }
   std::lock_guard lock(s_usedMutex);
   if (!s_usedKeys.insert(key).second) {
     return;
   }
   auto name = format_replacement_filename(key);
   name.resize(name.size() - 4);  // ".dds"
-  s_usedNames.insert(std::move(name));
+  (entry.xbox ? s_xboxNames : s_usedNames).insert(std::move(name));
   s_drawnGeneration.fetch_add(1);
 }
 
@@ -1021,6 +1030,7 @@ void reset_used() noexcept {
     std::lock_guard lock(s_usedMutex);
     s_usedKeys.clear();
     s_usedNames.clear();
+    s_xboxNames.clear();
     s_drawn.clear();
     s_drawnByName.clear();
     s_drawnByData.clear();
@@ -1041,7 +1051,8 @@ std::vector<DrawnTexture> drawn_textures() noexcept {
   out.reserve(s_drawn.size());
   for (const auto& e : s_drawn) {
     out.push_back({.name = e.name, .width = e.width, .height = e.height, .format = e.format, .versions = e.versions,
-                   .fileWidth = e.fileWidth, .fileHeight = e.fileHeight, .pack = s_usedNames.contains(e.name)});
+                   .fileWidth = e.fileWidth, .fileHeight = e.fileHeight, .pack = s_usedNames.contains(e.name),
+                   .xbox = s_xboxNames.contains(e.name)});
   }
   return out;
 }
@@ -1088,6 +1099,7 @@ bool take_reload() noexcept {
     std::lock_guard lock(s_usedMutex);
     s_usedKeys.clear();
     s_usedNames.clear();
+    s_xboxNames.clear();
     s_drawnGeneration.fetch_add(1);
   }
   Log.info("Texture packs: reloading");
@@ -1324,7 +1336,7 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
                     sharp_font::is_flat_icon(obj.width(), obj.height(), obj.format(), key.textureHash);
   // Find (dev menu): any texture turns magenta, not only one with a replacement file.
   if (s_highlightOn.load(std::memory_order_relaxed) && is_highlighted(key)) {
-    if (path != nullptr && !sharp && !icon) note_used_replacement(key);
+    if (path != nullptr && !sharp && !icon) note_used_replacement(key, *path);
     return highlight_texture();
   }
   if (path == nullptr && !sharp && !icon) {
@@ -1333,7 +1345,7 @@ std::optional<TextureHandle> find_replacement(const GXTexObj_& obj, const GXTlut
   }
   // Only a replacement file counts as drawn. The sharp font and icons share the pack's names (and the font wins over
   // the pack's file), so noting them made pack textures look drawn with HD textures off (smoke test i004).
-  if (!sharp && !icon) note_used_replacement(key);
+  if (!sharp && !icon) note_used_replacement(key, *path);
 
   if (const auto* cached = find_cached_replacement(key); cached != nullptr) {
     return *cached;

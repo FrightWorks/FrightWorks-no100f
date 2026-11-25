@@ -23,13 +23,14 @@ std::string note_drawn_texture(const GXTexObj_& obj, const GXTlutObj_* tlut, con
 bool tracking_drawn() noexcept;
 // Dev menu (F8): keep the list of textures drawn since the last reset_used (off by default: the dev menu turns it on).
 void track_drawn(bool on) noexcept;
-// Dev menu (F8): one texture drawn since the last reset_used. `pack`: drawn from a replacement file (a texture pack, mod
-// or the player's folder); fileWidth/fileHeight: the size uploaded in its place (0 = the game's own); versions: how
-// often the game rewrote it in place (the name is the newest).
+// Dev menu (F8): one texture drawn since the last reset_used. `pack`: drawn from an HD file (a texture pack, mod or the
+// player's texture_replacements); `xbox`: from the player's Xbox textures; fileWidth/fileHeight: the size uploaded in
+// its place (0 = the game's own); versions: how often the game rewrote it in place (the name is the newest).
 struct DrawnTexture {
   std::string name;
   uint32_t width = 0, height = 0, format = 0, versions = 1, fileWidth = 0, fileHeight = 0;
   bool pack = false;
+  bool xbox = false;
 };
 std::vector<DrawnTexture> drawn_textures() noexcept;
 // Changes whenever the drawn list or its pack markers change.

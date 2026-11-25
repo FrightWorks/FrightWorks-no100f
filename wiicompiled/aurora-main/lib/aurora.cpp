@@ -2712,6 +2712,7 @@ size_t aurora_texture_drawn(AuroraDrawnTexture* out, size_t capacity) {
     o.file_width = t.fileWidth;
     o.file_height = t.fileHeight;
     o.pack = t.pack;
+    o.xbox = t.xbox;
   }
   return list.size();
 #else

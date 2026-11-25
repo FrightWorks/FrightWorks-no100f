@@ -118,7 +118,7 @@ struct Spot {
 
 bool g_open = false;
 bool g_focused = false;  // the menu window has focus: game input is held (click the game to move with the menu open)
-bool g_toggleFocus = false;  // LB pressed: focus the menu / give focus back to the game
+bool g_focusOnOpen = false;  // opened with LB: give the menu focus, so the pad moves in it
 std::vector<Level> g_levels;
 std::vector<Spot> g_spots;
 bool g_spotsLoaded = false;
@@ -1336,7 +1336,7 @@ void DrawDiagnostics() {
 //   monsters [on|off]   list this scene's monsters; all monsters off (every scene) / back on
 //   monster N|NAME on|off
 //   ents                log the scene's entity list
-//   textures            log the texture pack files drawn in this level (count, then their names)
+//   textures            log the texture pack files drawn in this level (count, their names, then how many Xbox textures)
 //   find NAME|off       draw that texture (pack file name, extension optional) solid magenta / back to normal
 //   texreload           read the texture folders and packs again (files added, removed or edited); console.log lists
 //                       them
@@ -1476,15 +1476,17 @@ void PollCommandFile() {
         } else if (cmd == "textures") {
             RefreshLevelTextures();
             std::string names;
-            size_t packs = 0;
+            size_t packs = 0, xbox = 0;
             for (const AuroraDrawnTexture& t : g_levelTextures) {
+                xbox += t.xbox;
                 if (!t.pack) continue;
                 names += ' ';
                 names += t.name;
                 ++packs;
             }
             g_status = "pack textures drawn in this level (" + std::to_string(packs) + " of " +
-                       std::to_string(g_levelTextures.size()) + "):" + names;
+                       std::to_string(g_levelTextures.size()) + "):" + names +
+                       " | from Xbox textures: " + std::to_string(xbox);
         } else if (cmd == "cutout") {
 #ifdef AURORA_HAS_CUTOUT_MODE
             if (!arg.empty()) aurora_set_cutout_mode(std::atoi(arg.c_str()));
@@ -2030,8 +2032,15 @@ void DrawTextures() {
     OverlayTheme::Toggle("Pack textures only", &packOnly);
     const size_t packs = std::count_if(g_levelTextures.begin(), g_levelTextures.end(),
                                        [](const AuroraDrawnTexture& t) { return t.pack; });
-    ImGui::TextDisabled("%zu drawn in this level, %zu from texture packs (HD). Click one to draw it magenta.",
-                        g_levelTextures.size(), packs);
+    const size_t xbox = std::count_if(g_levelTextures.begin(), g_levelTextures.end(),
+                                      [](const AuroraDrawnTexture& t) { return t.xbox; });
+    if (xbox > 0) {
+        ImGui::TextDisabled("%zu drawn in this level: %zu from texture packs (HD), %zu from your Xbox textures (Xbox).",
+                            g_levelTextures.size(), packs, xbox);
+    } else {
+        ImGui::TextDisabled("%zu drawn in this level, %zu from texture packs (HD).", g_levelTextures.size(), packs);
+    }
+    ImGui::TextDisabled("Click one to draw it magenta.");
     const ImVec4 kMagenta(1.0f, 0.4f, 1.0f, 1.0f);
     if (!g_findName.empty()) {
         ImGui::TextColored(kMagenta, "Finding %s", g_findName.c_str());
@@ -2047,7 +2056,7 @@ void DrawTextures() {
         ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY;
     if (!ImGui::BeginTable("leveltextures", 3, kTableFlags)) return;
     ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("HD");
+    ImGui::TableSetupColumn("From");
     ImGui::TableSetupColumn("Texture");
     ImGui::TableSetupColumn("Size");
     ImGui::TableHeadersRow();
@@ -2058,15 +2067,21 @@ void DrawTextures() {
         ImGui::PushID(static_cast<int>(i));
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        if (t.pack) ImGui::TextColored(ImVec4(0.45f, 0.86f, 0.45f, 1.0f), "HD");
+        if (t.pack) {
+            ImGui::TextColored(ImVec4(0.45f, 0.86f, 0.45f, 1.0f), "HD");
+        } else if (t.xbox) {
+            ImGui::TextColored(ImVec4(0.5f, 0.72f, 1.0f, 1.0f), "Xbox");
+        }
         ImGui::TableNextColumn();
         const bool finding = g_findName == t.name;
         if (finding) ImGui::PushStyleColor(ImGuiCol_Text, kMagenta);
         if (ImGui::Selectable(t.name, finding, ImGuiSelectableFlags_SpanAllColumns)) SetFind(finding ? "" : t.name);
         if (finding) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) {
-            std::string tip = t.pack ? "Drawn from a texture pack file" : "The game's own texture";
-            if (t.pack && t.file_width) tip += " (" + std::to_string(t.file_width) + "x" + std::to_string(t.file_height) + ")";
+            std::string tip = t.pack   ? "Drawn from a texture pack file"
+                              : t.xbox ? "Drawn from your Xbox textures"
+                                       : "The game's own texture";
+            if ((t.pack || t.xbox) && t.file_width) tip += " (" + std::to_string(t.file_width) + "x" + std::to_string(t.file_height) + ")";
             if (t.versions > 1)
                 tip += "\nThe game rewrites it while drawing (" + std::to_string(t.versions) +
                        " versions so far): Find only catches the version it was clicked on.";
@@ -2231,15 +2246,19 @@ bool Enabled() noexcept {
     return enabled;
 }
 
-void HandleSdlEvent(const SDL_Event& event) noexcept {
+void HandleSdlEvent(const SDL_Event& event, bool settingsOpen) noexcept {
     if (!Enabled()) return;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F8) g_open = !g_open;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F7) CycleCutoutMode();
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F3)
         no100f_recorder::Toggle();
-    // LB: not mapped on the default controller layouts (it is L on the NSO GameCube one)
-    if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && event.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER && g_open)
-        g_toggleFocus = true;
+    // LB opens and closes the menu like F8 (not mapped on the default controller layouts; it is L on the NSO GameCube
+    // one). Not while F10 is open (LB/RB change its page) or with the Original Xbox layout (LB = soap bubble).
+    if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && event.gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_SHOULDER &&
+        !settingsOpen && !RuntimeConfigFile::XboxOriginalLayout()) {
+        g_open = !g_open;
+        g_focusOnOpen = g_open;
+    }
 }
 
 uint16_t PressedButtons() noexcept {
@@ -2319,22 +2338,22 @@ void Draw() noexcept {
     DrawFindToast();
     DrawCutoutToast();
     UpdateFreecam(g_open && g_focused);
-    const bool wasFocused = g_focused;
     g_focused = false;
     if (!g_open) {
-        g_toggleFocus = false;
+        g_focusOnOpen = false;
         return;
     }
     using OverlayTheme::Px;
     ImGui::SetNextWindowSize(ImVec2(Px(540.0f), Px(640.0f)), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(Px(30.0f), Px(40.0f)), ImGuiCond_FirstUseEver);
-    // LB: collapse when leaving the menu, expand + focus when coming back (ImGui puts the nav cursor back on the last item)
-    if (g_toggleFocus) ImGui::SetNextWindowCollapsed(wasFocused);
-    if (g_toggleFocus && !wasFocused) ImGui::SetNextWindowFocus();
-    // NoNavFocus: ImGui's gamepad window switcher (X) would otherwise grab the menu while you play; LB toggles instead
+    // Opened with LB: expanded and focused (ImGui puts the nav cursor back on the last item)
+    if (g_focusOnOpen) {
+        ImGui::SetNextWindowCollapsed(false);
+        ImGui::SetNextWindowFocus();
+        g_focusOnOpen = false;
+    }
+    // NoNavFocus: ImGui's gamepad window switcher (X) would otherwise grab the menu while you play; LB opens it instead
     const bool visible = ImGui::Begin("Dev menu (F8)", &g_open, ImGuiWindowFlags_NoNavFocus);
-    if (g_toggleFocus && wasFocused) ImGui::SetWindowFocus(nullptr);
-    g_toggleFocus = false;
     g_focused = g_open && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
     if (visible) {
         // Header: the sign lettering of the F10 board, and the build this is.
@@ -2351,8 +2370,8 @@ void Draw() noexcept {
                           Col(Colour::CreamDim), BuildInfo::Id());
             ImGui::Dummy(ImVec2(0.0f, heading->FontSize + Px(2)));
         }
-        ImGui::TextDisabled(g_focused ? "Game input paused: click the game or press LB to move."
-                                      : "Click here or press LB to use the menu.");
+        ImGui::TextDisabled(g_focused ? "Game input paused: click the game to move; LB or F8 closes the menu."
+                                      : "Click here to use the menu; LB or F8 closes it.");
         DrawStatus();
         ImGui::Separator();
         if (ImGui::BeginTabBar("devtabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
