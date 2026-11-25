@@ -64,6 +64,11 @@ pad script (`tools\debug\patches\pad-script.patch`, usage in `game-logic-debug`)
 - Volume sliders (F10) add a per-category offset in a native override of `MIXAdjustFader` (`0x800DD2A0`, the engine's only per-voice volume call, every frame; `music_attenuation.cpp`).
   The game only knows music (record flag `0x400`) versus SFX; ours: Music = `0x400` from the boot/mnu4 banks, Voices = `0x400` from a level bank (NPC dialog, `cin_XX_m`), Menus = the mnu4.HIP bank, SFX = the rest.
   Limits: resident dialog (Scooby barks, `holly_51a`) counts as SFX, Bink movie audio is master only, and the `w028` dock ambience loops count as Voices.
+- 3D pan: the sound engine's state block is `0x80237DF8` (sound records at +0x20). `fn_8003CE50` copies the camera
+  matrix in as the listener (right +0x1220, up +0x122C, at +0x1238, position +0x1244 written elsewhere), and
+  `fn_800D928C` sets MIX pan = 64 + 64 * dot(unit vector to the sound, right), 0 = left. The camera's right points to
+  the screen's left, so the game panned every 3D sound the wrong way; `hle/no100f_sound_pan.cpp` negates the stored
+  right vector. Check it live with the dev menu: `peek 80239018 3` is minus `peek 80245250 3` (the camera's right).
 - `h002` = Mystic Playground (the reported crackle level).
 
 ## Traps
