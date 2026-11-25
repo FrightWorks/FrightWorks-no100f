@@ -1,0 +1,35 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Scooby-Doo! Night of 100 Frights",
+  "wikidata": "Q2186477",
+  "system": "GameCube",
+  "type": "recomp",
+  "original": {
+    "region": "USA",
+    "revision": "Rev 1",
+    "serial": "GIHE78",
+    "sha1": "cf5638fd61a7862e07066fb290381bdfc77d1f37"
+  },
+  "project": "FrightWorks",
+  "status": "released",
+  "targets": ["Windows", "Linux"],
+  "toolchain": ["Wiicompiled", "Aurora"],
+  "approach": "PowerPC code recompiled ahead of time to C++ with WiiCompiled; Aurora (SDL3, WebGPU) replaces the GameCube's graphics, audio and input. No CPU emulator.",
+  "started": "2026-10-31",
+  "maintainers": [
+    { "name": "Loneranger419", "link": "https://github.com/Loneranger419" }
+  ],
+  "links": [
+    { "label": "Website", "url": "https://frightworks.dev" },
+    { "label": "Download", "url": "https://github.com/FrightWorks/FrightWorks-no100f/releases/latest" },
+    { "label": "Building", "url": "https://github.com/FrightWorks/FrightWorks-no100f/blob/main/docs/building.md" }
+  ],
+  "help": [
+    "Play testing and feedback on the game, the launcher and the project as a whole",
+    "Testing on Steam Deck, so it can be added to the supported platforms",
+    "Testing on Linux",
+    "Launcher art in the style of the original show"
+  ],
+  "tags": ["widescreen", "60fps", "hd-textures", "hdr", "controller", "launcher"],
+  "notes": "Continues Scooby-Doo: Refrightened by JosiahG, split off at its v1.0.2 (version numbers carry on). Up to 4K in true widescreen, 30 or 60 fps, MSAA, HDR, motion blur and ink outlines, optional HD texture packs from the launcher, remappable pads with matching button prompts and an optional original Xbox layout. Needs the player's own USA Rev 1 disc; no game data is included. GPL-3.0."
+}
