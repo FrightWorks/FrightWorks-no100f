@@ -648,13 +648,14 @@ static void index_button_icons(const std::filesystem::path& resourcesPath) noexc
   }
 }
 
-void build_index() noexcept {
+// `buttonIcons` = false: the texture folders alone (take_reload; the button icons don't change while the game runs).
+void build_index(bool buttonIcons = true) noexcept {
   auto userPath = fs_path_from_string(g_config.userPath);
   // Files the game ships (button_icons; texture_replacements, where only the debug kit links a pack) sit beside it, not
   // in the user's folder: an installed game's program folder is replaced on every update.
   const auto resourcesPath = g_config.resourcesPath != nullptr ? fs_path_from_string(g_config.resourcesPath)
                                                                : std::filesystem::path{};
-  index_button_icons(resourcesPath);
+  if (buttonIcons) index_button_icons(resourcesPath);
   if (!g_config.allowTextureReplacements) {
     return;
   }
@@ -1015,6 +1016,37 @@ void set_highlight(std::string_view name) noexcept {
 }
 
 bool take_highlight_change() noexcept { return s_highlightChanged.exchange(false); }
+
+// Dev menu (F8): read the texture folders and packs again without restarting (files added, removed or edited). The dev
+// menu runs on the game's thread and the index is read on the renderer's, so request_reload only raises a flag and
+// take_reload does the work there, before a draw resolves its textures.
+std::atomic<bool> s_reloadRequested{false};
+
+void request_reload() noexcept { s_reloadRequested.store(true); }
+
+bool take_reload() noexcept {
+  if (!s_reloadRequested.exchange(false)) {
+    return false;
+  }
+  if (!g_config.allowTextureReplacements) {
+    Log.info("Texture packs: not reloaded, texture replacement was off when the game started");
+    return false;
+  }
+  s_replacementIndex.clear();
+  s_replacementCache.clear();
+  s_replacementLru.clear();
+  s_replacementCacheBytes = 0;
+  s_failedKeys.clear();
+  s_reportedMisses.clear();
+  {
+    std::lock_guard lock(s_usedMutex);
+    s_usedKeys.clear();
+    s_usedNames.clear();
+  }
+  Log.info("Texture packs: reloading");
+  build_index(false);
+  return true;
+}
 
 bool is_highlighted(const RuntimeTextureKey& key) noexcept {
   std::lock_guard lock(s_usedMutex);

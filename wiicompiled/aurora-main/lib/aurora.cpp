@@ -2707,6 +2707,11 @@ void aurora_texture_replacement_highlight(const char* name) {
   aurora::gfx::texture_replacement::set_highlight(name != nullptr ? name : "");
 #endif
 }
+void aurora_texture_replacement_reload() {
+#ifdef AURORA_ENABLE_GX
+  aurora::gfx::texture_replacement::request_reload();
+#endif
+}
 void aurora_texture_log(const char* scene) {
 #ifdef AURORA_ENABLE_GX
   aurora::gfx::texture_replacement::set_texture_log_scene(scene != nullptr ? scene : "");

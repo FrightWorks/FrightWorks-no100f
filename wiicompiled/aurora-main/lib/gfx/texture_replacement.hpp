@@ -23,6 +23,10 @@ void reset_used() noexcept;
 // it changed: the caller must drop its cached textures so find_replacement runs again.
 void set_highlight(std::string_view name) noexcept;
 bool take_highlight_change() noexcept;
+// Dev menu (F8): read the texture folders and packs again (any thread). take_reload, on the renderer's thread before
+// textures are resolved, does it and returns true once: the caller must then drop its cached textures.
+void request_reload() noexcept;
+bool take_reload() noexcept;
 // Dev menu (F8): whether this handle is the magenta highlight texture (never creates it).
 bool is_highlight_handle(const TextureHandle& handle) noexcept;
 // Dev menu (F8): texture log (gx.cpp, devmenu_texlog.csv): the scene its rows are tagged with, "" = off.

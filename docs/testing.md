@@ -51,6 +51,9 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   `UserData\texture_packs\<NN-name>` (Scooby-HD is `50-scoobyhd`, the menu pack `40-menu`) and sets `[video] texture_replacements = true`.
   The game indexes `UserData\texture_replacements` and mods first, then the packs, lower folder name first (it wins);
   a `disabled` file in a pack's folder skips it, and the log names each pack it uses (`Texture pack: 50-scoobyhd`).
+  The game reads the folders once at start; with developer tools on, **Reload texture packs** in the dev menu's Textures
+  tab (or `texreload` in `Play\devmenu.txt`) reads them again and redraws every texture from them, so pack files added,
+  removed or edited show without a restart (only when HD textures were on at start).
   dogerki's Smuggler's Cove sign has no alpha channel (#107: the small ship's sails on its roof drew as opaque planks):
   the game adds the alpha from the disc's own texture as it loads (`add_original_alpha` in `texture_replacement.cpp`,
   log line "Smuggler's Cove sign: alpha from the original added").
