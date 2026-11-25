@@ -68,6 +68,7 @@ Camera g_camera;
 //   far NEAR FAR                 (the light fades out from NEAR to FAR units away: distant backdrops stay as painted)
 //   shadow RADIUS SIZE BIAS      (moon shadows within RADIUS units round the view, SIZE texels; RADIUS 0 = none)
 //   unlit KEY                    (a texture drawn as the game draws it: the sky band, painted backdrops)
+//   hide KEY                     (a texture not drawn at all: the game's painted shadow decals)
 constexpr size_t kMaxRelightLights = 32;
 struct RelightLight {
   float pos[3];
@@ -88,6 +89,7 @@ struct RelightScene {
   float shadowBias = 0.15f;  // units toward the moon
   std::vector<RelightLight> lights;
   std::unordered_set<std::string> unlit;
+  std::unordered_set<std::string> hidden;
 };
 
 RelightScene load_relight_scene() {
@@ -112,6 +114,10 @@ RelightScene load_relight_scene() {
       char key[128] = {};
       if (w == "unlit" && std::sscanf(line, "%15s %127s", word, key) == 2) {
         s.unlit.emplace(key);
+        continue;
+      }
+      if (w == "hide" && std::sscanf(line, "%15s %127s", word, key) == 2) {
+        s.hidden.emplace(key);
         continue;
       }
       if (w == "ambient" && n >= 4) {
@@ -139,8 +145,8 @@ RelightScene load_relight_scene() {
     }
     std::fclose(f);
     s.loaded = true;
-    Log.info("Relight: {} lights, moon {}, {} unlit textures, from {}", s.lights.size(), s.hasMoon ? "on" : "off",
-             s.unlit.size(), path);
+    Log.info("Relight: {} lights, moon {}, {} unlit and {} hidden textures, from {}", s.lights.size(),
+             s.hasMoon ? "on" : "off", s.unlit.size(), s.hidden.size(), path);
     return s;
 }
 
@@ -782,6 +788,11 @@ unsigned relight_generation() noexcept { return g_relightGeneration.load(std::me
 bool is_unlit_texture(const std::string& key) noexcept {
   const auto& unlit = relight_scene().unlit;
   return !key.empty() && unlit.contains(key);
+}
+
+bool is_hidden_texture(const std::string& key) noexcept {
+  const auto& hidden = relight_scene().hidden;
+  return !key.empty() && hidden.contains(key);
 }
 
 bool wanted() noexcept {

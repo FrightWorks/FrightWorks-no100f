@@ -2897,11 +2897,11 @@ static bool ordered_world_state() noexcept {
 }
 
 // Whether a world draw (perspective) samples one of the game's light textures, for the bloom (gfx/bloom.hpp).
-// Relighting experiment: the draw samples one of the light file's unlit textures.
-static bool samples_unlit_texture(const ShaderInfo& info) noexcept {
+// Relighting experiment: the draw samples one of the light file's unlit (or hidden) textures.
+static bool samples_listed_texture(const ShaderInfo& info, bool (*listed)(const std::string&) noexcept) noexcept {
   for (u32 i = 0; i < MaxTextures; ++i) {
     const auto& bind = g_gxState.textures[i];
-    if (info.sampledTextures.test(i) && bind && gfx::scene_stage::is_unlit_texture(bind.ref->debugKey)) {
+    if (info.sampledTextures.test(i) && bind && listed(bind.ref->debugKey)) {
       return true;
     }
   }
@@ -3417,10 +3417,12 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   log_lighting_probe(pipelineStatePtr->shaderInfo, prim, vtxCount);
   bool unlit = false;
   if (gfx::scene_stage::relighting()) {
-    if (draws_game_shadow(pipelineStatePtr->shaderInfo)) {
+    if (draws_game_shadow(pipelineStatePtr->shaderInfo) ||
+        samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_hidden_texture)) {
       return;
     }
-    unlit = pipelineStatePtr->shaderInfo.relight && samples_unlit_texture(pipelineStatePtr->shaderInfo);
+    unlit = pipelineStatePtr->shaderInfo.relight &&
+            samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_unlit_texture);
     if (unlit) {
       pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::Game, true);
     }

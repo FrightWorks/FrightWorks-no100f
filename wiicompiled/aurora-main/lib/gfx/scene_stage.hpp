@@ -74,6 +74,8 @@ void set_relight(int mode) noexcept;
 unsigned relight_generation() noexcept;
 // The light file's unlit textures ("unlit KEY", KEY as TextureRef::debugKey): drawn as the game draws them.
 bool is_unlit_texture(const std::string& key) noexcept;
+// The light file's hidden textures ("hide KEY"): draws that sample one are skipped (painted shadow decals).
+bool is_hidden_texture(const std::string& key) noexcept;
 
 // Moon shadows: the solid scene is drawn a second time from the moon into a depth map, before the stage. Each solid
 // draw gets a copy of its uniforms (shader_info.cpp build_uniform), whose projection is replaced, once the frame's
