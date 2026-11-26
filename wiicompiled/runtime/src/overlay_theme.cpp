@@ -24,6 +24,8 @@ ImFont* g_body = nullptr;
 ImFont* g_small = nullptr;
 ImFont* g_heading = nullptr;
 ImFont* g_title = nullptr;
+ImFont* g_row = nullptr;
+ImFont* g_tab = nullptr;
 
 // launcher/Theme.cs, so the game's menus and the launcher look like one thing.
 constexpr ImU32 kColours[] = {
@@ -161,6 +163,8 @@ void Initialize(const AuroraWindowSize* size) {
     g_small = AddFont(kFont_RobotoMedium, kFont_RobotoMediumSize, 14.0f);
     g_heading = AddFont(kFont_LuckiestGuyRegular, kFont_LuckiestGuyRegularSize, 22.0f);
     g_title = AddFont(kFont_LuckiestGuyRegular, kFont_LuckiestGuyRegularSize, 40.0f);
+    g_row = AddFont(kFont_RobotoMedium, kFont_RobotoMediumSize, 20.0f);
+    g_tab = AddFont(kFont_LuckiestGuyRegular, kFont_LuckiestGuyRegularSize, 27.0f);
     io.FontDefault = g_body;
     SetStyle();
 }
@@ -170,6 +174,8 @@ ImFont* Body() { return g_body; }
 ImFont* Small() { return g_small != nullptr ? g_small : ImGui::GetFont(); }
 ImFont* Heading() { return g_heading != nullptr ? g_heading : ImGui::GetFont(); }
 ImFont* Title() { return g_title != nullptr ? g_title : ImGui::GetFont(); }
+ImFont* Row() { return g_row != nullptr ? g_row : ImGui::GetFont(); }
+ImFont* Tab() { return g_tab != nullptr ? g_tab : Heading(); }
 
 ImU32 Col(Colour colour, float alpha) {
     const ImU32 c = kColours[static_cast<int>(colour)];
@@ -178,6 +184,41 @@ ImU32 Col(Colour colour, float alpha) {
 }
 
 ImVec4 Vec(Colour colour, float alpha) { return ImGui::ColorConvertU32ToFloat4(Col(colour, alpha)); }
+
+ImU32 UiCol(Colour colour, float alpha) { return ImGui::GetColorU32(Vec(colour, alpha)); }
+
+void Card(ImDrawList* list, ImVec2 min, ImVec2 max, float rounding, float alpha) {
+    list->AddRectFilled(min, max, UiCol(Colour::BoardBottom, 0.92f * alpha), rounding);
+    list->AddRect(min, max, UiCol(Colour::Purple, 0.55f * alpha), rounding, 0, Px(1));
+}
+
+bool FlatButton(const char* label, bool primary, ImVec2 size) {
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (window->SkipItems) return false;
+    const ImGuiID id = window->GetID(label);
+    const ImVec2 pos = window->DC.CursorPos;
+    const ImRect bb(pos, ImVec2(pos.x + size.x, pos.y + size.y));
+    ImGui::ItemSize(size);
+    if (!ImGui::ItemAdd(bb, id)) return false;
+    bool hovered = false, held = false;
+    const bool pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held);
+    ImDrawList* list = window->DrawList;
+    const float rounding = size.y * 0.5f;
+    if (primary) {
+        list->AddRectFilled(bb.Min, bb.Max, UiCol(hovered ? Colour::Lime : Colour::LimeDeep), rounding);
+    } else {
+        list->AddRectFilled(bb.Min, bb.Max, UiCol(Colour::Purple, hovered ? 0.55f : 0.3f), rounding);
+        list->AddRect(bb.Min, bb.Max, UiCol(Colour::Purple), rounding, 0, Px(1.5f));
+    }
+    const char* end = ImGui::FindRenderedTextEnd(label);
+    ImFont* font = Heading();
+    const ImVec2 text = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, label, end);
+    list->AddText(font, font->FontSize,
+                  ImVec2(std::round((bb.Min.x + bb.Max.x - text.x) * 0.5f), std::round((bb.Min.y + bb.Max.y - text.y) * 0.5f + Px(1))),
+                  primary ? UiCol(Colour::Ink) : UiCol(Colour::Cream), label, end);
+    ImGui::RenderNavCursor(bb, id);
+    return pressed;
+}
 
 void OutlinedText(ImDrawList* list, ImFont* font, ImVec2 pos, ImU32 fill, ImU32 outline, float thickness,
                   const char* text) {
@@ -193,7 +234,7 @@ void OutlinedText(ImDrawList* list, ImFont* font, ImVec2 pos, ImU32 fill, ImU32 
     list->AddText(font, size, pos, fill, text);
 }
 
-void Board(ImDrawList* list, ImVec2 min, ImVec2 max, float rounding) {
+void Board(ImDrawList* list, ImVec2 min, ImVec2 max, float rounding, float alpha) {
     // Drop shadow, then the gradient body, then the edges.
     for (int i = 3; i >= 1; --i) {
         const float grow = Px(4.0f * static_cast<float>(i));
@@ -201,7 +242,7 @@ void Board(ImDrawList* list, ImVec2 min, ImVec2 max, float rounding) {
                             Col(Colour::Ink, 0.12f), rounding + grow);
     }
     const int start = list->VtxBuffer.Size;
-    list->AddRectFilled(min, max, Col(Colour::BoardTop), rounding);
+    list->AddRectFilled(min, max, Col(Colour::BoardTop, alpha), rounding);  // the gradient below keeps this alpha
     ImGui::ShadeVertsLinearColorGradientKeepAlpha(list, start, list->VtxBuffer.Size, min, ImVec2(min.x, max.y),
                                                   Col(Colour::BoardTop), Col(Colour::BoardBottom));
     list->AddRect(min, max, Col(Colour::Ink), rounding, 0, Px(3));
@@ -334,9 +375,11 @@ void Hint(const char* text) {
 }
 
 void RowLabel(const char* label, float labelWidth, float controlWidth) {
+    // From where the row starts, not the window's edge: a page centred in a wide panel starts well inside it.
+    const float rowStart = ImGui::GetCursorPosX();
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(labelWidth);
+    ImGui::SameLine(rowStart + labelWidth);
     ImGui::SetNextItemWidth(controlWidth);
 }
 
