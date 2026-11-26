@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -72,6 +73,9 @@ Camera g_camera;
 //   hide KEY                     (a texture not drawn at all: the game's painted shadow decals)
 //   opaque KEY                   (a texture drawn solid, never blended: trees the game fades near the camera)
 //   deblue S                     (0..1: how much blue the original textures lose under the new light)
+//   fire X Y Z [SIZE [INTENSITY]] (a campfire on the ground there: flickering light, flame, embers, logs; SIZE = the
+//                                 scorched patch's radius, default 0.6)
+//   mountains LOW_DEG HIGH_DEG R G B (ridges round the sky's horizon between those heights; colour of the nearest)
 //   move ID X Y Z [YAW]          (read by the runtime: an entity moved there, no100f_devmenu.cpp)
 //   sky ZR ZG ZB HR HG HB        (a night sky behind everything: zenith and horizon colours; hide the game's band)
 //   moondisc RADIUS_DEG R G B    (the moon drawn in the sky at the moon's direction; radius 0 = none)
@@ -92,7 +96,14 @@ struct RelightScene {
   float moonColor[3] = {0.5f, 0.55f, 0.7f};
   float radiusScale = 1.f;
   float pointIntensity = 1.f;
-  float deblue = 0.f;  // "deblue S": 0..1, how much of the original textures' blue (positive Cb) goes
+  float deblue = 0.f;
+  bool hasFire = false;
+  float firePos[3] = {};
+  float fireSize = 0.6f;
+  float fireIntensity = 1.f;
+  bool hasMountains = false;
+  float mountainLow = 2.f, mountainHigh = 7.f;
+  float mountainColor[3] = {0.03f, 0.07f, 0.08f};  // "deblue S": 0..1, how much of the original textures' blue (positive Cb) goes
   float fadeNear = 1e6f, fadeFar = 2e6f;
   float shadowRadius = 40.f;
   uint32_t shadowSize = 2048;
@@ -158,6 +169,16 @@ RelightScene load_relight_scene() {
         }
       } else if (w == "light" && n >= 8 && s.lights.size() < kMaxRelightLights) {
         s.lights.push_back({{v[0], v[1], v[2]}, v[3], {v[4], v[5], v[6]}});
+      } else if (w == "fire" && n >= 4) {
+        s.hasFire = true;
+        std::copy(v, v + 3, s.firePos);
+        if (n >= 5) s.fireSize = std::max(v[3], 0.05f);
+        if (n >= 6) s.fireIntensity = std::max(v[4], 0.f);
+      } else if (w == "mountains" && n >= 6) {
+        s.hasMountains = true;
+        s.mountainLow = v[0];
+        s.mountainHigh = std::max(v[1], v[0]);
+        std::copy(v + 2, v + 5, s.mountainColor);
       } else if (w == "deblue" && n >= 2) {
         s.deblue = std::clamp(v[0], 0.f, 1.f);
       } else if (w == "scale" && n >= 3) {
@@ -216,6 +237,10 @@ struct RelightParams {
   std::array<float, 4> info;      // light count, fade near, fade far
   std::array<std::array<float, 4>, 4> shadow; // view space to shadow clip space (rows)
   std::array<float, 4> shadowInfo; // on, size, normal offset (units), bias (depth)
+  std::array<float, 4> firePos;    // view space; w = 1 when there is a fire
+  std::array<float, 4> fireInfo;   // size, unused, time (s), flicker
+  std::array<float, 4> fireUp;     // world up in view space
+  std::array<float, 4> fireEast;   // world +x in view space
   std::array<std::array<float, 4>, kMaxRelightLights * 2> lights; // (view pos, radius), (colour, 0)
 };
 
@@ -325,6 +350,10 @@ struct Relight {
     info: vec4f,
     shadow: array<vec4f, 4>,
     shadow_info: vec4f,
+    fire_pos: vec4f,
+    fire_info: vec4f,
+    fire_up: vec4f,
+    fire_east: vec4f,
     lights: array<vec4f, 64>,
 };
 @group(0) @binding(3) var<uniform> relight: Relight;
@@ -599,8 +628,117 @@ fn light_at(p: vec2i) -> vec3f {
         let f = clamp(1.0 - (d * d) / (lp.w * lp.w), 0.0, 1.0);
         light += relight.lights[i * 2 + 1].rgb * f * f * max(dot(n, to_light / max(d, 1e-4)), 0.0);
     }
+    if (relight.fire_pos.w > 0.0) {
+        light *= fire_ground(c).x;
+    }
     return mix(light, vec3f(1.0), smoothstep(relight.info.y, relight.info.z, length(c)));
 }
+
+// Reimagined campfire ("fire" in the light file): the scorched ground and its logs darken the light here; the flame and
+// the embers are added by fs_fire.
+fn fire_ground(c: vec3f) -> vec2f {  // x: light multiplier, y: ember glow
+    let rel = c - relight.fire_pos.xyz;
+    let up = relight.fire_up.xyz;
+    let h = dot(rel, up);
+    if (abs(h) > 0.4) {
+        return vec2f(1.0, 0.0);
+    }
+    let e = relight.fire_east.xyz;
+    let q = vec2f(dot(rel, e), dot(rel, cross(up, e)));
+    let r = length(q);
+    let s = relight.fire_info.x;  // size (the patch's radius)
+    var m = mix(0.3, 1.0, smoothstep(0.3 * s, s, r));
+    var glow = 0.0;
+    for (var k = 0; k < 4; k++) {
+        let a = f32(k) * 1.5708 + 0.4;
+        let dir = vec2f(cos(a), sin(a));
+        let along = dot(q, dir);
+        let perp = abs(q.x * dir.y - q.y * dir.x);
+        if (along > 0.05 * s && along < 0.75 * s && perp < 0.075 * s) {
+            m = min(m, 0.32);
+            glow = max(glow, (1.0 - smoothstep(0.05 * s, 0.4 * s, along)) * (1.0 - perp / (0.075 * s)));
+        }
+    }
+    // A ring of stones: lighter bumps round the edge.
+    let ring = abs(r - 0.9 * s);
+    let bumps = 0.5 + 0.5 * sin(atan2(q.y, q.x) * 11.0);
+    if (ring < 0.09 * s * (0.6 + 0.4 * bumps)) {
+        m = max(m, 0.9);
+    }
+    glow = max(glow, (1.0 - smoothstep(0.0, 0.35 * s, r)) * 0.8);
+    return vec2f(m, glow);
+}
+
+fn fire_hash(p: vec2f) -> f32 {
+    return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+}
+fn fire_noise(p: vec2f) -> f32 {
+    let i = floor(p);
+    let f = p - i;
+    let u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(fire_hash(i), fire_hash(i + vec2f(1.0, 0.0)), u.x),
+               mix(fire_hash(i + vec2f(0.0, 1.0)), fire_hash(i + vec2f(1.0, 1.0)), u.x), u.y);
+}
+
+// Added over the lit scene: the flame (a camera-facing sheet through the fire, hidden behind nearer surfaces), a soft
+// glow round it and the embers on the ground.
+@fragment
+fn fs_fire(@builtin(position) pos: vec4f) -> @location(0) vec4f {
+    let p = vec2i(pos.xy);
+    let uv = (vec2f(p) + 0.5 - params.viewport.xy) / params.viewport.zw;
+    let r4 = vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.5, 1.0) * params.inv_proj;
+    let dir = normalize(r4.xyz / r4.w);
+    let c4 = view_pos(p);
+    let scene_dist = select(1e9, length(c4.xyz), c4.w != 0.0);
+    let base = relight.fire_pos.xyz;
+    let up = relight.fire_up.xyz;
+    let s = relight.fire_info.x;
+    let t = relight.fire_info.z;
+    let flick = relight.fire_info.w;
+    var col = vec3f(0.0);
+
+    // Embers on the ground (and glowing log ends).
+    if (c4.w != 0.0) {
+        let g = fire_ground(c4.xyz);
+        if (g.y > 0.0) {
+            let rel = c4.xyz - base;
+            let e = relight.fire_east.xyz;
+            let q = vec2f(dot(rel, e), dot(rel, cross(up, e))) / s;
+            let n = fire_noise(q * 9.0 + vec2f(t * 0.7, -t * 0.5));
+            col += vec3f(1.0, 0.32, 0.06) * g.y * (0.25 + 0.75 * n * n) * flick * 0.9;
+        }
+    }
+
+    // The flame sheet: faces the camera, upright.
+    let nrm = normalize(base - up * dot(base, up));
+    let denom = dot(dir, nrm);
+    if (abs(denom) > 1e-4) {
+        let dist = dot(base, nrm) / denom;
+        if (dist > 0.0 && dist < scene_dist + 0.05 * s) {
+            let q = dir * dist - base;
+            let right = normalize(cross(up, nrm));
+            let x = dot(q, right) / s;
+            let y = dot(q, up) / s;
+            let height = 1.9;
+            if (y > -0.05 && y < height) {
+                let v = clamp(y / height, 0.0, 1.0);
+                let sway = (fire_noise(vec2f(y * 2.0 - t * 3.0, t * 0.7)) - 0.5) * 0.35 * v;
+                let width = 0.6 * pow(1.0 - v, 0.7) * (0.85 + 0.3 * fire_noise(vec2f(t * 4.0, y * 3.0)));
+                let lick = fire_noise(vec2f(x * 5.0, y * 4.0 - t * 5.0));
+                let d = abs(x - sway) / max(width, 1e-3);
+                let density = clamp((1.0 - d) * 1.6 - v * 0.9 * (1.0 - lick), 0.0, 1.0);
+                let heat = clamp(1.0 - v * 1.3 + (1.0 - d) * 0.4, 0.0, 1.0);
+                let flame = mix(vec3f(0.9, 0.15, 0.02), mix(vec3f(1.0, 0.55, 0.1), vec3f(1.0, 0.92, 0.6), heat), heat);
+                col += flame * density * flick * 1.2;
+            }
+            // Glow round the flame.
+            let gd = length(vec2f(x, (y - 0.5) * 0.8));
+            col += vec3f(1.0, 0.45, 0.12) * exp(-gd * 2.2) * 0.12 * flick;
+        }
+    }
+    return vec4f(col, 1.0);
+}
+
 
 // Multiplied into the solid scene at up to twice its brightness (the blend doubles: source x destination x 2).
 @fragment
@@ -631,7 +769,7 @@ fn fs_depth(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 }
 )""";
 
-enum class Kind { Occlusion, BlurH, BlurV, Apply, AoView, Tint, Depth, Ink, InkView, Relight, RelightView, Count };
+enum class Kind { Occlusion, BlurH, BlurV, Apply, AoView, Tint, Depth, Ink, InkView, Relight, RelightView, Fire, Count };
 
 struct Pipelines {
   uint32_t samples = 0;
@@ -674,11 +812,20 @@ void build_pipelines(wgpu::TextureFormat format, uint32_t samples) {
                 .srcFactor = wgpu::BlendFactor::Zero,
                 .dstFactor = wgpu::BlendFactor::One},
   };
-  const auto make = [&](const char* entry, bool efb, bool multiplies, bool doubles = false) {
+  // Added light (the campfire's flame and embers).
+  const wgpu::BlendState additive{
+      .color = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::One,
+                .dstFactor = wgpu::BlendFactor::One},
+      .alpha = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::Zero,
+                .dstFactor = wgpu::BlendFactor::One},
+  };
+  const auto make = [&](const char* entry, bool efb, bool multiplies, bool doubles = false, bool adds = false) {
     // Over the EFB: its format and sample count, and never its alpha (the game blends with it).
     const wgpu::ColorTargetState target{
         .format = efb ? format : kAoFormat,
-        .blend = doubles ? &multiply2x : multiplies ? &multiply : nullptr,
+        .blend = adds ? &additive : doubles ? &multiply2x : multiplies ? &multiply : nullptr,
         .writeMask = efb ? wgpu::ColorWriteMask::Red | wgpu::ColorWriteMask::Green | wgpu::ColorWriteMask::Blue
                          : wgpu::ColorWriteMask::All,
     };
@@ -704,6 +851,7 @@ void build_pipelines(wgpu::TextureFormat format, uint32_t samples) {
   p[static_cast<size_t>(Kind::InkView)] = make("fs_ink_view", true, false);
   p[static_cast<size_t>(Kind::Relight)] = make("fs_relight", true, true, true);
   p[static_cast<size_t>(Kind::RelightView)] = make("fs_relight_view", true, false);
+  p[static_cast<size_t>(Kind::Fire)] = make("fs_fire", true, false, false, true);
   g_pipelines.samples = samples;
   g_pipelines.format = format;
 }
@@ -738,8 +886,10 @@ void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureVie
     entries.push_back(wgpu::BindGroupEntry{.binding = 1, .textureView = *depth});
   if (ao != nullptr)
     entries.push_back(wgpu::BindGroupEntry{.binding = 2, .textureView = *ao});
-  if (kind == Kind::Relight || kind == Kind::RelightView) {
+  if (kind == Kind::Relight || kind == Kind::RelightView || kind == Kind::Fire) {
     entries.push_back(wgpu::BindGroupEntry{.binding = 3, .buffer = g_relightParams, .size = sizeof(RelightParams)});
+  }
+  if (kind == Kind::Relight || kind == Kind::RelightView) {  // the flame doesn't read the moon's shadow map
     entries.push_back(wgpu::BindGroupEntry{.binding = 4, .textureView = g_shadowTargets.depth});
   }
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
@@ -840,6 +990,8 @@ struct Sky {
     horizon: vec4f,
     moon_dir: vec4f,   // toward the moon; w = angular radius (radians), 0 = no moon
     moon_color: vec4f, // the disc; w = star density
+    mountains: vec4f,  // lowest, highest ridge (radians), on, seed
+    mountain_color: vec4f,
 };
 @group(0) @binding(0) var<uniform> sky: Sky;
 @group(0) @binding(1) var moon_tex: texture_2d<f32>;
@@ -863,6 +1015,10 @@ fn noise2(p: vec2f) -> f32 {
     let u = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), u.x),
                mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), u.x), u.y);
+}
+fn ridge(p: vec2f) -> f32 {  // 0..1, peaky
+    let n = 0.55 * noise2(p) + 0.3 * noise2(p * 2.3 + 5.2) + 0.15 * noise2(p * 5.1 + 1.3);
+    return clamp((1.0 - abs(n * 2.0 - 1.0)) * 1.25 - 0.2, 0.0, 1.0);
 }
 fn fbm2(p: vec2f) -> f32 {
     return 0.5 * noise2(p) + 0.25 * noise2(p * 2.03 + 1.7) + 0.125 * noise2(p * 4.01 + 3.1) + 0.0625 * noise2(p * 8.1);
@@ -892,6 +1048,24 @@ fn fs_sky(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let bright = 0.35 + 0.65 * hash3(cell + 5.0);
         let s = (1.0 - smoothstep(0.0, size, length(sp - star))) * bright * smoothstep(0.03, 0.3, h);
         col += vec3f(0.85, 0.9, 1.0) * s;
+    }
+
+
+    // Mountains: two ranges of ridges round the horizon (the nearer lower and darker), over the stars, under the moon.
+    if (sky.mountains.z > 0.0) {
+        let az = atan2(d.x, d.z);
+        let el = asin(clamp(h, -1.0, 1.0));
+        let circ = vec2f(cos(az), sin(az));
+        let lo = sky.mountains.x;
+        let hi = sky.mountains.y;
+        let far_ridge = lo + (hi - lo) * ridge(circ * 3.0 + vec2f(sky.mountains.w, 1.7));
+        let near_ridge = lo * 0.6 + (hi - lo) * 0.55 * ridge(circ * 5.0 + vec2f(9.1, sky.mountains.w));
+        // Soft edges (a fraction of a degree), the far range lighter and hazier toward its foot.
+        let far_cover = 1.0 - smoothstep(far_ridge - 0.004, far_ridge, el);
+        let far_col = mix(sky.mountain_color.rgb, sky.horizon.rgb, 0.3 * (1.0 - smoothstep(0.0, far_ridge, el)));
+        col = mix(col, far_col, far_cover);
+        let near_cover = 1.0 - smoothstep(near_ridge - 0.004, near_ridge, el);
+        col = mix(col, sky.mountain_color.rgb * 0.65, near_cover);
     }
 
     // The moon: a disc with soft limb darkening and darker patches, and its glow.
@@ -927,7 +1101,7 @@ fn fs_sky(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 )WGSL";
 
 struct SkyParams {
-  std::array<std::array<float, 4>, 9> v;
+  std::array<std::array<float, 4>, 11> v;
 };
 struct SkyPipelines {
   wgpu::RenderPipeline pipeline;
@@ -1060,6 +1234,9 @@ void encode_sky(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu:
   const float radius = scene.hasMoon ? scene.moonRadiusDeg * 3.14159265f / 180.f : 0.f;
   p.v[7] = {scene.moonDir[0], scene.moonDir[1], scene.moonDir[2], radius};
   p.v[8] = {scene.moonDisc[0], scene.moonDisc[1], scene.moonDisc[2], scene.starDensity};
+  constexpr float kDeg = 3.14159265f / 180.f;
+  p.v[9] = {scene.mountainLow * kDeg, scene.mountainHigh * kDeg, scene.hasMountains ? 1.f : 0.f, 3.3f};
+  p.v[10] = {scene.mountainColor[0], scene.mountainColor[1], scene.mountainColor[2], 0.f};
   g_queue.WriteBuffer(g_skyParams, 0, &p, sizeof(p));
   if (!g_skySampler) {
     const wgpu::SamplerDescriptor samplerDescriptor{
@@ -1251,6 +1428,26 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       rp.lights[i * 2][3] = l.radius * scene.radiusScale;
       for (int c = 0; c < 3; ++c) rp.lights[i * 2 + 1][c] = l.color[c] * scene.pointIntensity;
     }
+    if (scene.hasFire) {
+      static const auto start = std::chrono::steady_clock::now();
+      const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
+      const float flicker = 1.f + 0.12f * std::sin(t * 13.f) + 0.08f * std::sin(t * 7.3f + 1.f) +
+                            0.06f * std::sin(t * 23.f + 2.f);
+      toView(scene.firePos, 1.f, rp.firePos.data());
+      rp.firePos[3] = 1.f;
+      rp.fireInfo = {scene.fireSize, 0.f, t, flicker * scene.fireIntensity};
+      const float up[3] = {0.f, 1.f, 0.f}, east[3] = {1.f, 0.f, 0.f};
+      toView(up, 0.f, rp.fireUp.data());
+      toView(east, 0.f, rp.fireEast.data());
+      const size_t i = std::min(scene.lights.size(), kMaxRelightLights - 1);
+      const float lightPos[3] = {scene.firePos[0], scene.firePos[1] + 0.6f * scene.fireSize / 0.6f,
+                                 scene.firePos[2]};
+      toView(lightPos, 1.f, rp.lights[i * 2].data());
+      rp.lights[i * 2][3] = 8.f * scene.radiusScale;
+      const float fireColor[3] = {1.f, 0.5f, 0.16f};
+      for (int c = 0; c < 3; ++c) rp.lights[i * 2 + 1][c] = fireColor[c] * 1.6f * flicker * scene.fireIntensity;
+      rp.info[0] = static_cast<float>(i + 1);
+    }
     if (!g_relightParams) {
       const wgpu::BufferDescriptor descriptor{
           .label = "Scene stage relighting",
@@ -1265,6 +1462,7 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       return;
     }
     draw(encoder, Kind::Relight, color, size, &depth, nullptr);
+    if (scene.hasFire) draw(encoder, Kind::Fire, color, size, &depth, nullptr);
   }
   if (mode == 1) {
     draw(encoder, Kind::Tint, color, size, nullptr, nullptr);
