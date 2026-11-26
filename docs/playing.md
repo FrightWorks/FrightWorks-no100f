@@ -80,6 +80,12 @@ Make it executable (`chmod +x FrightWorks.AppImage`) and run it. It needs a Vulk
 `./FrightWorks.AppImage --appimage-extract-and-run`. Video recording and the fullscreen monitor choice aren't there yet.
 [Tell us how it goes](https://github.com/FrightWorks/FrightWorks-no100f/issues) on your setup.
 
+## Reimagined (experimental)
+
+**Extras > Game > Reimagined** gives a level a new look: a moonlit night sky, new lamps, real shadows and a campfire.
+Only the playground (the second hub area) has one so far; other levels look as they always did. It takes effect from
+the next game start. Each level's look is a text file in `reimagined` beside the game.
+
 ## Developer tools
 
 **Extras > Game > Developer tools** turns on:
