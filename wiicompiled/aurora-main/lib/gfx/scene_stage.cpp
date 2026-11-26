@@ -80,8 +80,13 @@ Camera g_camera;
 //   deblue S                     (0..1: how much blue the original textures lose under the new light)
 //   fire X Y Z [SIZE [INTENSITY]] (a campfire on the ground there: flickering light, flame, embers, logs; SIZE = the
 //                                 scorched patch's radius, default 0.6)
+//   firemask 0|1                 (the flame's core into the depth buffer, default 1)
+//   lamp X GROUND_Y Z            (a mercury-vapour post-top lamp standing there; its light 3.5 above the ground)
+//   lampcolor R G B [RADIUS]     (every lamp's light; default 0.5 0.85 1.0, radius 5)
 //   mountains LOW_DEG HIGH_DEG R G B (ridges round the sky's horizon between those heights; colour of the nearest)
 //   move ID X Y Z [YAW]          (read by the runtime: an entity moved there, no100f_devmenu.cpp)
+//   shift ID DX DY DZ            (read by the runtime: a trigger moved by an offset)
+// Each level's file is reimagined/<level>.txt beside the game; all of Reimagined: .agents/reimagined.md.
 //   sky ZR ZG ZB HR HG HB        (a night sky behind everything: zenith and horizon colours; hide the game's band)
 //   moondisc RADIUS_DEG R G B    (the moon drawn in the sky at the moon's direction; radius 0 = none)
 //   moontex KEY                  (the moon's picture: a texture name, looked up like the game's, so a pack can
