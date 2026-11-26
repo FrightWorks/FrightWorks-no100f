@@ -1380,6 +1380,26 @@ inline std::string DisplayMode(std::string fallback = "borderless") {
     return Get().displayMode.value_or(std::move(fallback));
 }
 
+// RecompLauncher (recomplauncher.com, recomplauncher.json at the zip's top) starts the game with RECOMPLAUNCHER=1, and
+// RECOMPLAUNCHER_MODE=bigpicture when Play was pressed in its full-screen controller view.
+inline bool StartedByRecompLauncher() {
+    const char* env = std::getenv("RECOMPLAUNCHER");
+    return env != nullptr && std::string_view(env) == "1";
+}
+
+inline bool RecompLauncherBigPicture() {
+    const char* env = std::getenv("RECOMPLAUNCHER_MODE");
+    return StartedByRecompLauncher() && env != nullptr && std::string_view(env) == "bigpicture";
+}
+
+// The display mode the game opens in: the saved one, except that a start from RecompLauncher's Big Picture mode (a
+// controller on the couch, maybe no mouse in reach) opens borderless full screen even when a window was saved. Only for
+// this run: nothing is written unless the player changes the mode.
+inline std::string StartDisplayMode() {
+    std::string mode = DisplayMode("borderless");
+    return mode == "windowed" && RecompLauncherBigPicture() ? std::string("borderless") : mode;
+}
+
 inline std::string FullscreenDisplay(std::string fallback = "auto") {
     return Get().fullscreenDisplay.value_or(std::move(fallback));
 }

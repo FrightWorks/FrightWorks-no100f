@@ -1,0 +1,402 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "FrightWorks: Night of 100 Frights",
+  "repo": "FrightWorks/FrightWorks-no100f",
+  "inputs": [
+    {
+      "id": "game",
+      "role": "game",
+      "label": "Your Scooby-Doo! Night of 100 Frights disc image: the USA release, revision 1 (GIHE78), as a plain .iso, .gcm or .ciso.",
+      "formats": [{ "type": "file", "extensions": ["iso", "gcm", "ciso"] }],
+      "check": { "ids": ["GIHE78"] },
+      "dumps": [{ "name": "USA (Rev 1)", "size": 1459978240, "crc32": "b29a2a47" }]
+    }
+  ],
+  "prepare": {
+    "program": ["FrightWorks.exe", "FrightWorks"],
+    "args": ["--prepare", "--game={input:game}"],
+    "label": "Unpacking your disc and setting up the game",
+    "done": ["{install}/data/Disc/DATA/sys/main.dol"],
+    "options": [
+      {
+        "id": "scoobyhd",
+        "label": "Download the Scooby-HD texture pack (about 600 MB)",
+        "note": "Nearly every texture in the game redrawn at 6x with AI upscaling, by dogerki. HD textures switches it off.",
+        "args": ["--texture-pack=50-scoobyhd"],
+        "default": false
+      },
+      {
+        "id": "menupack",
+        "label": "Download the menu pack (about 50 MB)",
+        "note": "The menus and maps redrawn at 8x, and the HD Creeper window in the hub.",
+        "args": ["--texture-pack=40-menu"],
+        "default": false
+      }
+    ]
+  },
+  "start": {
+    "program": ["data/FrightWorks Game.exe", "data/FrightWorks Game"]
+  },
+  "config": [
+    {
+      "id": "main",
+      "format": "toml",
+      "file": [{ "path": "{install}/data/UserData/Config.toml" }],
+      "ensure": { "paths/dvd_root": "'../Disc/DATA'" }
+    }
+  ],
+  "groups": [
+    { "id": "Screen" },
+    { "id": "Picture" },
+    { "id": "Experimental" },
+    { "id": "Controls" },
+    { "id": "Sound" },
+    { "id": "Game" },
+    { "id": "Developer", "advanced": true }
+  ],
+  "settings": [
+    {
+      "id": "display_mode",
+      "group": "Screen",
+      "label": "Window",
+      "help": "F11 switches in the game. Big Picture mode always starts full screen.",
+      "choices": [
+        { "label": "Borderless fullscreen", "set": { "video/display_mode": "\"borderless\"" } },
+        { "label": "Window", "set": { "video/display_mode": "\"windowed\"" } },
+        { "label": "Exclusive fullscreen", "set": { "video/display_mode": "\"exclusive\"" } }
+      ],
+      "defaults": { "video/display_mode": "\"borderless\"" }
+    },
+    {
+      "id": "resolution",
+      "group": "Screen",
+      "label": "Resolution",
+      "help": "What the game draws at: higher is sharper, but slower. The console drew 480 lines (1x).",
+      "choices": [
+        { "label": "Auto (screen size)", "set": { "video/resolution_multiplier": "0" } },
+        { "label": "0.5x (240p)", "set": { "video/resolution_multiplier": "0.5" } },
+        { "label": "0.75x (360p)", "set": { "video/resolution_multiplier": "0.75" } },
+        { "label": "1x (480p)", "set": { "video/resolution_multiplier": "1" } },
+        { "label": "1.5x (720p)", "set": { "video/resolution_multiplier": "1.5" } },
+        { "label": "2x (960p)", "set": { "video/resolution_multiplier": "2" } },
+        { "label": "2.25x (1080p)", "set": { "video/resolution_multiplier": "2.25" } },
+        { "label": "3x (1440p)", "set": { "video/resolution_multiplier": "3" } },
+        { "label": "4x (1920p)", "set": { "video/resolution_multiplier": "4" } },
+        { "label": "4.5x (4K)", "set": { "video/resolution_multiplier": "4.5" } },
+        { "label": "6x (2880p)", "set": { "video/resolution_multiplier": "6" } },
+        { "label": "8x (3840p)", "set": { "video/resolution_multiplier": "8" } }
+      ],
+      "defaults": { "video/resolution_multiplier": "2.25" }
+    },
+    {
+      "id": "aspect",
+      "group": "Screen",
+      "label": "Picture shape",
+      "help": "The console's own is 4:3; the others show more of the world, not a stretched picture.",
+      "choices": [
+        { "label": "Original 4:3", "set": { "video/aspect_mode": "0" } },
+        { "label": "Widescreen 16:9", "set": { "video/aspect_mode": "1" } },
+        { "label": "Fill the screen", "set": { "video/aspect_mode": "2" } },
+        { "label": "Cinematic 2.39:1", "set": { "video/aspect_mode": "3" } }
+      ],
+      "defaults": { "video/aspect_mode": "2" }
+    },
+    {
+      "id": "fps60",
+      "group": "Screen",
+      "label": "Frame rate",
+      "help": "The game times itself by the clock, so it keeps its speed at 60 fps.",
+      "choices": [
+        { "label": "30 fps (original)", "set": { "video/fps60": "false" } },
+        { "label": "60 fps", "set": { "video/fps60": "true" } }
+      ],
+      "defaults": { "video/fps60": "false" }
+    },
+    {
+      "id": "skip_intro",
+      "group": "Screen",
+      "label": "Intro movies",
+      "choices": [
+        { "label": "Play them", "set": { "video/skip_intro": "false" } },
+        { "label": "Skip them", "set": { "video/skip_intro": "true" } }
+      ],
+      "defaults": { "video/skip_intro": "false" }
+    },
+    {
+      "id": "hd_textures",
+      "group": "Picture",
+      "label": "HD textures",
+      "help": "Uses the texture packs ticked at setup or added in the FrightWorks launcher (Extras > Textures).",
+      "choices": [
+        { "label": "On", "set": { "video/texture_replacements": "true" } },
+        { "label": "Off (original textures)", "set": { "video/texture_replacements": "false" } }
+      ],
+      "defaults": { "video/texture_replacements": "true" }
+    },
+    {
+      "id": "msaa",
+      "group": "Picture",
+      "label": "Anti-aliasing",
+      "help": "Smooths jagged edges.",
+      "choices": [
+        { "label": "Off", "set": { "video/msaa": "1" } },
+        { "label": "2x MSAA", "set": { "video/msaa": "2" } },
+        { "label": "4x MSAA", "set": { "video/msaa": "4" } },
+        { "label": "8x MSAA", "set": { "video/msaa": "8" } }
+      ],
+      "defaults": { "video/msaa": "1" }
+    },
+    {
+      "id": "vsync",
+      "group": "Picture",
+      "label": "V-Sync",
+      "help": "Stops tearing; can add a little input delay.",
+      "choices": [
+        { "label": "Off", "set": { "video/vsync": "false" } },
+        { "label": "On", "set": { "video/vsync": "true" } }
+      ],
+      "defaults": { "video/vsync": "false" }
+    },
+    {
+      "id": "hdr",
+      "group": "Picture",
+      "label": "HDR",
+      "help": "For an HDR screen with Windows HDR on. Set the brightness in F10 > Video or the FrightWorks launcher.",
+      "choices": [
+        { "label": "Off", "set": { "video/hdr": "false" } },
+        { "label": "On", "set": { "video/hdr": "true" } }
+      ],
+      "defaults": { "video/hdr": "false" }
+    },
+    {
+      "id": "sharp_font",
+      "group": "Picture",
+      "label": "Sharp lettering",
+      "help": "Redraws the menu and caption lettering at a high resolution.",
+      "advanced": true,
+      "choices": [
+        { "label": "On", "set": { "video/sharp_font": "true" } },
+        { "label": "Off", "set": { "video/sharp_font": "false" } }
+      ],
+      "defaults": { "video/sharp_font": "true" }
+    },
+    {
+      "id": "sharp_icons",
+      "group": "Picture",
+      "label": "Sharp icons",
+      "help": "Redraws the pause menu and map icons at a high resolution where no texture pack has them.",
+      "advanced": true,
+      "choices": [
+        { "label": "On", "set": { "video/sharp_icons": "true" } },
+        { "label": "Off", "set": { "video/sharp_icons": "false" } }
+      ],
+      "defaults": { "video/sharp_icons": "true" }
+    },
+    {
+      "id": "graphics_api",
+      "group": "Picture",
+      "label": "Graphics API",
+      "help": "Leave it on Automatic unless the game won't start. Linux always uses Vulkan.",
+      "advanced": true,
+      "choices": [
+        { "label": "Automatic", "set": { "video/graphics_api": "\"auto\"" } },
+        { "label": "Direct3D 12", "set": { "video/graphics_api": "\"d3d12\"" } },
+        { "label": "Vulkan", "set": { "video/graphics_api": "\"vulkan\"" } }
+      ],
+      "defaults": { "video/graphics_api": "\"auto\"" }
+    },
+    {
+      "id": "frame_interpolation",
+      "group": "Experimental",
+      "label": "Frame interpolation",
+      "help": "Extra in-between frames for fast screens. Needs 60 fps; caps the resolution at 4x.",
+      "when": { "video/fps60": "true" },
+      "choices": [
+        { "label": "Off", "set": { "video/frame_interpolation_fps": "0" } },
+        { "label": "120 FPS", "set": { "video/frame_interpolation_fps": "120" } },
+        { "label": "180 FPS", "set": { "video/frame_interpolation_fps": "180" } }
+      ],
+      "defaults": { "video/frame_interpolation_fps": "0" }
+    },
+    {
+      "id": "motion_blur",
+      "group": "Experimental",
+      "label": "Motion blur",
+      "help": "Blurs fast movement.",
+      "choices": [
+        { "label": "Off", "set": { "video/motion_blur": "0" } },
+        { "label": "Extra low", "set": { "video/motion_blur": "10" } },
+        { "label": "Low", "set": { "video/motion_blur": "20" } },
+        { "label": "Medium", "set": { "video/motion_blur": "30" } },
+        { "label": "High", "set": { "video/motion_blur": "40" } },
+        { "label": "Extra high", "set": { "video/motion_blur": "50" } }
+      ],
+      "defaults": { "video/motion_blur": "0" }
+    },
+    {
+      "id": "ink_outlines",
+      "group": "Experimental",
+      "label": "Ink outlines",
+      "help": "Cartoon outlines around characters and things.",
+      "choices": [
+        { "label": "Off", "set": { "video/ink_outlines": "0" } },
+        { "label": "Thin", "set": { "video/ink_outlines": "1" } },
+        { "label": "Bold", "set": { "video/ink_outlines": "2" } }
+      ],
+      "defaults": { "video/ink_outlines": "0" }
+    },
+    {
+      "id": "ambient_occlusion",
+      "group": "Experimental",
+      "label": "Ambient occlusion",
+      "help": "Soft shade in corners and creases.",
+      "choices": [
+        { "label": "Off", "set": { "video/ambient_occlusion": "0" } },
+        { "label": "Low", "set": { "video/ambient_occlusion": "35" } },
+        { "label": "Medium", "set": { "video/ambient_occlusion": "65" } }
+      ],
+      "defaults": { "video/ambient_occlusion": "0" }
+    },
+    {
+      "id": "bloom",
+      "group": "Experimental",
+      "label": "Bloom",
+      "help": "A glow around lamps, fire and sparkles.",
+      "choices": [
+        { "label": "Off", "set": { "video/bloom": "0" } },
+        { "label": "Low", "set": { "video/bloom": "40" } },
+        { "label": "Medium", "set": { "video/bloom": "70" } },
+        { "label": "High", "set": { "video/bloom": "100" } }
+      ],
+      "defaults": { "video/bloom": "0" }
+    },
+    {
+      "id": "layout",
+      "group": "Controls",
+      "label": "Layout",
+      "help": "Original Xbox uses the buttons of the game's Xbox version. Remap buttons in F10 > Controls.",
+      "choices": [
+        { "label": "GameCube", "set": { "controller/layout": "\"gamecube\"" } },
+        { "label": "Original Xbox", "set": { "controller/layout": "\"xbox_original\"" } }
+      ],
+      "defaults": { "controller/layout": "\"gamecube\"" }
+    },
+    {
+      "id": "rumble",
+      "group": "Controls",
+      "label": "Rumble",
+      "choices": [
+        { "label": "On", "set": { "controller/rumble": "true" } },
+        { "label": "Off", "set": { "controller/rumble": "false" } }
+      ],
+      "defaults": { "controller/rumble": "true" }
+    },
+    {
+      "id": "volume",
+      "group": "Sound",
+      "label": "Volume",
+      "slider": { "key": "audio/volume", "min": 0, "max": 1, "step": 0.05, "format": "%.2f" },
+      "defaults": { "audio/volume": "1.0" }
+    },
+    {
+      "id": "music_volume",
+      "group": "Sound",
+      "label": "Music",
+      "slider": { "key": "audio/music_volume", "min": 0, "max": 1, "step": 0.05, "format": "%.2f" },
+      "defaults": { "audio/music_volume": "1.0" }
+    },
+    {
+      "id": "sound_effects_volume",
+      "group": "Sound",
+      "label": "Sound effects",
+      "slider": { "key": "audio/sound_effects_volume", "min": 0, "max": 1, "step": 0.05, "format": "%.2f" },
+      "defaults": { "audio/sound_effects_volume": "1.0" }
+    },
+    {
+      "id": "voices_volume",
+      "group": "Sound",
+      "label": "Voices",
+      "slider": { "key": "audio/voices_volume", "min": 0, "max": 1, "step": 0.05, "format": "%.2f" },
+      "defaults": { "audio/voices_volume": "1.0" }
+    },
+    {
+      "id": "ui_volume",
+      "group": "Sound",
+      "label": "Menu sounds",
+      "slider": { "key": "audio/ui_volume", "min": 0, "max": 1, "step": 0.05, "format": "%.2f" },
+      "defaults": { "audio/ui_volume": "1.0" }
+    },
+    {
+      "id": "muted",
+      "group": "Sound",
+      "label": "Sound",
+      "choices": [
+        { "label": "On", "set": { "audio/muted": "false" } },
+        { "label": "Muted", "set": { "audio/muted": "true" } }
+      ],
+      "defaults": { "audio/muted": "false" }
+    },
+    {
+      "id": "holiday",
+      "group": "Game",
+      "label": "Holiday events",
+      "help": "Fireworks, bats and more in the hubs on holidays.",
+      "choices": [
+        { "label": "By today's date", "set": { "game/holiday": "\"auto\"" } },
+        { "label": "Off", "set": { "game/holiday": "\"off\"" } },
+        { "label": "New Year's Day", "set": { "game/holiday": "\"01-01\"" } },
+        { "label": "St. Patrick's Day", "set": { "game/holiday": "\"03-17\"" } },
+        { "label": "Fourth of July", "set": { "game/holiday": "\"07-04\"" } },
+        { "label": "Halloween", "set": { "game/holiday": "\"10-31\"" } },
+        { "label": "Christmas", "set": { "game/holiday": "\"12-25\"" } },
+        { "label": "Confetti fireworks", "set": { "game/holiday": "\"confetti\"" } }
+      ],
+      "defaults": { "game/holiday": "\"auto\"" }
+    },
+    {
+      "id": "show_fps",
+      "group": "Developer",
+      "label": "Show FPS",
+      "choices": [
+        { "label": "Off", "set": { "video/show_fps": "false" } },
+        { "label": "On", "set": { "video/show_fps": "true" } }
+      ],
+      "defaults": { "video/show_fps": "false" }
+    },
+    {
+      "id": "dev_tools",
+      "group": "Developer",
+      "label": "Developer tools",
+      "help": "F8 dev menu (travel, free camera, texture finder) and F3 video recording.",
+      "choices": [
+        { "label": "Off", "set": { "game/dev_tools": "false" } },
+        { "label": "On", "set": { "game/dev_tools": "true" } }
+      ],
+      "defaults": { "game/dev_tools": "false" }
+    }
+  ],
+  "saves": ["{install}/data/UserData/Saves"],
+  "folders": {
+    "saves": [{ "path": "{install}/data/UserData/Saves" }],
+    "logs": [{ "path": "{install}/data/UserData/Logs" }],
+    "settings": [{ "path": "{install}/data/UserData" }],
+    "screenshots": [{ "path": "{install}/Screenshots" }],
+    "mods": [{ "path": "{install}/data/UserData/mods" }],
+    "texture_packs": [{ "path": "{install}/data/UserData/texture_packs" }],
+    "cache": [{ "path": "{install}/data/UserData/Cache" }]
+  },
+  "actions": [
+    { "id": "open_saves", "label": "Open the saves folder", "help": "The memory card the game saves to.", "open": "saves" },
+    { "id": "open_screenshots", "label": "Open screenshots", "help": "F2 in the game takes one.", "open": "screenshots" },
+    { "id": "open_mods", "label": "Open the mods folder", "help": "Each mod is a folder; a file named disabled in it turns it off.", "open": "mods" },
+    { "id": "open_texture_packs", "label": "Open the texture packs folder", "open": "texture_packs" },
+    { "id": "open_logs", "label": "Open the logs", "help": "latest.log is the last run; each run also has its own folder.", "open": "logs" }
+  ],
+  "exit_codes": { "0": "ok" },
+  "looks": { "graphics_key": "video/graphics_api" },
+  "system": {
+    "windows": { "version": "10" },
+    "linux": { "glibc": "2.34" }
+  }
+}

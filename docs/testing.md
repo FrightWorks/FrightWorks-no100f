@@ -450,6 +450,19 @@ A difference names the retrace; `--dump <retrace>[,...]` writes both runs' memor
 Diff before trusting "different": when a function goes from native back to translated code, stale stack bytes can end up in structure padding and differ for good while everything else matches. A control that breaks the change on purpose shows whether the run reaches the changed code at all.
 Measured on one PC (2026-11-18): `i004` with two A presses, same build twice, identical at 60 and 30 fps; a control with one extra press differed from the first hash after it.
 
+## 4e. RecompLauncher
+
+`recomplauncher.json` at the repo root tells [RecompLauncher](https://recomplauncher.com) how to set up, configure and start the game; the packaging copies it to the top of the zip and the Linux tarball (`.agents/REPO.md`, "RecompLauncher").
+After changing it:
+1. Check it against the schema, with any JSON Schema (draft 7) validator: https://recomplauncher.com/schema/recomplauncher.json.
+2. Try the setup step without RecompLauncher, from a packaged folder (`dist\FrightWorks`, or an unzipped release with the new `FrightWorks.exe` copied in), never from `Play\`, which it refuses:
+   ```powershell
+   .\FrightWorks.exe --prepare "--game=<your .iso>" | Out-String   # progress lines, then "progress 1 Ready to play"; $LASTEXITCODE 0
+   ```
+   It extracts the disc into `data\Disc\DATA` (disc data: keep the folder local), sets `dvd_root`, and with `--texture-pack=40-menu` or `--texture-pack=50-scoobyhd` downloads a pack.
+   On a PC with the installed game, a fresh folder also gets its saves and settings (`data\UserData\imported.txt` says from where).
+3. In RecompLauncher: Settings > Developers > Developer tools, then "Add a build" on that folder. Its Developer tab checks the file and shows each setting's current choice; set up with your disc, change a setting and check that only those keys changed in `data\UserData\Config.toml`, then Play (the game starts without the FrightWorks launcher).
+
 ## 5. Dev menu (F8)
 
 The dev menu is part of the game, off unless **Extras > Game > Developer tools** is on in the launcher (`[game] dev_tools =

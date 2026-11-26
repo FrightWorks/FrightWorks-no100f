@@ -117,7 +117,7 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 - Implementation notes go in code comments and PR bodies.
 - Build tips go in `docs/testing.md` (keep it in step when tools change).
 - Player-visible fixes go in release notes.
-- A new F10 video setting with a lasting effect belongs in the launcher too.
+- A new F10 video setting with a lasting effect belongs in the launcher too, and in `recomplauncher.json`.
 
 **No bypassing security warnings:** do not bypass antivirus or OS warnings, add exclusions or restore quarantined files.
 
@@ -361,7 +361,7 @@ To build old source there, set only the paths that differ with `git restore --so
   Other platforms (Windows ARM64, macOS) use the stock package and play 2x and 8x as 4x on Vulkan, with a log line.
   A new Dawn version quietly goes back to stock (2x and 8x then play as 4x on Vulkan) until the pins are updated (`docs/testing.md`).
   Pipelines cached for another MSAA setting are skipped, not failed.
-- A launcher Display setting mirrors F10 Video (#91): a new F10 video setting with a lasting effect belongs in both.
+- A launcher Display setting mirrors F10 Video (#91): a new F10 video setting with a lasting effect belongs in both, and in `recomplauncher.json` (RecompLauncher's settings).
 - HDR output (`[video] hdr`, `hdr_paper_white_nits`, `hdr_peak_nits`) is chosen once at startup: a float16 scRGB swapchain that only the final copy writes.
   Only Windows with Direct3D has been checked; Vulkan and Metal have no colour-space chain yet.
   The game stays SDR when `window::hdr_display_state()` says Windows HDR is off for its display (the F10 hint says so); an unknown state changes nothing.
@@ -407,6 +407,17 @@ To build old source there, set only the paths that differ with `git restore --so
 - Display mirrors F10 Video: the same 12 `resolution_multiplier` values (compared as numbers), and 120/180 fps caps resolution at 4x.
   Missing keys fall back as the game does: resolution 2.25, aspect Fill unless `widescreen=false` or `force_16_9`.
 
+**RecompLauncher** (https://recomplauncher.com; its developer docs are in the launcher and the site's developer hub)
+- RecompLauncher installs and updates the release zip (and the Linux `.tar.gz`) from GitHub, so a RecompLauncher install is a portable copy.
+  It reads `recomplauncher.json` at the top of the zip, which `package-scooby.ps1` copies there from the repo root; the Linux tarball gets it from `package-linux.sh`.
+  Check it against https://recomplauncher.com/schema/recomplauncher.json after changing it (the docs show fields the schema refuses, such as `prepare.timeout`).
+- Its setup step runs `FrightWorks.exe --prepare --game=<image> [--texture-pack=<folder>]...` with no window (`launcher/Prepare.cs`): it extracts the disc into `data/Disc/DATA` and sets `dvd_root`, copies an installed game's saves and settings into a fresh copy, fills the HDR keys, and downloads the texture packs the player ticked (off by default, like Extras > Textures).
+  It prints `progress <0..1> <text>` lines; exit 0 done, 1 error, 2 incomplete image, 3 wrong disc.
+- Play starts `data/FrightWorks Game` directly, not this launcher, so anything the launcher does before Play (patch mods are built when added, not only before Play) must also work without it.
+- The game reads `RECOMPLAUNCHER=1` and `RECOMPLAUNCHER_MODE` (`runtime_config.h`): under RecompLauncher it doesn't read pads in the background (its overlay uses them), and from its Big Picture mode a saved window opens borderless for that run only.
+- Its crash report takes the newest `.log` in `UserData/Logs`: the game mirrors the run's `console.log` to `Logs/latest.log`.
+- The settings it shows are listed in `recomplauncher.json` with the values F10 writes: a new or renamed setting changes it too.
+
 **Patch mods** (format and error handling: `docs/mod-patches.md`)
 - A mod's `patch.json` adds models and objects to a level with no game data in the mod: the launcher (`launcher/ModPatches/`) builds the level from the player's own disc into `UserData/mods/!patched`, and the game reads that like any other mod.
 - The game has no code for this, and the build runs on players' PCs, so it's C#, not Python.
@@ -431,8 +442,8 @@ A maintainer runs releases:
 
 1. Version PR: `<Version>` in `launcher/FrightWorks.Launcher.csproj` and the version line in `tools/package-README.txt`.
 2. After the merge, on a clean `main`: local tag `v<ver>` (the build ID is then just `<ver>`), then `tools/package-scooby.ps1 -Build`, then `-Zip` as a second call (`-Build` resets PATH), then `-Installer`.
-3. Smoke test: the zip has no game data, saves or settings; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
-4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `FrightWorks-<ver>.zip`, every `dist\installer\*` file and the notes.
+3. Smoke test: the zip has no game data, saves or settings, and has `recomplauncher.json` beside `FrightWorks.exe`; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
+4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `FrightWorks-<ver>.zip`, every `dist\installer\*` and `dist\installer-linux\*` file (the Linux `.tar.gz` is RecompLauncher's) and the notes.
    A maintainer publishes.
 
 Installed launchers only find updates in published releases carrying `releases.win.json`.

@@ -124,7 +124,7 @@ int g_frameInterpolationMode = [] {
     }
 }();
 int g_displayMode = [] {
-    const std::string mode = RuntimeConfigFile::DisplayMode("borderless");
+    const std::string mode = RuntimeConfigFile::StartDisplayMode();
     if (mode == "borderless") {
         return static_cast<int>(AURORA_DISPLAY_MODE_BORDERLESS);
     }

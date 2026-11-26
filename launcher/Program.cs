@@ -12,6 +12,9 @@ static class Program
         // an uninstall leaves them (DataPaths). In the zip and the dev tree this does nothing.
         Velopack.VelopackApp.Build().Run();
 
+        // Headless: RecompLauncher's setup step (Prepare.cs).
+        if (args.Length > 0 && args[0] == Prepare.Flag) return Prepare.Run(args);
+
         // Headless: "--extract <image> <outdir>" writes <outdir>/extract.log; exit 0 ok, 2 holes, 3 wrong disc, 1 error.
         if (args.Length == 3 && args[0] == "--extract")
         {
