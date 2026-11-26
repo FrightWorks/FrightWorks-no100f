@@ -4,6 +4,7 @@
 #include <cstdlib>
 extern "C" uint8_t* aurora_load_png_rgba(const char* path, uint32_t* width, uint32_t* height);
 #include "netplay_lobby.h"
+#include "netplay_session.h"
 #include "netplay_ui.h"
 #include "settings_overlay.h"
 #include "overlay_theme.h"
@@ -303,6 +304,53 @@ void SetTopBarVisible(bool visible) {
     }
 }
 
+// F10 pauses the game with the game's own pause: Start, pressed for it (PressedButtons, ORed into pad 1 after the input
+// block), opens the pause menu (mode 7) and stops the world. Only in play with the player in control, so a cutscene or
+// camera pan plays to its end first and the game pauses as soon as control comes back. Closing F10 presses Start again
+// to resume, but only if F10 made the pause: a pause menu the player opened stays open. Not in LAN play, where the
+// other players' game would stop too.
+int g_pausePressReads = 0;          // PADReads that still see Start held
+Clock::time_point g_pauseLastPress{};
+bool g_pauseAttempted = false;      // Start pressed for this F10 opening
+bool g_pausedByF10 = false;         // ... and the game took it
+
+void PressStartForPause() {
+    g_pausePressReads = 3;  // a few reads, so the game sees one clean press and release
+    g_pauseLastPress = Clock::now();
+}
+
+void UpdateF10Pause() {
+    namespace gs = no100f_game_state;
+    uint32_t mode = 0, control = 0, movie = 0;
+    const bool read = Memory::TryRead32(gs::kModeAddress, mode) && Memory::TryRead32(gs::kPlayerControlAddress, control) &&
+                      Memory::TryRead32(gs::kMovieAddress, movie);
+    if (g_pauseAttempted && !g_pausedByF10 && read && mode == gs::kModePause) {
+        g_pausedByF10 = true;
+        RT_LOGF(RT_TAG_RUNTIME, "[f10] game paused\n");
+    }
+    if (g_pausePressReads > 0) return;
+    using std::chrono::milliseconds;
+    const auto sinceLastPress = Clock::now() - g_pauseLastPress;
+    if (g_topBarVisible && !NetplaySession::Active()) {
+        // Retried slowly while the game doesn't take it.
+        if (!g_pausedByF10 && sinceLastPress >= milliseconds(1500) && read && mode == gs::kModeInPlay && control == 1 &&
+            movie == 0) {
+            PressStartForPause();
+            g_pauseAttempted = true;
+            RT_LOGF(RT_TAG_RUNTIME, "[f10] pressing Start to pause\n");
+        }
+        return;
+    }
+    // Closed: the game may still be taking the pause press, and the resume press needs a release before it.
+    if (g_pauseAttempted && sinceLastPress < milliseconds(g_pausedByF10 ? 200 : 500)) return;
+    if (g_pausedByF10 && read && mode == gs::kModePause) {
+        PressStartForPause();
+        RT_LOGF(RT_TAG_RUNTIME, "[f10] resuming the game\n");
+    }
+    g_pausedByF10 = false;
+    g_pauseAttempted = false;
+}
+
 // The buttons only (a resting finger on a trigger or a drifting stick doesn't count).
 bool PadButtonDown() {
     if ((ImGui::GetIO().BackendFlags & ImGuiBackendFlags_HasGamepad) == 0) return false;
@@ -406,7 +454,14 @@ void DrawWiiRemoteAccelerometer(uint32_t port) {
 
 // Wii Remotes (Bluetooth) menu: driver switch, pairing help, continuous scanning and the port's controller kind.
 void DrawWiiRemoteSettings(uint32_t selectedGamePort) {
-    if (!ImGui::CollapsingHeader("Wii Remotes (Bluetooth)")) {
+    // ImGui widens a framed header by half the window's side padding, and a page centred in a wide F10 panel has wide
+    // padding (DrawTopBar): for the header, the usual padding.
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const float padding = window->WindowPadding.x;
+    window->WindowPadding.x = std::min(padding, OverlayTheme::Px(18));
+    const bool open = ImGui::CollapsingHeader("Wii Remotes (Bluetooth)");
+    window->WindowPadding.x = padding;
+    if (!open) {
         return;
     }
     if (OverlayTheme::Toggle("Use Wii Remotes / Wii U Pro Controllers", &g_wiiRemotesEnabled)) {
@@ -1877,9 +1932,9 @@ struct PageItem {
     Page page;
     const char* label;
 };
-constexpr std::array<PageItem, 5> kPages = {{
-    {Page::Video, "Video"}, {Page::Audio, "Audio"}, {Page::Controls, "Controls"}, {Page::LanPlay, "LAN Play"},
-    {Page::About, "About"},
+// LAN Play ({Page::LanPlay, "LAN Play"}) is hidden until network play is worked on; its page code stays.
+constexpr std::array<PageItem, 4> kPages = {{
+    {Page::Video, "Video"}, {Page::Audio, "Audio"}, {Page::Controls, "Controls"}, {Page::About, "About"},
 }};
 Page g_page = Page::Video;
 
@@ -1953,6 +2008,12 @@ void DrawPage(Page page) {
     }
 }
 
+// The F10 board fills the window: its body at this opacity over the dimming below, so the paused game stays in view.
+constexpr float kFullWindowBoardAlpha = 0.55f;
+// The widest a page's rows get (before the UI scale); on a wider window the page's content is centred in its panel, so
+// a row's label and control stay together instead of a screen apart.
+constexpr float kPageContentMaxWidth = 860.0f;
+
 void DrawTopBar() {
     using namespace OverlayTheme;
     if (!g_topBarVisible) {
@@ -1978,12 +2039,10 @@ void DrawTopBar() {
     background->AddRectFilledMultiColor(ImVec2(v0.x, v1.y - band), v1, Col(Colour::Ink, 0.0f), Col(Colour::Ink, 0.0f),
                                         Col(Colour::Ink, 0.45f * fade), Col(Colour::Ink, 0.45f * fade));
 
-    const float margin = Px(20);
-    const ImVec2 size(std::min(viewport->Size.x - margin * 2, std::clamp(viewport->Size.x * 0.74f, Px(760), Px(1120))),
-                      std::min(viewport->Size.y - margin * 2, std::clamp(viewport->Size.y * 0.82f, Px(520), Px(860))));
-    const ImVec2 center(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
-    ImGui::SetNextWindowPos(ImVec2(center.x, center.y + (1.0f - fade) * Px(16)), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+    // The board fills the window (maintainer, 2026-11-25), see-through enough that the dimmed game shows behind it. It
+    // fades in without sliding: a slide would uncover a strip of the window's edge.
+    ImGui::SetNextWindowPos(viewport->Pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(viewport->Size, ImGuiCond_Always);
     if (g_panelFocusPending) {
         ImGui::SetNextWindowFocus();
         ImGui::SetNavCursorVisible(g_panelOpenedByPad);
@@ -2019,7 +2078,7 @@ void DrawTopBar() {
         ImDrawList* list = ImGui::GetWindowDrawList();
         const ImVec2 p0 = ImGui::GetWindowPos();
         const ImVec2 p1(p0.x + ImGui::GetWindowWidth(), p0.y + ImGui::GetWindowHeight());
-        Board(list, p0, p1, Px(16));
+        Board(list, p0, p1, 0.0f, kFullWindowBoardAlpha);
 
         // Header: the title sign.
         const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -2034,14 +2093,20 @@ void DrawTopBar() {
         ImGui::SetCursorScreenPos(ImVec2(origin.x, std::max(origin.y + title->FontSize, ImGui::GetCursorScreenPos().y) + Px(14)));
 
         // Pages + content.
-        const float footer = ImGui::GetFontSize() + Px(18);
+        // With Developer tools on, the DEV mark (DrawDevMark) takes the window's bottom-left corner: the footer keys
+        // stay above it.
+        const float devMark = no100f_devmenu::Enabled() ? Heading()->FontSize + Px(14) : 0.0f;
+        const float footer = ImGui::GetFontSize() + Px(18) + devMark;
         const float bodyHeight = ImGui::GetContentRegionAvail().y - footer;
         const float tabsWidth = Px(176);
         // Not while editing a slider: there they are ImGui's slow / fast.
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) &&
             !ImGui::IsAnyItemActive()) {
             const int count = static_cast<int>(kPages.size());
-            int index = static_cast<int>(g_page);
+            // The page's place in the list (not its enum value: a hidden page leaves a gap).
+            int index = 0;
+            while (index < count && kPages[index].page != g_page) ++index;
+            if (index == count) index = 0;
             const bool previous = ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false);
             const bool next = ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false);
             if (previous) g_page = kPages[(index + count - 1) % count].page;
@@ -2088,9 +2153,11 @@ void DrawTopBar() {
         ImGui::EndGroup();
         ImGui::PopStyleVar();
         ImGui::SameLine(0.0f, Px(18));
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, Vec(Colour::Field, 0.72f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Vec(Colour::Field, 0.55f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, Px(12));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Px(18), Px(14)));
+        // Side padding centres the content in a wide panel (the scrollbar stays at the panel's edge).
+        const float pagePadding = std::max(Px(18), (ImGui::GetContentRegionAvail().x - Px(kPageContentMaxWidth)) * 0.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pagePadding, Px(14)));
         if (ImGui::BeginChild("##page", ImVec2(0.0f, bodyHeight), ImGuiChildFlags_AlwaysUseWindowPadding)) {
             static Page drawnPage = g_page;
             if (drawnPage != g_page) {
@@ -2804,6 +2871,12 @@ void DrawCreditsPill() {
 
 } // namespace
 
+uint16_t PressedButtons() noexcept {
+    if (g_pausePressReads <= 0) return 0;
+    --g_pausePressReads;
+    return PAD_BUTTON_START;
+}
+
 void Draw() noexcept {
     // Wait for the frame worker's DONE phase: it has replayed the previous frame's ImGui draw lists
     // and started the next ImGui frame, so all overlay callers can now safely issue ImGui commands.
@@ -2833,6 +2906,7 @@ void Draw() noexcept {
     DrawExitPrompt();
     controller_mapping_wizard::Draw();
     ApplyInputBlockState();
+    UpdateF10Pause();
     aurora_set_hdr_calibration(&g_hdrCalibrationFrame);
 }
 } // namespace settings_overlay
