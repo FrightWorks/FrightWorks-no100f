@@ -716,8 +716,8 @@ std::string FormatHostStackTrace(unsigned framesToSkip) {
     return out.str();
 #elif defined(RECOMP_HAS_POSIX_BACKTRACE)
     // Release builds export few symbols, so most frames name only their module: "module+0x..." is the offset to look
-    // up in that same build (llvm-symbolizer --obj=<FrightWorks Game> 0x...). Module file names only, no folders
-    // (those hold the player's user name).
+    // up in that same build, which keeps its symbol table (llvm-symbolizer --obj=<FrightWorks Game> 0x...). Module
+    // file names only, no folders (those hold the player's user name).
     void* frames[64]{};
     const int captured = ::backtrace(frames, static_cast<int>(std::size(frames)));
     std::ostringstream out;
@@ -748,9 +748,11 @@ std::string FormatHostStackTrace(unsigned framesToSkip) {
             }
         }
         if (symbolName == "?") {
+            // The registry gives the nearest translated function below the address: right for translated code, only a
+            // hint for the runtime's own (that is what "near" says). The module offset is the exact reference.
             if (auto translated = TranslatedFunctionRegistry::FindByHostAddress(addr)) {
                 if (translated->name != nullptr && *translated->name != '\0') {
-                    symbolName = translated->name;
+                    symbolName = std::string("near ") + translated->name;
                     symbolDisp = addr - reinterpret_cast<uintptr_t>(translated->entryPoint);
                 }
                 ppcAddress = translated->address;

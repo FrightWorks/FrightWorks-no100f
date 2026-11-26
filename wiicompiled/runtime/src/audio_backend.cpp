@@ -56,8 +56,7 @@ bool AudioBackend::EnsureInitializedLocked(uint32_t sampleRate, uint32_t channel
     }
     const auto failed = [this, now](const char* what) {
         if (m_failedInits++ == 0) {
-            RT_LOG(RT_TAG_AUDIO) << what << " failed: " << SDL_GetError() << " (no sound; trying again every 5 s)"
-                                 << std::endl;
+            RT_LOGF(RT_TAG_AUDIO, "%s failed: %s (no sound; trying again every 5 s)\n", what, SDL_GetError());
         }
         m_lastFailedInit = now;
         return false;
@@ -93,15 +92,14 @@ bool AudioBackend::EnsureInitializedLocked(uint32_t sampleRate, uint32_t channel
     // No device name: those can be personal ("<name>'s headphones").
     SDL_AudioSpec deviceSpec{};
     int deviceFrames = 0;
+    // One fprintf per line: other threads log at the same time, and a C++ stream writes each << separately.
     const char* driver = SDL_GetCurrentAudioDriver();
     if (SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(stream), &deviceSpec, &deviceFrames)) {
-        RT_LOG(RT_TAG_AUDIO) << "output: SDL driver " << (driver ? driver : "?") << ", device " << deviceSpec.freq
-                             << " Hz, " << deviceSpec.channels << " channel(s), " << deviceFrames
-                             << " frames per buffer; game stream " << sampleRate << " Hz"
-                             << (m_failedInits ? " (after " + std::to_string(m_failedInits) + " failed tries)" : "")
-                             << std::endl;
+        RT_LOGF(RT_TAG_AUDIO, "output: SDL driver %s, device %d Hz, %d channel(s), %d frames per buffer; game stream %u Hz%s\n",
+                driver ? driver : "?", deviceSpec.freq, deviceSpec.channels, deviceFrames, sampleRate,
+                m_failedInits ? (" (after " + std::to_string(m_failedInits) + " failed tries)").c_str() : "");
     } else {
-        RT_LOG(RT_TAG_AUDIO) << "output: SDL driver " << (driver ? driver : "?") << std::endl;
+        RT_LOGF(RT_TAG_AUDIO, "output: SDL driver %s\n", driver ? driver : "?");
     }
     m_failedInits = 0;
 

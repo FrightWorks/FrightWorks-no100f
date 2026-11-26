@@ -125,15 +125,15 @@ void LogHostSystem() {
     AddEnvWord(launch, "RECOMPLAUNCHER_MODE");
     AddEnvWord(launch, "RECOMPLAUNCHER_VERSION");
 
-    RT_LOG(RT_TAG_SYSTEM) << "os: " << os.str() << std::endl;
+    // One fprintf per line: other threads log at the same time, and a C++ stream writes each << separately.
     const std::string launchText = launch.str();
-    RT_LOG(RT_TAG_SYSTEM) << "launch:" << (launchText.empty() ? " plain (no launcher variables set)" : launchText)
-                          << std::endl;
+    RT_LOGF(RT_TAG_SYSTEM, "os: %s\n", os.str().c_str());
+    RT_LOGF(RT_TAG_SYSTEM, "launch:%s\n", launchText.empty() ? " plain (no launcher variables set)" : launchText.c_str());
 }
 
 void LogVideoDriver() {
     const char* driver = SDL_GetCurrentVideoDriver();
-    RT_LOG(RT_TAG_SYSTEM) << "SDL video driver: " << (driver ? driver : "none") << std::endl;
+    RT_LOGF(RT_TAG_SYSTEM, "SDL video driver: %s\n", driver ? driver : "none");
 }
 
 }  // namespace SystemReport
