@@ -868,7 +868,7 @@ void prepare_ao_targets(uint32_t width, uint32_t height) {
 // One full-screen triangle with `kind`'s pipeline into `target` (`size`). Only the bindings the pass reads are bound
 // (the pipelines' layouts are derived from what each entry point uses).
 void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureView& target, wgpu::Extent3D size,
-          const wgpu::TextureView* depth, const wgpu::TextureView* ao) {
+          const wgpu::TextureView* depth, const wgpu::TextureView* ao, const wgpu::TextureView* resolve = nullptr) {
   const auto& pipeline = g_pipelines.pipelines[static_cast<size_t>(kind)];
   std::vector<wgpu::BindGroupEntry> entries{
       wgpu::BindGroupEntry{.binding = 0, .buffer = g_params, .size = sizeof(Params)},
@@ -891,6 +891,7 @@ void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureVie
   const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
   const wgpu::RenderPassColorAttachment attachment{
       .view = target,
+      .resolveTarget = resolve != nullptr ? *resolve : wgpu::TextureView{},
       .loadOp = wgpu::LoadOp::Load,
       .storeOp = wgpu::StoreOp::Store,
   };
@@ -1074,7 +1075,7 @@ fn fs_sky(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let gully = noise2(vec2f(az * 90.0, el * 14.0)) * 0.6 + noise2(vec2f(az * 210.0, el * 30.0)) * 0.4;
         // The far range: shaded faces, gullies, snow above a jagged snowline, hazier toward its foot.
         var far_col = sky.mountain_color.rgb * mix(0.72, 1.2, far_lit) * (0.86 + 0.14 * gully);
-        let snowline = lo + 0.66 * (hi - lo) + (noise2(vec2f(az * 30.0, 1.3)) - 0.5) * 0.25 * (hi - lo)
+        let snowline = lo + 0.8 * (hi - lo) + (noise2(vec2f(az * 30.0, 1.3)) - 0.5) * 0.25 * (hi - lo)
                      - (gully - 0.5) * 0.12 * (hi - lo);
         let snow = smoothstep(snowline - 0.0015, snowline + 0.0015, el);
         let snow_col = mix(sky.mountain_color.rgb, vec3f(0.44, 0.52, 0.6), 0.7) * mix(0.68, 1.1, far_lit);
@@ -1188,6 +1189,8 @@ void write_shadow_uniforms(uint8_t* uniforms) noexcept {
 }
 
 void drop_shadow_uniforms() noexcept { g_shadowOffsets.clear(); }
+
+bool g_fireReady = false;
 
 // ---- Reimagined campfire props: logs in a teepee and a ring of rocks round the light file's fire, real geometry drawn
 // into the scene's pass after the sky (depth written, so the game's draws hide them and the stage lights them).
@@ -1336,21 +1339,21 @@ std::vector<PropVertex> campfire_mesh(const RelightScene& scene) {
   for (int i = 0; i < kLogs; ++i) {
     const float ang = 6.2831853f * i / kLogs + 0.3f;
     const V3 dir{std::cos(ang), 0.f, std::sin(ang)};
-    const V3 foot = v_add(base, v_add(v_mul(dir, 0.62f * s), V3{0.f, 0.02f * s, 0.f}));
-    const V3 top = v_add(base, v_add(v_mul(dir, -0.14f * s), V3{0.f, 1.0f * s, 0.f}));
-    push_log(out, foot, top, 0.085f * s, static_cast<float>(i) + 1.f);
+    const V3 foot = v_add(base, v_add(v_mul(dir, 0.68f * s), V3{0.f, 0.05f * s, 0.f}));
+    const V3 top = v_add(base, v_add(v_mul(dir, -0.16f * s), V3{0.f, 1.05f * s, 0.f}));
+    push_log(out, foot, top, 0.15f * s, static_cast<float>(i) + 1.f);
   }
   // Two short logs lying at the foot.
-  push_log(out, v_add(base, V3{-0.75f * s, 0.07f * s, 0.35f * s}), v_add(base, V3{-0.05f * s, 0.07f * s, 0.78f * s}),
-           0.08f * s, 9.f);
-  push_log(out, v_add(base, V3{0.55f * s, 0.07f * s, -0.62f * s}), v_add(base, V3{0.82f * s, 0.07f * s, 0.15f * s}),
-           0.075f * s, 13.f);
+  push_log(out, v_add(base, V3{-0.85f * s, 0.12f * s, 0.4f * s}), v_add(base, V3{-0.05f * s, 0.12f * s, 0.9f * s}),
+           0.13f * s, 9.f);
+  push_log(out, v_add(base, V3{0.62f * s, 0.12f * s, -0.72f * s}), v_add(base, V3{0.95f * s, 0.12f * s, 0.18f * s}),
+           0.125f * s, 13.f);
   // A ring of rocks.
   constexpr int kRocks = 11;
   for (int i = 0; i < kRocks; ++i) {
     const float ang = 6.2831853f * i / kRocks + 0.15f * prop_hash(i * 2.3f);
-    const float size = (0.17f + 0.08f * prop_hash(i * 4.1f)) * s;
-    const float ring = 1.08f * s + 0.05f * s * prop_hash(i * 6.7f);
+    const float size = (0.27f + 0.1f * prop_hash(i * 4.1f)) * s;
+    const float ring = 1.3f * s + 0.06f * s * prop_hash(i * 6.7f);
     push_rock(out, v_add(base, V3{std::cos(ang) * ring, size * 0.25f, std::sin(ang) * ring}), size,
               static_cast<float>(i) * 1.37f + 0.5f);
   }
@@ -1446,6 +1449,13 @@ void encode_props(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgp
   pass.Draw(g_props.vertexCount);
 }
 
+
+void encode_fire(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, const wgpu::TextureView& resolve,
+                 const wgpu::TextureView& depth, wgpu::Extent3D size) {
+  if (!g_fireReady || !color || !depth) return;
+  g_fireReady = false;
+  draw(encoder, Kind::Fire, color, size, &depth, nullptr, resolve ? &resolve : nullptr);
+}
 
 bool sky_wanted(const Camera& camera) noexcept {
   return relighting() && (relight_scene().hasSky || relight_scene().hasFire) && camera.hasView;
@@ -1749,7 +1759,7 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       return;
     }
     draw(encoder, Kind::Relight, color, size, &depth, nullptr);
-    if (scene.hasFire) draw(encoder, Kind::Fire, color, size, &depth, nullptr);
+    g_fireReady = scene.hasFire;  // drawn by encode_fire once the scene pass's translucent draws are in
   }
   if (mode == 1) {
     draw(encoder, Kind::Tint, color, size, nullptr, nullptr);

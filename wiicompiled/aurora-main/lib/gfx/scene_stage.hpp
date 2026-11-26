@@ -104,6 +104,9 @@ const ShadowTargets& shadow_targets(uint32_t samples, bool motion);
 // (right after its clear, before the game draws anything), from the stage camera; the game's draws cover it.
 // `motion`: the pass has the motion targets (left alone).
 bool sky_wanted(const Camera& camera) noexcept;
+// The campfire's flame, after the scene pass (so the game's translucent draws, such as footprints, are under it).
+void encode_fire(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, const wgpu::TextureView& resolve,
+                 const wgpu::TextureView& depth, wgpu::Extent3D size);
 void encode_sky(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size, uint32_t samples,
                 bool motion);
 
