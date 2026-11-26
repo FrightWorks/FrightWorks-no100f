@@ -72,6 +72,8 @@ Camera g_camera;
 //   unlit KEY                    (a texture drawn as the game draws it: the sky band, painted backdrops)
 //   hide KEY                     (a texture not drawn at all: the game's painted shadow decals)
 //   opaque KEY                   (a texture drawn solid, never blended: trees the game fades near the camera)
+//   spin KEY                     (models with this texture turned about their own up axis by an angle from where they
+//                                 stand: pickups the game spins in step start at different angles)
 //   deblue S                     (0..1: how much blue the original textures lose under the new light)
 //   fire X Y Z [SIZE [INTENSITY]] (a campfire on the ground there: flickering light, flame, embers, logs; SIZE = the
 //                                 scorched patch's radius, default 0.6)
@@ -113,6 +115,7 @@ struct RelightScene {
   std::unordered_set<std::string> unlit;
   std::unordered_set<std::string> hidden;
   std::unordered_set<std::string> opaque;
+  std::unordered_set<std::string> spin;
   bool hasSky = false;
   float skyZenith[3] = {0.02f, 0.035f, 0.07f};
   float skyHorizon[3] = {0.08f, 0.2f, 0.19f};
@@ -155,7 +158,9 @@ RelightScene load_relight_scene() {
         s.moonTexture = key;
         continue;
       }
-      if (w == "opaque" && std::sscanf(line, "%15s %127s", word, key) == 2) {
+      if (w == "spin" && std::sscanf(line, "%15s %127s", word, key) == 2) {
+        s.spin.emplace(key);
+      } else if (w == "opaque" && std::sscanf(line, "%15s %127s", word, key) == 2) {
         s.opaque.emplace(key);
         continue;
       }
@@ -1232,6 +1237,30 @@ bool is_hidden_texture(const std::string& key) noexcept {
 
 uint8_t relight_deblue() noexcept {
   return static_cast<uint8_t>(std::lround(relight_scene().deblue * 255.f));
+}
+
+bool is_spin_texture(const std::string& key) noexcept {
+  const auto& spin = relight_scene().spin;
+  return !key.empty() && spin.contains(key);
+}
+
+float spin_angle(const float viewPos[3]) noexcept {
+  // The world matrix most drawn with so far this frame (the static world comes before the pickups), else the camera's.
+  const MatrixVote* best = nullptr;
+  for (size_t i = 0; i < g_voteCount; ++i)
+    if (best == nullptr || g_votes[i].n > best->n) best = &g_votes[i];
+  const float* v = best != nullptr ? best->m.data() : (g_camera.hasView ? g_camera.view.data() : nullptr);
+  if (v == nullptr) return 0.f;
+  // world = R^T (view - T), rows of R at 0, 4, 8; T at 3, 7, 11. Only x and z: pickups bob up and down.
+  const float d[3] = {viewPos[0] - v[3], viewPos[1] - v[7], viewPos[2] - v[11]};
+  const float wx = v[0] * d[0] + v[4] * d[1] + v[8] * d[2];
+  const float wz = v[2] * d[0] + v[6] * d[1] + v[10] * d[2];
+  uint32_t h = static_cast<uint32_t>(std::lround(wx * 20.f)) * 0x9E3779B1u ^
+               static_cast<uint32_t>(std::lround(wz * 20.f)) * 0x85EBCA77u;
+  h ^= h >> 15;
+  h *= 0x2C1B3C6Du;
+  h ^= h >> 13;
+  return static_cast<float>(h & 0xFFFFu) / 65536.f * 6.2831853f;
 }
 
 bool is_opaque_texture(const std::string& key) noexcept {

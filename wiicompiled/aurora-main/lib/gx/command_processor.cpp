@@ -3421,7 +3421,9 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   log_lighting_probe(pipelineStatePtr->shaderInfo, prim, vtxCount);
   bool unlit = false;
   bool opaque = false;
+  bool spin = false;
   if (gfx::scene_stage::relighting()) {
+    spin = samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_spin_texture);
     if (draws_game_shadow(pipelineStatePtr->shaderInfo) ||
         samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_hidden_texture)) {
       return;
@@ -3475,9 +3477,28 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
         .matrixTopology = matrixTopologySignature,
     };
   }
+  // Reimagined "spin": this draw's model turned about its own up axis (position and normal matrices times a rotation
+  // about Y) by an angle from where it stands, for these uniforms only.
+  std::optional<std::pair<u32, PnMtx>> spunMatrix;
+  if (spin) {
+    const u32 slot = std::min<u32>(g_gxState.currentPnMtx, MaxPnMtx - 1);
+    auto& mtx = g_gxState.pnMtx[slot];
+    spunMatrix.emplace(slot, mtx);
+    const float at[3] = {mtx.pos.m0.m[3], mtx.pos.m1.m[3], mtx.pos.m2.m[3]};
+    const float angle = gfx::scene_stage::spin_angle(at);
+    const float c = std::cos(angle), sn = std::sin(angle);
+    for (auto* rows : {&mtx.pos, &mtx.nrm}) {
+      for (auto* row : {&rows->m0, &rows->m1, &rows->m2}) {
+        const float x = row->m[0], z = row->m[2];
+        row->m[0] = c * x - sn * z;
+        row->m[2] = sn * x + c * z;
+      }
+    }
+  }
   const auto uniformRanges =
       build_uniform(info, vertRange.offset, ranges, drawIdentity, interpolationIdentityActive,
                     usedPnMtxMask);
+  if (spunMatrix) g_gxState.pnMtx[spunMatrix->first] = spunMatrix->second;
   s_lastDrawRecordedInterpolation = interpolationIdentityActive;
 
   uint32_t instanceCount = 1;

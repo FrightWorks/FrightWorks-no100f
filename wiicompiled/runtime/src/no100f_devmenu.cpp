@@ -1694,6 +1694,16 @@ void PollCommandFile() {
             g_status = "pack textures drawn in this level (" + std::to_string(packs) + " of " +
                        std::to_string(g_levelTextures.size()) + "):" + names +
                        " | from Xbox textures: " + std::to_string(xbox);
+            if (arg == "all") {  // "textures all": every texture drawn, with or without a pack file
+                g_status += " | all:";
+                for (const AuroraDrawnTexture& t : g_levelTextures) {
+                    g_status += ' ';
+                    g_status += t.name;
+                }
+            }
+        } else if (cmd == "texhl") {  // "texhl KEY": draw that texture solid magenta; "texhl" alone: off
+            aurora_texture_replacement_highlight(arg.c_str());
+            g_status = arg.empty() ? "texture highlight off" : "highlighting " + arg;
         } else if (cmd == "cutout") {
 #ifdef AURORA_HAS_CUTOUT_MODE
             if (!arg.empty()) aurora_set_cutout_mode(std::atoi(arg.c_str()));

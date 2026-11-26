@@ -80,6 +80,10 @@ bool is_unlit_texture(const std::string& key) noexcept;
 bool is_hidden_texture(const std::string& key) noexcept;
 // The file's opaque textures ("opaque KEY"): drawn without blending, so the game can't fade them.
 bool is_opaque_texture(const std::string& key) noexcept;
+// Reimagined "spin KEY": a model with this texture is turned by spin_angle (from where it stands in the world, given its
+// position in view space) about its own up axis.
+bool is_spin_texture(const std::string& key) noexcept;
+float spin_angle(const float viewPos[3]) noexcept;
 // The file's "deblue" (0-255) for the relit draws' shader (ShaderConfig.deblue).
 uint8_t relight_deblue() noexcept;
 
