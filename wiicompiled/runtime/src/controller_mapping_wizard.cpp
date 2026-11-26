@@ -1,4 +1,5 @@
 #include "controller_mapping_wizard.h"
+#include "menu_rows.h"
 #include "overlay_theme.h"
 #include "runtime_config.h"
 #include "runtime_log.h"
@@ -376,22 +377,14 @@ void DrawSetupList() {
     if (candidates.empty()) {
         return;
     }
-    ImGui::SeparatorText("Unrecognized controllers");
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + OverlayTheme::Px(380.0f));
-    ImGui::TextDisabled(
-        "These devices have no usable gamepad mapping. Set one up by pressing "
-        "each control when asked.");
-    ImGui::PopTextWrapPos();
+    MenuRows::Section("Unrecognized controllers");
     for (const auto& candidate : candidates) {
         ImGui::PushID(static_cast<int>(candidate.id));
-        ImGui::TextUnformatted(candidate.name.c_str());
-        ImGui::SameLine();
-        if (ImGui::SmallButton(candidate.incompleteMapping ? "Fix mapping" : "Set up")) {
+        if (MenuRows::Action(candidate.name.c_str(), candidate.incompleteMapping ? "Fix mapping" : "Set up")) {
             StartWizard(candidate.id);
         }
-        if (candidate.incompleteMapping && ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("SDL matched a mapping without an analog stick for this device");
-        }
+        MenuRows::Describe("This device has no usable gamepad mapping. Set one up by pressing each control when asked.");
+        if (candidate.incompleteMapping) MenuRows::Describe("SDL matched a mapping without an analog stick for this device.");
         ImGui::PopID();
     }
 }

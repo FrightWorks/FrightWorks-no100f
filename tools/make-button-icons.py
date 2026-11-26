@@ -7,9 +7,10 @@ mapping (hle/input/pad.cpp):
                                             button's icon goes (top-left corner)
     button_icons/<family>/<button>.png      one icon per pad button, named like the [controller] mapping
                                             (south, east, west, north), for xbox, playstation and nintendo; also
-                                            back and left_shoulder, which only the in-game hotkey guide shows
-                                            (settings_overlay.cpp, not in the atlas)
-    button_icons/keyboard/<key>.png         the keys on the hotkey guide (f1, f2, f3, f8, f10, f11, escape)
+                                            back, start, the shoulders and the D-pad, which only the hotkey guide
+                                            and the F10 menu's button prompts show (settings_overlay.cpp, not in the
+                                            atlas)
+    button_icons/keyboard/<key>.png         the keys on the hotkey guide and the F10 menu's prompts
 Icons come from Kenney's Input Prompts (CC0, tools/button-art: only the ones used; the whole pack is not in the repo).
 Every icon is drawn at the size of the biggest GameCube button (A), centred where that button is and kept inside its
 quarter of the atlas; the GameCube B button is smaller. The atlas is the HD pack's size: its size and the four buttons'
@@ -42,14 +43,20 @@ FAMILIES = {
                     "west": "playstation_button_color_square", "north": "playstation_button_color_triangle"},
     "nintendo": {"south": "switch_button_b", "east": "switch_button_a", "west": "switch_button_y", "north": "switch_button_x"},
 }
-# Buttons the hotkey guide shows (white art, drawn with a dark symbol like Nintendo's buttons).
+# Buttons the hotkey guide and the F10 menu's prompts show (white art, drawn with a dark symbol like Nintendo's buttons).
 EXTRAS = {
-    "xbox": {"back": "xbox_button_view", "left_shoulder": "xbox_lb"},
-    "playstation": {"back": "playstation4_button_share", "left_shoulder": "playstation_trigger_l1"},
-    "nintendo": {"back": "switch_button_minus", "left_shoulder": "switch_button_l"},
+    "xbox": {"back": "xbox_button_view", "start": "xbox_button_menu", "left_shoulder": "xbox_lb",
+             "right_shoulder": "xbox_rb", "dpad_horizontal": "xbox_dpad_horizontal",
+             "dpad_vertical": "xbox_dpad_vertical"},
+    "playstation": {"back": "playstation4_button_share", "start": "playstation4_button_options",
+                    "left_shoulder": "playstation_trigger_l1", "right_shoulder": "playstation_trigger_r1",
+                    "dpad_horizontal": "playstation_dpad_horizontal", "dpad_vertical": "playstation_dpad_vertical"},
+    "nintendo": {"back": "switch_button_minus", "start": "switch_button_plus", "left_shoulder": "switch_button_l",
+                 "right_shoulder": "switch_button_r", "dpad_horizontal": "switch_dpad_horizontal",
+                 "dpad_vertical": "switch_dpad_vertical"},
 }
-# Keys the hotkey guide shows (white keycaps, dark lettering).
-KEYBOARD = ["f1", "f2", "f3", "f8", "f10", "f11", "escape"]
+# Keys the hotkey guide and the F10 menu's prompts show (white keycaps, dark lettering).
+KEYBOARD = ["f1", "f2", "f3", "f8", "f10", "f11", "escape", "q", "e", "enter", "arrows_horizontal", "arrows_vertical"]
 
 
 # The atlas's size and its four buttons' bounding boxes (x0, y0, x1, y1), by quadrant: Y top-left, X top-right, A
