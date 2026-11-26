@@ -35,6 +35,8 @@
 /launcher/publish/
 /tools/launcher-hdr-tests/bin/
 /tools/launcher-hdr-tests/obj/
+/tools/launcher-removal-tests/bin/
+/tools/launcher-removal-tests/obj/
 /tools/launcher-layout-tests/bin/
 /tools/launcher-layout-tests/obj/
 /tools/launcher-controller-tests/bin/

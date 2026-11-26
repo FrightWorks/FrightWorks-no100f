@@ -20,11 +20,13 @@ static class Prepare
     public static int Run(string[] args)
     {
         string? image = null;
+        bool removeInstalled = false;
         for (int i = 1; i < args.Length; i++)
         {
             string a = args[i];
             if (a.StartsWith("--game=", StringComparison.Ordinal)) image = a["--game=".Length..];
             else if (a == "--game" && i + 1 < args.Length) image = args[++i];
+            else if (a == InstalledRemoval.Flag) removeInstalled = true;
             else return Fail(1, $"Unknown argument: {a}");
         }
         if (string.IsNullOrEmpty(image)) return Fail(1, "No disc image given (--game=<image>).");
@@ -55,7 +57,7 @@ static class Prepare
                 var current = new GameConfig(paths.ConfigPath);
                 current.Set("paths", "dvd_root", paths.DvdRootValue);
                 current.Save();
-                return Finish(paths);
+                return Finish(paths, removeInstalled);
             }
 
             Progress(0.02, "Unpacking your disc");
@@ -88,14 +90,25 @@ static class Prepare
             return Fail(1, "Setting up the disc failed: " + e.Message);
         }
 
-        return Finish(paths);
+        return Finish(paths, removeInstalled);
     }
 
-    static int Finish(DataPaths paths)
+    static int Finish(DataPaths paths, bool removeInstalled)
     {
         Progress(0.95, "Finishing the settings");
         paths.RemoveOldShippedCopies();
         if (OperatingSystem.IsWindows()) FillHdrDefaults(paths);
+        // Last, with this copy ready: the player's tick on RecompLauncher's setup screen (InstalledRemoval). What it did
+        // is printed; it never fails the step.
+        if (removeInstalled && OperatingSystem.IsWindows())
+        {
+            Progress(0.97, "Removing the installed FrightWorks");
+            var (target, why) = InstalledRemoval.Find(paths);
+            string result = target == null ? why
+                : InstalledRemoval.Remove(target, paths, InstalledRemoval.RunUninstaller, InstalledRemoval.AnyRunningFrom);
+            Console.Out.WriteLine(result);
+            Console.Out.Flush();
+        }
         Progress(1, "Ready to play");
         return 0;
     }

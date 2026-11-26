@@ -461,6 +461,11 @@ After changing it:
    ```
    It extracts the disc into `data\Disc\DATA` (disc data: keep the folder local) and sets `dvd_root`.
    On a PC with the installed game, a fresh folder also gets its saves and settings (`data\UserData\imported.txt` says from where).
+   A second run with the same image prints "Your disc is already unpacked" and finishes at once.
+   Don't add `--remove-installed` on a PC whose installed game you want to keep: it uninstalls it. Its checks run without that:
+   ```powershell
+   dotnet run --project tools\launcher-removal-tests\LauncherRemovalTests.csproj -c Release -- <scratch folder>   # a stand-in uninstaller
+   ```
 3. In RecompLauncher: Settings > Developers > Developer tools, then "Add a build" on that folder. Its Developer tab checks the file and shows each setting's current choice; set up with your disc, change a setting and check that only those keys changed in `data\UserData\Config.toml`, then Play (the game starts without the FrightWorks launcher).
 
 ## 5. Dev menu (F8)

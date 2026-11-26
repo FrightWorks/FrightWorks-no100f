@@ -415,6 +415,9 @@ To build old source there, set only the paths that differ with `git restore --so
   Texture packs are only ever downloaded from this launcher's Extras > Textures, never by the setup step (maintainer, 2026-11-25).
   It prints `progress <0..1> <text>` lines; exit 0 done, 1 error, 2 incomplete image, 3 wrong disc.
   RecompLauncher runs it again after every update: `data/Disc/DATA.source` records which image (path, size, date) the disc folder came from, and the same image with its files in place isn't unpacked again.
+  Windows only, a tick on its setup screen (`prepare.options` `remove_installed`, off by default) adds `--remove-installed`: after the import, `launcher/InstalledRemoval.cs` checks every imported file matches byte for byte, runs Velopack's registered quiet uninstall, then deletes `FrightWorks-Data` and the default `Saved Games\FrightWorks` (never a chosen `saves_dir`); any mismatch or failure keeps the installed game and says why.
+  Tested by `tools/launcher-removal-tests` with a stand-in uninstaller; never run the real one on the maintainer's PC.
+- On Linux RecompLauncher should take the `.tar.gz` (portable, `Linux-x64` in the name), not `FrightWorks.AppImage`, which is the installed layout (its data in `~/.local/share/WiiCompiled`) and has no `recomplauncher.json`: still to confirm in RecompLauncher on Linux.
 - The game's exit codes in `exit_codes`: 0 is a normal quit; 3 is no usable disc folder on Linux and macOS (`GameFolder::kNoGameExitCode`), shown as its message instead of a crash report. Windows asks for the folder instead.
   Another code the game uses on purpose gets a message there too; a crash (1) stays unlisted so the player gets the crash report.
 - Play starts `data/FrightWorks Game` directly, not this launcher, so anything the launcher does before Play (patch mods are built when added, not only before Play) must also work without it.
@@ -447,7 +450,9 @@ A maintainer runs releases:
 1. Version PR: `<Version>` in `launcher/FrightWorks.Launcher.csproj` and the version line in `tools/package-README.txt`.
 2. After the merge, on a clean `main`: local tag `v<ver>` (the build ID is then just `<ver>`), then `tools/package-scooby.ps1 -Build`, then `-Zip` as a second call (`-Build` resets PATH), then `-Installer`.
 3. Smoke test: the zip has no game data, saves or settings, and has `recomplauncher.json` beside `FrightWorks.exe`; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
-4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `FrightWorks-<ver>.zip`, every `dist\installer\*` and `dist\installer-linux\*` file (the Linux `.tar.gz` is RecompLauncher's) and the notes.
+4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `dist\FrightWorks.zip` uploaded as `FrightWorks-<ver>-Windows-x64.zip`, every `dist\installer\*` and `dist\installer-linux\*` file (the Linux `.tar.gz` is RecompLauncher's) and the notes.
+   RecompLauncher picks a release file by the system and processor in its name, hence `Windows-x64` (up to v1.2.0 the zip was `FrightWorks-<ver>.zip`); frightworks.dev finds the zip with the `zipPattern` in FrightWorks-site's `src/content/games/no100f.md`, which must match the new name before the first release with it.
+   `FrightWorks-win-Setup.exe` and `FrightWorks.AppImage` keep their names: the site links them by name.
    A maintainer publishes.
 
 Installed launchers only find updates in published releases carrying `releases.win.json`.

@@ -17,7 +17,17 @@
     "program": ["FrightWorks.exe", "FrightWorks"],
     "args": ["--prepare", "--game={input:game}"],
     "label": "Unpacking your disc and setting up the game",
-    "done": ["{install}/data/Disc/DATA/sys/main.dol"]
+    "done": ["{install}/data/Disc/DATA/sys/main.dol"],
+    "options": [
+      {
+        "id": "remove_installed",
+        "label": "Remove the FrightWorks installed on this PC",
+        "note": "If you also have it from its installer: its saves, settings, mods and texture packs come here first, and it's only removed once they all match.",
+        "args": ["--remove-installed"],
+        "os": ["windows"],
+        "default": false
+      }
+    ]
   },
   "start": {
     "program": ["data/FrightWorks Game.exe", "data/FrightWorks Game"]
