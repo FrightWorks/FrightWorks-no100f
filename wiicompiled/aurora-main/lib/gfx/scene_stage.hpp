@@ -83,6 +83,9 @@ void set_relight_file(const std::string& path) noexcept;
 unsigned relight_generation() noexcept;
 // The light file's unlit textures ("unlit KEY", KEY as TextureRef::debugKey): drawn as the game draws them.
 bool is_unlit_texture(const std::string& key) noexcept;
+// The file's emissive textures ("emissive KEY STRENGTH"): STRENGTH as 0-255 (0: not emissive), for
+// ShaderConfig.emissive. A relit draw sampling one is drawn again after the relighting, adding its colour.
+uint8_t emissive_strength(const std::string& key) noexcept;
 // The light file's hidden textures ("hide KEY"): draws that sample one are skipped (painted shadow decals).
 bool is_hidden_texture(const std::string& key) noexcept;
 // The file's opaque textures ("opaque KEY"): drawn without blending, so the game can't fade them.

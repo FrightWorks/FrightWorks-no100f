@@ -2067,10 +2067,22 @@ static inline wgpu::PrimitiveState to_primitive_state(GXCullMode gx_cullMode) {
 wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu::VertexBufferLayout> vtxBuffers,
                                     wgpu::ShaderModule shader, const char* label) noexcept {
   ZoneScoped;
+  // Reimagined emissive replay (ShaderConfig.emissive): over its own pixels only, adding its colour.
+  const bool emissive = config.shaderConfig.emissive != 0;
   const wgpu::DepthStencilState depthStencil{
       .format = g_graphicsConfig.depthFormat,
-      .depthWriteEnabled = config.depthUpdate,
-      .depthCompare = config.depthCompare ? to_compare_function(config.depthFunc) : wgpu::CompareFunction::Always,
+      .depthWriteEnabled = config.depthUpdate && !emissive,
+      .depthCompare = emissive               ? wgpu::CompareFunction::Equal
+                      : config.depthCompare ? to_compare_function(config.depthFunc)
+                                            : wgpu::CompareFunction::Always,
+  };
+  constexpr wgpu::BlendState additive{
+      .color = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::One,
+                .dstFactor = wgpu::BlendFactor::One},
+      .alpha = {.operation = wgpu::BlendOperation::Add,
+                .srcFactor = wgpu::BlendFactor::Zero,
+                .dstFactor = wgpu::BlendFactor::One},
   };
   const auto blendState = to_blend_state(config.blendMode, config.blendFacSrc, config.blendFacDst, config.blendOp,
                                          config.pixelFmt, config.dstAlpha);
@@ -2079,11 +2091,12 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
   // 2D draws are not scene surfaces: the HUD has its mark, and a copy of the scene drawn back over it (the game's
   // mist and glow effects paste part of the frame back) shows the scene, which keeps its own motion and depth.
   const u8 role = config.shaderConfig.motionRole;
-  const bool writesMotion = motion_owner(config) && role != MotionRoleLayer2D;
+  const bool writesMotion = motion_owner(config) && role != MotionRoleLayer2D && !emissive;
   const bool alphaOwned = motion_alpha_blended(config);
   // The HUD mark: set by the draws the seal flags as the HUD, cleared under anything else drawn visibly (see the
   // shader); weighted by the shader's alpha, like motionSelect.
-  const bool writesMark = role == MotionRoleLayer2D || writesMotion || role == MotionRoleTransparent;
+  const bool writesMark =
+      !emissive && (role == MotionRoleLayer2D || writesMotion || role == MotionRoleTransparent);
   constexpr wgpu::BlendState motionSelect{
       .color = {.operation = wgpu::BlendOperation::Add,
                 .srcFactor = wgpu::BlendFactor::SrcAlpha,
@@ -2095,8 +2108,9 @@ wgpu::RenderPipeline build_pipeline(const PipelineConfig& config, ArrayRef<wgpu:
   const std::array colorTargets{
       wgpu::ColorTargetState{
           .format = g_graphicsConfig.surfaceConfiguration.format,
-          .blend = &blendState,
-          .writeMask = to_write_mask(config.colorUpdate, config.alphaUpdate),
+          .blend = emissive ? &additive : &blendState,
+          .writeMask = emissive ? wgpu::ColorWriteMask::Red | wgpu::ColorWriteMask::Green | wgpu::ColorWriteMask::Blue
+                                : to_write_mask(config.colorUpdate, config.alphaUpdate),
       },
       wgpu::ColorTargetState{
           .format = wgpu::TextureFormat::RG16Float,

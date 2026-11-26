@@ -3422,6 +3422,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   bool unlit = false;
   bool opaque = false;
   bool spin = false;
+  u8 emissive = 0;
   if (gfx::scene_stage::relighting()) {
     spin = samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_spin_texture);
     if (draws_game_shadow(pipelineStatePtr->shaderInfo) ||
@@ -3433,6 +3434,14 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
     opaque = samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_opaque_texture);
     if (unlit || opaque) {
       pipelineStatePtr = &resolve_pipeline_state(prim, fmt, PipelineVariant::Game, unlit, opaque);
+    }
+    if (!unlit && pipelineStatePtr->shaderInfo.relight) {
+      for (u32 i = 0; i < MaxTextures; ++i) {
+        const auto& bind = g_gxState.textures[i];
+        if (pipelineStatePtr->shaderInfo.sampledTextures.test(i) && bind) {
+          emissive = std::max(emissive, gfx::scene_stage::emissive_strength(bind.ref->debugKey));
+        }
+      }
     }
   }
   // Only the resolved textures tell whether an HD replacement is drawn. The cut-out variants change the alpha test and
@@ -3529,6 +3538,17 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
       .clearQuad = g_gxState.projType == GX_ORTHOGRAPHIC && g_gxState.depthUpdate && vtxCount == 4 &&
                    info.sampledTextures.none() && gfx::scene_stage::relighting(),
   };
+  // Reimagined emissive: the game's own pipeline with ShaderConfig.emissive (straight to a pipeline ref, not through
+  // cached_pipeline_state, whose slots the memos above point into).
+  if (emissive != 0) {
+    PipelineConfig emissiveConfig{};
+    populate_pipeline_config(emissiveConfig, prim, fmt);
+    if (emissiveConfig.shaderConfig.relight) {
+      emissiveConfig.shaderConfig.emissive = emissive;
+      draw.emissive = true;
+      draw.emissivePipeline = gfx::pipeline_ref(emissiveConfig);
+    }
+  }
   const auto cutoutMode = cutout_mode();
   const bool enhancedCutouts = cutoutMode == CutoutMode::TwoPass || cutoutMode == CutoutMode::TwoPassAll;
   const bool orderedWorld = ordered_world_state();

@@ -1861,6 +1861,11 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept {
   }
   // Reimagined (ShaderConfig.deblue): the original textures lose some of their blue before the new light multiplies
   // them: the positive blue difference (Cb) is scaled down, brightness (Y) and the red difference (Cr) are kept.
+  // Reimagined (ShaderConfig.emissive): the emissive replay adds the colour at this share of its strength.
+  if (config.emissive != 0) {
+    fragmentReturn = fmt::format("    prev = vec4f(prev.rgb * {:.4f}, prev.a);\n", config.emissive / 255.0f) +
+                     fragmentReturn;
+  }
   if (config.relight != 0 && config.deblue != 0) {
     fragmentReturn = fmt::format("    {{\n"
                                  "        let dbY = dot(prev.rgb, vec3f(0.299, 0.587, 0.114));\n"

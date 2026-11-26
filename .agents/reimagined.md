@@ -85,6 +85,7 @@ is -1. `NO100F_REIMAGINED` (or the older `NO100F_RELIGHT`) overrides that for ev
 | `unlit KEY` | Texture drawn as the game draws it |
 | `hide KEY` | Texture not drawn |
 | `opaque KEY` | Texture drawn solid, never blended (trees the game fades near the camera) |
+| `emissive KEY STRENGTH` | Texture that glows: lit as usual, then STRENGTH (0..1) of its own colour added on top (drawn once more after the relighting, depth equal, no depth write) |
 | `spin KEY` | Models with this texture start their spin at an angle from where they stand |
 | `sky ZR ZG ZB HR HG HB` | Night sky: zenith and horizon colours (hide the game's sky band) |
 | `moondisc RADIUS_DEG R G B` | The moon in the sky at the moon's direction |
@@ -131,10 +132,13 @@ the debug kit puts the player's setup back (`tools/debug/manual-session.ps1 stop
 
 1. `textures all` lists every key drawn this frame (to the dev menu log).
 2. `texhl KEY` paints that texture magenta. Diff a shot against one without it to see where it is.
-3. When nothing turns magenta, it may be a **darkening (multiply) draw**, like the pickups' blob shadows: highlighted
+3. A **tinted sprite** (its colour from a tint, only its alpha from the texture, like the pickups' glow
+   `tex1_32x32_f88f03b76eb01a39_6`) doesn't change when highlighted: try `hide KEY` in a copy of the file
+   (`NO100F_REIMAGINED`), `reimagined reload` and diff, one candidate at a time (no depth write, few vertices).
+4. When nothing turns magenta, it may be a **darkening (multiply) draw**, like the pickups' blob shadows: highlighted
    it turns into dark *squares*, not magenta. Sweep every listed key (a shot per key) and rank the region's change
    against the median of all shots instead of counting magenta pixels.
-4. Highlighting a texture and seeing a darkening stay on top of it means the darkening is a separate draw (or the new
+5. Highlighting a texture and seeing a darkening stay on top of it means the darkening is a separate draw (or the new
    light), not that texture.
 
 ## Notes by feature

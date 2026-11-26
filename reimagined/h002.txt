@@ -50,6 +50,10 @@ fire 24.7 0.09 -5.8 0.6 1.0
 mountains 8 15 0.11 0.24 0.30
 spin tex1_128x128_133e6c02869897d7_a8839ec1b6d562bf_9
 spin tex1_128x128_eb148b4e961bb6c5_14
+# the sandwiches glow dimly from within (lit as usual, then this share of their own colour added)
+emissive tex1_64x64_6ada02c5c5bf3c0d_14 0.35
+# the pickups' glow sprite (tinted per pickup: yellow round the sandwiches, purple round the clue glasses)
+hide tex1_32x32_f88f03b76eb01a39_6
 # mercury-vapour post-top lamps where the game's 12 POST LIGHT lamps stood (ground = old light height - 4);
 # each adds its light in its globe (lampcolor R G B RADIUS: mercury's blue-green white)
 lampcolor 0.45 0.85 1.0 5.0

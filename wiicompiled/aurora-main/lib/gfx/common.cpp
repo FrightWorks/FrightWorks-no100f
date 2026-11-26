@@ -1624,7 +1624,7 @@ struct SkyInsert {
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& passes, u32 idx,
                              int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight = false,
                              bool shadow = false, const SkyInsert* sky = nullptr,
-                             int lampSlot = -1);
+                             int lampSlot = -1, bool emissive = false);
 
 // The bloom (bloom.hpp), at the scene stage: the frame's light draws up to the end of its see-through tail
 // (gx::DrawData::emitsLight, in the EFB passes before `afterPass`, the pass after the tail) are drawn once more, alone
@@ -1752,6 +1752,54 @@ static void encode_moon_shadow(const wgpu::CommandEncoder& cmd, const std::vecto
   }
   if (!passes.empty())
     scene_stage::encode_props_shadow(cmd, targets.depth, stage.sceneCamera, stage.msaaSamples);
+}
+
+// Reimagined emissive textures: right after the relighting, the solid passes' emissive draws once more over the
+// scene with their emissive pipelines (gx::DrawData::emissivePipeline): their colour added where they are drawn.
+static void encode_emissive(const wgpu::CommandEncoder& cmd, const std::vector<RenderPass>& renderPasses,
+                            u32 stagePass, int32_t interpolatedFrame, DebugFrameData& debugFrame) {
+  const auto& stage = renderPasses[stagePass];
+  std::vector<u32> passes;
+  for (u32 i = 0; i < stagePass; ++i) {
+    const auto& rp = renderPasses[i];
+    if (rp.colorView.Get() != stage.colorView.Get()) continue;
+    const auto hasEmissive = [](const CommandList& list) {
+      return std::any_of(list.begin(), list.end(), [](const Command& command) {
+        return command.type == CommandType::Draw && command.data.draw.type == ShaderType::GX &&
+               command.data.draw.gx.emissive;
+      });
+    };
+    if (hasEmissive(rp.commands) || hasEmissive(rp.deferred) || hasEmissive(rp.translucent)) passes.push_back(i);
+  }
+  if (passes.empty()) return;
+  const bool motionPass =
+      stage.motionView != nullptr && stage.motionDepthView != nullptr && stage.motionMarkView != nullptr;
+  const std::array attachments{
+      wgpu::RenderPassColorAttachment{
+          .view = stage.colorView, .loadOp = wgpu::LoadOp::Load, .storeOp = wgpu::StoreOp::Store},
+      wgpu::RenderPassColorAttachment{
+          .view = stage.motionView, .loadOp = wgpu::LoadOp::Load, .storeOp = wgpu::StoreOp::Store},
+      wgpu::RenderPassColorAttachment{
+          .view = stage.motionDepthView, .loadOp = wgpu::LoadOp::Load, .storeOp = wgpu::StoreOp::Store},
+      wgpu::RenderPassColorAttachment{
+          .view = stage.motionMarkView, .loadOp = wgpu::LoadOp::Load, .storeOp = wgpu::StoreOp::Store},
+  };
+  const wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{
+      .view = stage.depthView,
+      .depthLoadOp = wgpu::LoadOp::Load,
+      .depthStoreOp = wgpu::StoreOp::Store,
+  };
+  const wgpu::RenderPassDescriptor renderPassDescriptor{
+      .label = "Emissive",
+      .colorAttachmentCount = motionPass ? attachments.size() : 1,
+      .colorAttachments = attachments.data(),
+      .depthStencilAttachment = &depthStencilAttachment,
+  };
+  auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
+  for (const u32 i : passes) {
+    render_pass_impl(pass, renderPasses, i, interpolatedFrame, debugFrame, false, false, nullptr, -1, true);
+  }
+  pass.End();
 }
 
 // Reimagined lamp shadows: the same solid scene into each chosen lamp's map, with that map's uniform copies.
@@ -1891,6 +1939,7 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
       encode_lamp_shadows(cmd, renderPasses, i, interpolatedFrame, debugFrame);
       scene_stage::encode(cmd, passInfo.colorView, passInfo.depthView, passInfo.targetSize, passInfo.msaaSamples,
                           passInfo.sceneCamera);
+      encode_emissive(cmd, renderPasses, i, interpolatedFrame, debugFrame);
       if (afterTailPass != UINT32_MAX && passInfo.depthView.Get() == webgpu::g_depthBuffer.view.Get()) {
         bloom::encode_keep_depth(cmd, webgpu::g_depthBuffer.texture, passInfo.msaaSamples);
         encode_bloom(cmd, renderPasses, afterTailPass, interpolatedFrame, debugFrame);
@@ -2130,7 +2179,7 @@ void after_submit() noexcept {
 
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& renderPasses, u32 idx,
                              int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight, bool shadow,
-                             const SkyInsert* sky, int lampSlot) {
+                             const SkyInsert* sky, int lampSlot, bool emissive) {
   // Per-invocation, not per-process: two encoders can be recording at once.
   gx::DrawEncodeState encodeState{};
   encodeState.boundTextureBindGroup = gx::g_emptyTextureBindGroup.Get();
@@ -2247,6 +2296,8 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
       case ShaderType::GX: {
         if (onlyLight && !draw.gx.emitsLight)
           break;
+        if (emissive && !draw.gx.emissive)
+          break;
         const gfx::Range* shadowRange = !shadow        ? nullptr
                                         : lampSlot >= 0 ? &draw.gx.lampShadowUniformRanges[lampSlot]
                                                         : &draw.gx.shadowUniformRange;
@@ -2258,10 +2309,16 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
             draw.gx.interpolatedUniformRanges[interpolatedFrame].size != 0) {
           uniformOverride = &draw.gx.interpolatedUniformRanges[interpolatedFrame];
         }
-        gx::render(draw.gx, pass, encodeState, renderPasses[idx].requireReadyPipelines, uniformOverride);
+        if (emissive) {
+          gx::DrawData replay = draw.gx;
+          replay.pipeline = draw.gx.emissivePipeline;
+          gx::render(replay, pass, encodeState, renderPasses[idx].requireReadyPipelines, uniformOverride);
+        } else {
+          gx::render(draw.gx, pass, encodeState, renderPasses[idx].requireReadyPipelines, uniformOverride);
+        }
       } break;
       case ShaderType::Clear:
-        if (!onlyLight && !shadow)
+        if (!onlyLight && !shadow && !emissive)
           clear::render(draw.clear, pass, renderPasses[idx].targetSize, encodeState.currentPipeline);
         break;
       }

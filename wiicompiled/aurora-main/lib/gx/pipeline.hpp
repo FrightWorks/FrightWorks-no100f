@@ -27,9 +27,14 @@ struct DrawData {
   std::array<gfx::Range, 4> lampShadowUniformRanges{};
   // Reimagined: the game's frame clear (an untextured ortho quad that writes depth); the night sky is drawn after it.
   bool clearQuad = false;
+  // Reimagined "emissive KEY STRENGTH": drawn once more after the relighting with this pipeline (ShaderConfig.emissive:
+  // its colour scaled and added, depth equal, no depth write), so it glows on top of the new light.
+  bool emissive = false;
+  gfx::PipelineRef emissivePipeline{};
 };
 
-constexpr uint32_t GXPipelineConfigVersion = 22;  // 21: ShaderConfig.relight (relighting experiment); 22: deblue
+constexpr uint32_t GXPipelineConfigVersion = 23;  // 21: ShaderConfig.relight (relighting experiment); 22: deblue;
+                                                  // 23: ShaderConfig.emissive
 
 constexpr GXFogType effective_pipeline_fog_type(GXFogType fogType, GXZTexOp zTextureOp,
                                                 bool zCompLocBeforeTex, GXBlendMode blendMode,
