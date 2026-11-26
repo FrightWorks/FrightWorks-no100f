@@ -15,11 +15,12 @@ namespace FrightWorks;
 static class DataImport
 {
     static readonly string[] GameExes = { DataPaths.GameExe, "Scooby-Doo Refrightened.exe", "Scooby-Doo Re-Masked.exe" };
-    const string Mark = "imported.txt", OldMark = "imported-from-refrightened.txt";  // in UserData: asked once
+    internal const string Mark = "imported.txt", OldMark = "imported-from-refrightened.txt";  // in UserData: asked once
     // Rebuilt by the game, shipped with it (or once shipped: Refrightened's HD pack), or a half-done pack download.
     static readonly string[] Skip = { "Logs", "Cache", "button_icons", "Disc", Path.Combine("texture_replacements", "ScoobyHD"), "texture_packs.download" };
 
-    internal sealed record Source(string Name, string UserData, string? Disc);
+    // Saves: where the old copy keeps its saves when that isn't its UserData\Saves (the installed game's Saved Games).
+    internal sealed record Source(string Name, string UserData, string? Disc, string? Saves = null);
 
     public static async Task OfferAtStart(DataPaths paths, string title, Window? owner = null)
     {
@@ -166,6 +167,37 @@ static class DataImport
         return found;
     }
 
+    // The installed game's files (settings in FrightWorks-Data, saves in Saved Games\FrightWorks or its saves_dir on
+    // Windows; ~/.local/share/WiiCompiled on Linux), for a portable copy beside it: RecompLauncher installs the zip, and
+    // its setup step (Prepare) brings over a player's installed game. Null when there is none or this is that game.
+    internal static Source? Installed(DataPaths paths)
+    {
+        if (!paths.Portable || paths.DevTree) return null;
+        var userData = DataPaths.InstalledDataDir;
+        var config = Path.Combine(userData, "Config.toml");
+        // The Linux folder is named after the runtime, which other WiiCompiled games share.
+        if (SameFolder(userData, paths.UserData) || !File.Exists(config) || (!OperatingSystem.IsWindows() && !IsThisGamesConfig(config)))
+            return null;
+        string? saves = null;
+        if (OperatingSystem.IsWindows())
+        {
+            string? configured = null;
+            try { configured = new GameConfig(config).Get("paths", "saves_dir"); } catch (Exception) { }
+            try
+            {
+                saves = string.IsNullOrWhiteSpace(configured) ? Path.Combine(KnownFolders.SavedGames, DataPaths.UserFolderName)
+                                                              : Path.GetFullPath(Path.Combine(userData, configured));
+            }
+            catch (Exception) { saves = null; }
+        }
+        return Make(userData, userData) with { Saves = saves };
+    }
+
+    // A first start with nothing of its own yet and the question never asked: the condition for offering an import.
+    internal static bool Fresh(DataPaths paths) =>
+        !File.Exists(Path.Combine(paths.UserData, Mark)) && !File.Exists(Path.Combine(paths.UserData, OldMark)) &&
+        !File.Exists(paths.ConfigPath) && !HasFiles(paths.Saves);
+
     // A Config.toml in a folder other WiiCompiled games may share: only take it when the settings are this game's.
     static bool IsThisGamesConfig(string config)
     {
@@ -202,19 +234,8 @@ static class DataImport
     // Returns the error, if any, and how many files were already there.
     static async Task<(Exception? error, int skipped)> Import(Source source, DataPaths paths, string title, Window? owner)
     {
-        var files = new List<(string from, string to)>();
         bool configCopied = !File.Exists(paths.ConfigPath);
-        var saves = paths.Saves;
-        foreach (var f in Directory.EnumerateFiles(source.UserData, "*", SearchOption.AllDirectories))
-        {
-            var rel = Path.GetRelativePath(source.UserData, f);
-            if (Skip.Any(s => rel.StartsWith(s + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))) continue;
-            if (rel is Mark or OldMark) continue;
-            const string savesPrefix = "Saves";
-            files.Add(rel.StartsWith(savesPrefix + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                ? (f, Path.Combine(saves, rel[(savesPrefix.Length + 1)..]))
-                : (f, Path.Combine(paths.UserData, rel)));
-        }
+        var files = Files(source, paths);
         bool copyDisc = CopiesDisc(source, paths);
         var staging = paths.Disc + ".new";
         if (copyDisc)
@@ -247,6 +268,27 @@ static class DataImport
             cfg.Save();
         }
         return (error, skipped);
+    }
+
+    // Everything to copy but the disc: the saves into this game's saves folder, the rest into its UserData.
+    internal static List<(string from, string to)> Files(Source source, DataPaths paths)
+    {
+        var files = new List<(string from, string to)>();
+        var saves = paths.Saves;
+        const string savesPrefix = "Saves";
+        foreach (var f in Directory.EnumerateFiles(source.UserData, "*", SearchOption.AllDirectories))
+        {
+            var rel = Path.GetRelativePath(source.UserData, f);
+            if (Skip.Any(s => rel.StartsWith(s + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))) continue;
+            if (rel is Mark or OldMark) continue;
+            bool save = rel.StartsWith(savesPrefix + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            if (save && source.Saves != null) continue;  // its saves are elsewhere (below); this would be an old leftover
+            files.Add(save ? (f, Path.Combine(saves, rel[(savesPrefix.Length + 1)..])) : (f, Path.Combine(paths.UserData, rel)));
+        }
+        if (source.Saves != null && Directory.Exists(source.Saves) && !SameFolder(source.Saves, saves))
+            foreach (var f in Directory.EnumerateFiles(source.Saves, "*", SearchOption.AllDirectories))
+                files.Add((f, Path.Combine(saves, Path.GetRelativePath(source.Saves, f))));
+        return files;
     }
 
     // Copies with a small progress window; never overwrites a file the game already has.

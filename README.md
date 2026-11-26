@@ -58,6 +58,9 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
    - **Linux (beta):** `FrightWorks.AppImage` (x86_64, glibc 2.34+, Vulkan). `chmod +x` it and run it.
 2. Open **FrightWorks** and press **Play**. The first time, it asks for your disc image.
 
+Or install it from [RecompLauncher](https://recomplauncher.com): it sets up your disc and starts the game for you
+([details](docs/playing.md#installing)).
+
 | Key | |
 | --- | --- |
 | **F10** (or the controller's **Back**/**Select**) | Settings |

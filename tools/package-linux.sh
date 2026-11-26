@@ -13,7 +13,7 @@
 # game keeps the player's files outside it (launcher/DataPaths.cs: $XDG_DATA_HOME/WiiCompiled).
 # Into --feed (default dist/installer-linux): FrightWorks-linux.AppImage, FrightWorks-<ver>-linux-full.nupkg, a -delta.nupkg
 # against the previous Linux release when one exists, and releases.linux.json / assets.linux.json, which the installed
-# launcher reads from GitHub Releases. The Linux channel ("linux") has its own files, so they sit beside the Windows ones
+# launcher reads from GitHub Releases. Also FrightWorks-<ver>-Linux-x64.tar.gz: the portable folder, for RecompLauncher. The Linux channel ("linux") has its own files, so they sit beside the Windows ones
 # in a release. Unless --no-download, the latest release's Linux package is downloaded into the feed first for the delta
 # (none yet before the first Linux release: fine).
 # --version defaults to <Version> in the launcher's .csproj. Uploading is a separate step (docs/testing.md).
@@ -141,6 +141,17 @@ fi
 "$vpk" pack --packId FrightWorks --packVersion "$version" --packDir "$stage" --mainExe FrightWorks --runtime linux-x64 \
     --packTitle FrightWorks --packAuthors Loneranger419 --icon "$work/frightworks.png" --categories Game \
     --outputDir "$feed"
+
+# The same program files as a portable folder in a .tar.gz, the Linux counterpart of the Windows zip: the portable marker
+# keeps the player's files in data/UserData, and recomplauncher.json beside the launcher lets RecompLauncher install, set
+# up and start the game from it. The name says the system and processor, which is how RecompLauncher picks a release file.
+portable="$work/portable/FrightWorks"
+mkdir -p "$work/portable"
+cp -a "$stage" "$portable"
+mkdir -p "$portable/data/UserData/mods"
+echo "FrightWorks: Night of 100 Frights: settings, saves and logs stay in the UserData folder next to this file." >"$portable/data/portable.txt"
+install -m 644 "$root/recomplauncher.json" "$portable/recomplauncher.json"
+tar -C "$work/portable" -czf "$feed/FrightWorks-$version-Linux-x64.tar.gz" FrightWorks
 
 echo "DONE: $feed (FrightWorks $version)"
 ls -l "$feed" | sed 1d | awk '{ printf "  %s  %.0f MB\n", $NF, $5 / 1048576 }'

@@ -217,6 +217,9 @@ struct ProcessTranscriptState {
     bool enabled = false;
     std::filesystem::path path;
     std::ofstream file;
+    // Logs/latest.log: the same transcript at a fixed place, for tools that take the newest .log in the Logs folder
+    // without looking into the run folders (RecompLauncher attaches it to the crash report a player sends).
+    std::ofstream latest;
     std::mutex fileMutex;
     std::atomic_bool initialized{false};
     int savedStdoutFd = -1;
@@ -296,6 +299,10 @@ void WriteProcessTranscriptChunk(ProcessTranscriptState& state, const char* data
     std::lock_guard<std::mutex> lock(state.fileMutex);
     state.file.write(data, static_cast<std::streamsize>(size));
     state.file.flush();
+    if (state.latest) {
+        state.latest.write(data, static_cast<std::streamsize>(size));
+        state.latest.flush();
+    }
 }
 
 void PumpTranscriptPipe(ProcessTranscriptState& state, int readFd, int mirrorFd) {
@@ -485,6 +492,8 @@ void InitializeProcessTranscript(int argc, char** argv) {
 
     state.enabled = true;
     state.path = path;
+    // A second game running at once takes it over; console.log in the run folder stays complete.
+    state.latest.open(GetDefaultRuntimeLogDirectory() / "latest.log", std::ios::out | std::ios::trunc | std::ios::binary);
 
 #if defined(_WIN32)
     const unsigned long pid = ::GetCurrentProcessId();
@@ -494,22 +503,20 @@ void InitializeProcessTranscript(int argc, char** argv) {
 
     const std::string setupVersion = ReadInstalledSetupVersion();
 
-    {
-        std::lock_guard<std::mutex> lock(state.fileMutex);
-        state.file << "[runtime] WiiCompiled "
-                   << (setupVersion.empty() ? "version unknown" : setupVersion) << "\n";
-        state.file << "[runtime] process transcript started\n";
-        state.file << "[runtime] pid=" << pid << "\n";
-        std::string args;
-        for (int i = 0; i < argc; ++i) {
-            if (i != 0) {
-                args += ' ';
-            }
-            args += argv[i];
+    std::ostringstream header;
+    header << "[runtime] WiiCompiled " << (setupVersion.empty() ? "version unknown" : setupVersion) << "\n";
+    header << "[runtime] process transcript started\n";
+    header << "[runtime] pid=" << pid << "\n";
+    std::string args;
+    for (int i = 0; i < argc; ++i) {
+        if (i != 0) {
+            args += ' ';
         }
-        state.file << "[runtime] argv=" << LogPrivacy::Sanitized(std::move(args)) << "\n";
-        state.file.flush();
+        args += argv[i];
     }
+    header << "[runtime] argv=" << LogPrivacy::Sanitized(std::move(args)) << "\n";
+    const std::string headerText = header.str();
+    WriteProcessTranscriptChunk(state, headerText.data(), headerText.size());
 
     state.savedStdoutFd = DuplicateFileDescriptor(GetFileDescriptor(stdout));
     state.savedStderrFd = DuplicateFileDescriptor(GetFileDescriptor(stderr));
@@ -550,6 +557,7 @@ void InitializeProcessTranscript(int argc, char** argv) {
         }
         state.enabled = false;
         state.file.close();
+        state.latest.close();
     };
 
     if (!InstallTranscriptPipe(state.stdoutPipeReadFd, state.stdoutPipeWriteFd, GetFileDescriptor(stdout)) ||
@@ -621,12 +629,10 @@ void ShutdownProcessTranscript(const char* how) {
         state.savedStderrFd = -1;
     }
 
-    {
-        std::lock_guard<std::mutex> lock(state.fileMutex);
-        state.file << "\n[runtime] process transcript ended: " << how << "\n";
-        state.file.flush();
-    }
+    const std::string ended = std::string("\n[runtime] process transcript ended: ") + how + "\n";
+    WriteProcessTranscriptChunk(state, ended.data(), ended.size());
     state.file.close();
+    state.latest.close();
     state.enabled = false;
 }
 
@@ -1515,9 +1521,19 @@ int RuntimeMain(int argc, char** argv) {
         RuntimeConfigFile::LogLoadedConfig();
         // The player's own extracted game (game_folder.h); on Windows it is asked for at first start.
         if (!GameFolder::EnsureConfigured()) {
+#if defined(_WIN32)
+            // The player was asked for the folder and gave up.
             SetRuntimeExitCodeImpl(0);
             ShutdownProcessTranscript("quit (no game folder chosen)");
             return 0;
+#else
+            // Already explained (a message box, or RecompLauncher's message for the code): not a crash, so no fatal
+            // popup or crash file from the exit handler.
+            g_fatalErrorReported.store(true, std::memory_order_release);
+            SetRuntimeExitCodeImpl(GameFolder::kNoGameExitCode);
+            ShutdownProcessTranscript("stopped: no game folder (exit code 3)");
+            return GameFolder::kNoGameExitCode;
+#endif
         }
 #if defined(__ANDROID__)
         // Determinism testing on a phone: debug.no100f.det=1 turns the lockstep timing on,
@@ -1626,7 +1642,9 @@ int RuntimeMain(int argc, char** argv) {
         auroraConfig.windowHeight = RuntimeConfigFile::WindowHeight(auroraConfig.windowHeight);
         auroraConfig.hasWindowPosition = RuntimeConfigFile::WindowPosition(
             auroraConfig.windowPosX, auroraConfig.windowPosY);
-        auroraConfig.allowJoystickBackgroundEvents = true;
+        // Controllers keep working while another window is in front (#123), except under RecompLauncher: its overlay
+        // and its own controller menus use the pad while the game runs, so there the game listens only with focus.
+        auroraConfig.allowJoystickBackgroundEvents = !RuntimeConfigFile::StartedByRecompLauncher();
         auroraConfig.disableCopyFilter = RuntimeConfigFile::DisableCopyFilter(true);
         auroraConfig.msaa = RuntimeConfigFile::Msaa(1);
         auroraConfig.motionBlur = RuntimeConfigFile::MotionBlurShutter(RuntimeConfigFile::MotionBlur());
@@ -1727,7 +1745,7 @@ int RuntimeMain(int argc, char** argv) {
         aurora_set_hdr(RuntimeConfigFile::Hdr(), RuntimeConfigFile::HdrPaperWhiteNits(), RuntimeConfigFile::HdrPeakNits());
         // Known before the window exists when starting fullscreen, so it opens on the chosen monitor. A game starting
         // in a window opens at its own spot and gets the choice in InitializeRuntimeSettings.
-        if (RuntimeConfigFile::DisplayMode("borderless") != "windowed") {
+        if (RuntimeConfigFile::StartDisplayMode() != "windowed") {
             aurora_set_fullscreen_monitor(RuntimeConfigFile::FullscreenDisplay().c_str());
         }
         no100f_light_textures::Apply();  // before the first textures are drawn

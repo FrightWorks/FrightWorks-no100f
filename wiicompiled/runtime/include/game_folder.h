@@ -17,8 +17,13 @@ std::string Problem(const std::filesystem::path& root);
 
 // At startup, before anything reads the disc. Windows: a game folder that is missing or wrong is
 // asked for, with the Dolphin steps and a folder picker (a "game" folder next to the program is
-// picked up by itself), and saved to Config.toml. Elsewhere the app supplies the folder.
-// Returns false when the player gave up (the program then quits).
+// picked up by itself), and saved to Config.toml. Elsewhere the app supplies the folder; if it is
+// missing or wrong all the same, this says so (a message box, except under RecompLauncher).
+// Returns false when the player gave up or there is no game (the program then quits).
 bool EnsureConfigured();
+
+// The exit code when there is no usable game folder and nobody was asked for one (Linux, macOS):
+// recomplauncher.json's exit_codes shows the player a message for it instead of a crash report.
+constexpr int kNoGameExitCode = 3;
 
 } // namespace GameFolder

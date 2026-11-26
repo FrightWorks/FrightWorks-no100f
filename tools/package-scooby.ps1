@@ -1,5 +1,5 @@
-# Assembles dist\FrightWorks: one exe on top (the launcher, named "FrightWorks.exe"), README.txt, and
-# data\ with the game's runtime files. No disc data and no HD texture pack in the package (packs are an opt-in launcher
+# Assembles dist\FrightWorks: one exe on top (the launcher, named "FrightWorks.exe"), README.txt, recomplauncher.json
+# (for RecompLauncher), and data\ with the game's runtime files. No disc data and no HD texture pack in the package (packs are an opt-in launcher
 # download, launcher\TexturePacks.cs).
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 [-Build] [-Zip]
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 -Installer [-Version <v>] [-Feed <dir>] [-NoDownload]
@@ -28,7 +28,11 @@ function Stage([string]$to, [switch]$Installed) {
     New-Item -ItemType Directory -Force "$to\data" | Out-Null
     if (-not $Installed) { New-Item -ItemType Directory -Force "$to\data\UserData\mods" | Out-Null }
     Copy-Item -LiteralPath $launcher -Destination "$to\FrightWorks.exe" -Force
-    if (-not $Installed) { Copy-Item -LiteralPath "$PSScriptRoot\package-README.txt" -Destination "$to\README.txt" -Force }
+    if (-not $Installed) {
+        Copy-Item -LiteralPath "$PSScriptRoot\package-README.txt" -Destination "$to\README.txt" -Force
+        # RecompLauncher reads it from the top of the zip, beside the program, to install, set up and start the game.
+        Copy-Item -LiteralPath "$root\recomplauncher.json" -Destination "$to\recomplauncher.json" -Force
+    }
     $files = 'FrightWorks Game.exe', '*.dll', 'dsp_coef.bin', 'initial_pipeline_cache.db'
     if (-not $Installed) { $files += 'portable.txt' }
     foreach ($f in $files) {

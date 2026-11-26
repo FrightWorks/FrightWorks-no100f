@@ -10,6 +10,12 @@ From the [latest release](https://github.com/FrightWorks/FrightWorks-no100f/rele
 - **Zip** (`FrightWorks-<version>.zip`): unzip anywhere; everything stays in that folder.
 - **Linux AppImage (beta)**: see [Linux](#linux-beta).
 
+Or install it from [RecompLauncher](https://recomplauncher.com), which installs and updates the zip, checks your disc
+image, sets it up, shows the game's settings on its page and in its Big Picture mode, and starts the game directly.
+It's the zip underneath, so your files are where the zip keeps them; if you also have the installed game, the first
+setup copies its saves and settings over. The FrightWorks launcher in that folder still works for what RecompLauncher
+doesn't do (HD texture packs, HDR brightness, button mapping, mods, PS2 and Xbox extras).
+
 Open **FrightWorks** and press **Play**. The first time, it asks for your disc image ([which one](disc.md)).
 
 ## Updates
