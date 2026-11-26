@@ -1521,9 +1521,19 @@ int RuntimeMain(int argc, char** argv) {
         RuntimeConfigFile::LogLoadedConfig();
         // The player's own extracted game (game_folder.h); on Windows it is asked for at first start.
         if (!GameFolder::EnsureConfigured()) {
+#if defined(_WIN32)
+            // The player was asked for the folder and gave up.
             SetRuntimeExitCodeImpl(0);
             ShutdownProcessTranscript("quit (no game folder chosen)");
             return 0;
+#else
+            // Already explained (a message box, or RecompLauncher's message for the code): not a crash, so no fatal
+            // popup or crash file from the exit handler.
+            g_fatalErrorReported.store(true, std::memory_order_release);
+            SetRuntimeExitCodeImpl(GameFolder::kNoGameExitCode);
+            ShutdownProcessTranscript("stopped: no game folder (exit code 3)");
+            return GameFolder::kNoGameExitCode;
+#endif
         }
 #if defined(__ANDROID__)
         // Determinism testing on a phone: debug.no100f.det=1 turns the lockstep timing on,

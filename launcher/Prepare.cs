@@ -3,7 +3,8 @@ using System.Globalization;
 namespace FrightWorks;
 
 // RecompLauncher's setup step (recomplauncher.json "prepare"; https://recomplauncher.com). It runs this exe with no window
-// after it has checked the player's disc image, and again whenever the player picks another copy:
+// after it has checked the player's disc image, again whenever the player picks another copy, and after every update
+// (the disc is unpacked again only for another image: <disc folder>.source records which one it came from):
 //   FrightWorks.exe --prepare --game=<image>
 // It does what this launcher's first start and disc choice do, so the game can start straight away without it:
 // - copies the saves, settings and controls of an installed FrightWorks into a fresh portable copy (DataImport.Installed),
@@ -42,6 +43,21 @@ static class Prepare
 
             ImportInstalled(paths);
 
+            // RecompLauncher runs this step again after every update: the image already unpacked here isn't unpacked
+            // again (1.4 GB). Another image, or a disc folder missing its files, is unpacked as before.
+            string stamp = SourceStamp(image);
+            string stampFile = paths.Disc + ".source";
+            if (File.Exists(stampFile) && File.ReadAllText(stampFile) == stamp &&
+                File.Exists(Path.Combine(paths.Disc, "sys", "main.dol")) &&
+                File.Exists(Path.Combine(paths.Disc, "sys", "boot.bin")))
+            {
+                Progress(discShare, "Your disc is already unpacked");
+                var current = new GameConfig(paths.ConfigPath);
+                current.Set("paths", "dvd_root", paths.DvdRootValue);
+                current.Save();
+                return Finish(paths);
+            }
+
             Progress(0.02, "Unpacking your disc");
             var staging = paths.Disc + ".new";
             if (Directory.Exists(staging)) Directory.Delete(staging, true);
@@ -58,9 +74,11 @@ static class Prepare
                 try { Directory.Delete(staging, true); } catch (Exception) { }
                 return Fail(2, "The disc image is incomplete (it ends early): dump the disc again.");
             }
+            File.Delete(stampFile);  // until the new folder is in place
             if (Directory.Exists(paths.Disc)) Directory.Delete(paths.Disc, true);
             Directory.CreateDirectory(Path.GetDirectoryName(paths.Disc)!);
             Directory.Move(staging, paths.Disc);
+            File.WriteAllText(stampFile, stamp);
             var cfg = new GameConfig(paths.ConfigPath);
             cfg.Set("paths", "dvd_root", paths.DvdRootValue);  // relative to UserData, so the folder can move
             cfg.Save();
@@ -70,11 +88,24 @@ static class Prepare
             return Fail(1, "Setting up the disc failed: " + e.Message);
         }
 
-        Progress(discShare, "Finishing the settings");
+        return Finish(paths);
+    }
+
+    static int Finish(DataPaths paths)
+    {
+        Progress(0.95, "Finishing the settings");
         paths.RemoveOldShippedCopies();
         if (OperatingSystem.IsWindows()) FillHdrDefaults(paths);
         Progress(1, "Ready to play");
         return 0;
+    }
+
+    // Which image the disc folder was unpacked from: its full path, size and last change. Any difference unpacks again,
+    // which is only slower, never wrong.
+    static string SourceStamp(string image)
+    {
+        var info = new FileInfo(image);
+        return $"{info.FullName}\n{info.Length}\n{info.LastWriteTimeUtc.Ticks}\n";
     }
 
     // A fresh portable copy (RecompLauncher's install) of a player who has the installed game too: the same copy the

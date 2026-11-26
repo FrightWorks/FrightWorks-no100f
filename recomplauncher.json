@@ -375,9 +375,13 @@
     { "id": "open_screenshots", "label": "Open screenshots", "help": "F2 in the game takes one.", "open": "screenshots" },
     { "id": "open_mods", "label": "Open the mods folder", "help": "Each mod is a folder; a file named disabled in it turns it off.", "open": "mods" },
     { "id": "open_texture_packs", "label": "Open the texture packs folder", "open": "texture_packs" },
-    { "id": "open_logs", "label": "Open the logs", "help": "latest.log is the last run; each run also has its own folder.", "open": "logs" }
+    { "id": "open_logs", "label": "Open the logs", "help": "latest.log is the last run; each run also has its own folder.", "open": "logs" },
+    { "id": "clear_cache", "label": "Clear the shader cache", "help": "If the picture goes wrong or the game stops while starting after a driver update. It is built again while you play, with some stutter at first.", "clear": "cache" }
   ],
-  "exit_codes": { "0": "ok" },
+  "exit_codes": {
+    "0": "ok",
+    "3": "The game can't find your disc files (data/Disc/DATA). Choose your disc image again so its setup step unpacks it."
+  },
   "looks": { "graphics_key": "video/graphics_api" },
   "system": {
     "windows": { "version": "10" },
