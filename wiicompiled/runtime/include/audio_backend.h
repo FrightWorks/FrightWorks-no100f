@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -49,6 +50,8 @@ private:
     float m_masterVolume = 1.0f;
     bool m_muted = false;
     bool m_reportedDroppedBlock = false;
+    uint32_t m_failedInits = 0;  // failed output opens since the last success; retried every 5 s
+    std::chrono::steady_clock::time_point m_lastFailedInit{};
     std::vector<int16_t> m_convertBuffer;
     CaptureFn m_capture = nullptr;
 };

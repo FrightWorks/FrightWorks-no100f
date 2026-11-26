@@ -558,6 +558,20 @@ useful:
 
 ## 7. Logs, scripted input and other switches
 
+- **What a player's log tells you**: near the top, `[system]` lines (operating system and memory; how the game was
+  started: Steam, gamescope, Wayland or X11, AppImage, Flatpak, RecompLauncher, Wine/Proton; the SDL video driver),
+  the graphics adapter and driver, and `[audio] output:` (SDL audio driver and device format). On a crash: the signal
+  or exception, the game's CPU state, `crash_<reason>.txt` beside the log and a host stack trace (on Linux each frame
+  is `module!symbol` plus `module+0x...`: look the offset up in the same build with `llvm-symbolizer
+  --obj="FrightWorks Game" 0x...`). A freeze leaves `[hang] no new frame for N s` with the game mode, the movie
+  playing and the guest threads; each Bink movie logs `[movie] playing` and `[movie] closed`. The dev menu's `stall`
+  and `crash` commands (`game-logic-debug` skill) make these happen on purpose. A run that ended normally finishes
+  with `process transcript ended: <how>` (window closed, the game reset, an error it reported); a log without that line
+  and without a `crash_*.txt` was ended from outside: killed, out of memory, or power lost. The player's home folder is written
+  as `~` (Linux, macOS) or `%USERPROFILE%` (Windows; under Wine or Proton the Linux home, `Z:\home\<name>`, becomes
+  `~` too) in `console.log` and the crash files, so their user name stays
+  out of what they send (`runtime/include/log_privacy.h`, tested by `recomp_log_privacy_tests`); the copy on the
+  terminal (stderr) keeps the real paths.
 - **Logs**: `Play\UserData\Logs\<time>\console.log`; the newest one shows which level files load (`[dvdread] ...
   xNNN.HIP`). Runtime messages (`RT_LOGF`) go to stderr: launch with
   `Start-Process "Play\FrightWorks Game.exe" -WorkingDirectory Play -RedirectStandardError err.txt`.

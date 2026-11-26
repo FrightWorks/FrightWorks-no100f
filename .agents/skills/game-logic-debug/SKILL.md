@@ -84,6 +84,8 @@ no scene/spot transfer pending, except diagnostic-only files below, `skip`, or, 
 `monster N|NAME on|off`, `ents` (scene entity list), `textures`, `freecam on|off`, `cam X Y Z YAW PITCH` (free camera at
 this pose, degrees; pitch > 0 looks down), `camspin DEG` / `cammove DX DY DZ` (the free camera turns or moves this
 much every frame: steady motion for frame-to-frame checks; 0 stops). These commands don't edit warp flags or save files.
+`stall [SECONDS]` (holds the frame loop, default 15 s: the log's `[hang]` lines) and `crash [segv|abort|ill|fpe]` (crashes
+the game that way) test the crash and hang logging.
 `cutout N` (cut-out draw mode, needs aurora's `AURORA_HAS_CUTOUT_MODE`; F7 cycles), `perf` (draw calls + present
 timing), `mvview MODE [SCALE]` (motion vectors view: 0 off, 1 motion only, 2 over the picture; SCALE = pixels per frame
 for full color), `stageview MODE` (scene stage view: 0 off, 1 tint what is drawn before the stage, 2 the solid scene's

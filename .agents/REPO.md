@@ -292,7 +292,7 @@ To build old source there, set only the paths that differ with `git restore --so
 - Posted Enter doesn't open the pause menu even with focus; posted F2 works without it, and F10/F11 key messages reach the game, but posted mouse clicks don't reach F10 (ImGui).
   F2 with dev tools off is the bare game frame at render size, with no DEV stamp.
 - A Bink movie is open while the handle at `0x80271050` is set; the credits pill shows when the last opened movie is `Credits*.bik`.
-- F10 with a pad has two levels (`settings_overlay.cpp`, `aurora-main/lib/imgui_sdl_owner.cpp`): the tab column (D-pad or left stick moves, A enters, B closes; Resume above the pages, Quit Game below), then inside a page (D-pad moves, B goes back, left stick scrolls); LB/RB change page at either level.
+- F10 (`settings_overlay.cpp`) draws its rows with `menu_rows.h`, which reads the pad and keys itself instead of ImGui navigation: it owns the D-pad, left stick, face buttons, shoulders, Start, arrows, Enter, Space, Q/E and Page Up/Down while the list has input (its window has `NoNavInputs`), and hands them back (`MenuRows::Release`) when a prompt, popup or text field takes over or F10 closes. One row per setting, left/right changes it, A activates, X adds a second binding; LB/RB (Q/E) change page, B/Start resume, Y quits. `Describe` after a row fills the details panel.
   Rebind capture takes every button, and game input stays blocked until the closing button is released.
 - SDL's window and events run on the native main thread and the guest on a worker (`aurora-main/lib/window_owner.cpp`), so dragging or resizing the window doesn't stall the game or audio.
   F10 Quit is a deferred flag; the event queue holds 2048.

@@ -9,6 +9,7 @@
 #include "runtime_config.h"
 #include "runtime_log.h"
 #include "no100f_devmenu.h"
+#include "settings_overlay.h"
 
 #include <aurora/aurora.h>
 #include <SDL3/SDL_gamepad.h>
@@ -278,6 +279,10 @@ extern "C" uint32_t PAD__Read_HLE(uint32_t statusPtr)
         }
     }
     InputBindings::Apply(statuses);
+    if (const uint16_t pressed = settings_overlay::PressedButtons()) {
+        statuses[0].err = PAD_ERR_NONE;
+        statuses[0].button |= pressed;
+    }
     if (const uint16_t pressed = no100f_devmenu::PressedButtons()) {
         statuses[0].err = PAD_ERR_NONE;
         statuses[0].button |= pressed;

@@ -35,6 +35,8 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <chrono>
+#include <csignal>
 #include <cstring>
 #include <cctype>
 #include <cmath>
@@ -49,6 +51,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -86,7 +89,7 @@ constexpr uint32_t kTakeDamage = 0x802459B4u;      // globals + 0x824: sd2.ini T
 // Cutscene manager pointer (globals + 0x860): set while a recorded cutscene plays (h001 intro), null in play.
 constexpr uint32_t kCutsceneMgr = 0x802459F0;
 // globals + 0x3B0: 1 while the player has control; 0 during a recorded cutscene or an in-world camera pan (i001 key).
-constexpr uint32_t kPlayerControl = 0x80245540;
+constexpr uint32_t kPlayerControl = no100f_game_state::kPlayerControlAddress;
 constexpr uint32_t kGodTint = 0x78FF78FFu;         // material colour RGBA while god mode is on
 constexpr uint8_t kNpcBaseType = 0x02;
 
@@ -1359,6 +1362,8 @@ void DrawDiagnostics() {
 //   bloomview MODE      bloom view: 0 off, 1 the glow alone, 2 its source (the light draws alone)
 //   lighttex add|del KEY | list | clear   the bloom's light textures for this run (texture pack names without .dds;
 //                       no100f_light_textures.cpp), "list" to devmenu.log
+//   stall [SECONDS]     hold the frame loop that long (default 15): tests the hang watchdog and crash reports
+//   crash [segv|abort|ill|fpe]   crash the game that way (default segv): tests the crash handlers and crash reports
 void PollCommandFile() {
     static uint32_t tick = 0;
     if (++tick % 30 != 0) return;
@@ -1407,6 +1412,26 @@ void PollCommandFile() {
                 g_spots.push_back(s);
                 SaveSpots();
                 g_status = "Saved " + arg;
+            }
+        } else if (cmd == "stall") {
+            // Test the hang watchdog (vi.cpp) and crash reports: hold the frame loop for N seconds (default 15).
+            const int seconds = std::clamp(arg.empty() ? 15 : std::atoi(arg.c_str()), 1, 600);
+            log << "stall " << seconds << " s" << std::endl;
+            log.flush();
+            std::this_thread::sleep_for(std::chrono::seconds(seconds));
+            g_status = "Stalled " + std::to_string(seconds) + " s";
+        } else if (cmd == "crash") {
+            // Test the crash handlers and crash reports: segv (default), abort, ill or fpe.
+            log << "crash " << (arg.empty() ? "segv" : arg) << std::endl;
+            log.flush();
+            if (arg == "abort") {
+                std::abort();
+            } else if (arg == "ill") {
+                std::raise(SIGILL);
+            } else if (arg == "fpe") {
+                std::raise(SIGFPE);
+            } else {
+                *static_cast<volatile int*>(nullptr) = 0;
             }
         } else if (cmd == "where") {
             g_status = WhereText();

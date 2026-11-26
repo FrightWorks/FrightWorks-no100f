@@ -45,7 +45,12 @@ version**. Old saves are converted, with a backup.
 ## Settings and keys
 
 Settings are in the launcher (**Settings**) and in game (**F10**, or the controller's **Back**/**Select** as long as no
-mapping uses it). The title screen and main menu list the keys in a corner.
+mapping uses it). The title screen and main menu list the keys in a corner. In play, F10 pauses the game (a cutscene
+finishes first, then it pauses) and closing it carries on.
+
+F10 is made for a controller: **LB**/**RB** (or **Q**/**E**) change the page, the D-pad or left stick picks a setting and
+left/right changes it, **A** switches or opens it, **B** or **Start** goes back to the game and **Y** quits. The panel on
+the right explains the selected setting, and the bottom row shows the buttons for it. A mouse and the arrow keys work too.
 
 | Key | |
 | --- | --- |
@@ -61,7 +66,7 @@ uses.
 
 ## Controllers and keyboard
 
-Gamepads work right away. Remap them in the launcher (**Settings > Controls**) or in game (**F10** > Controls). Button
+Gamepads work right away. Remap them in the launcher (**Settings > Controls**) or in game (**F10** > Controller, or Keyboard). Button
 prompts match your Xbox, PlayStation or Nintendo controller and follow remapped face buttons.
 
 Default keyboard: WASD move, arrows camera, Space A, Left Shift B, R X, F Y, C Z, Q/E L/R, Enter Start, IJKL D-pad.
