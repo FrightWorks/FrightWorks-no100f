@@ -406,7 +406,14 @@ void DrawWiiRemoteAccelerometer(uint32_t port) {
 
 // Wii Remotes (Bluetooth) menu: driver switch, pairing help, continuous scanning and the port's controller kind.
 void DrawWiiRemoteSettings(uint32_t selectedGamePort) {
-    if (!ImGui::CollapsingHeader("Wii Remotes (Bluetooth)")) {
+    // ImGui widens a framed header by half the window's side padding, and a page centred in a wide F10 panel has wide
+    // padding (DrawTopBar): for the header, the usual padding.
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const float padding = window->WindowPadding.x;
+    window->WindowPadding.x = std::min(padding, OverlayTheme::Px(18));
+    const bool open = ImGui::CollapsingHeader("Wii Remotes (Bluetooth)");
+    window->WindowPadding.x = padding;
+    if (!open) {
         return;
     }
     if (OverlayTheme::Toggle("Use Wii Remotes / Wii U Pro Controllers", &g_wiiRemotesEnabled)) {
@@ -1953,6 +1960,12 @@ void DrawPage(Page page) {
     }
 }
 
+// The F10 board fills the window: its body at this opacity over the dimming below, so the paused game stays in view.
+constexpr float kFullWindowBoardAlpha = 0.55f;
+// The widest a page's rows get (before the UI scale); on a wider window the page's content is centred in its panel, so
+// a row's label and control stay together instead of a screen apart.
+constexpr float kPageContentMaxWidth = 860.0f;
+
 void DrawTopBar() {
     using namespace OverlayTheme;
     if (!g_topBarVisible) {
@@ -1978,12 +1991,10 @@ void DrawTopBar() {
     background->AddRectFilledMultiColor(ImVec2(v0.x, v1.y - band), v1, Col(Colour::Ink, 0.0f), Col(Colour::Ink, 0.0f),
                                         Col(Colour::Ink, 0.45f * fade), Col(Colour::Ink, 0.45f * fade));
 
-    const float margin = Px(20);
-    const ImVec2 size(std::min(viewport->Size.x - margin * 2, std::clamp(viewport->Size.x * 0.74f, Px(760), Px(1120))),
-                      std::min(viewport->Size.y - margin * 2, std::clamp(viewport->Size.y * 0.82f, Px(520), Px(860))));
-    const ImVec2 center(viewport->Pos.x + viewport->Size.x * 0.5f, viewport->Pos.y + viewport->Size.y * 0.5f);
-    ImGui::SetNextWindowPos(ImVec2(center.x, center.y + (1.0f - fade) * Px(16)), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+    // The board fills the window (maintainer, 2026-11-25), see-through enough that the dimmed game shows behind it. It
+    // fades in without sliding: a slide would uncover a strip of the window's edge.
+    ImGui::SetNextWindowPos(viewport->Pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(viewport->Size, ImGuiCond_Always);
     if (g_panelFocusPending) {
         ImGui::SetNextWindowFocus();
         ImGui::SetNavCursorVisible(g_panelOpenedByPad);
@@ -2019,7 +2030,7 @@ void DrawTopBar() {
         ImDrawList* list = ImGui::GetWindowDrawList();
         const ImVec2 p0 = ImGui::GetWindowPos();
         const ImVec2 p1(p0.x + ImGui::GetWindowWidth(), p0.y + ImGui::GetWindowHeight());
-        Board(list, p0, p1, Px(16));
+        Board(list, p0, p1, 0.0f, kFullWindowBoardAlpha);
 
         // Header: the title sign.
         const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -2034,7 +2045,10 @@ void DrawTopBar() {
         ImGui::SetCursorScreenPos(ImVec2(origin.x, std::max(origin.y + title->FontSize, ImGui::GetCursorScreenPos().y) + Px(14)));
 
         // Pages + content.
-        const float footer = ImGui::GetFontSize() + Px(18);
+        // With Developer tools on, the DEV mark (DrawDevMark) takes the window's bottom-left corner: the footer keys
+        // stay above it.
+        const float devMark = no100f_devmenu::Enabled() ? Heading()->FontSize + Px(14) : 0.0f;
+        const float footer = ImGui::GetFontSize() + Px(18) + devMark;
         const float bodyHeight = ImGui::GetContentRegionAvail().y - footer;
         const float tabsWidth = Px(176);
         // Not while editing a slider: there they are ImGui's slow / fast.
@@ -2088,9 +2102,11 @@ void DrawTopBar() {
         ImGui::EndGroup();
         ImGui::PopStyleVar();
         ImGui::SameLine(0.0f, Px(18));
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, Vec(Colour::Field, 0.72f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Vec(Colour::Field, 0.55f));
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, Px(12));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Px(18), Px(14)));
+        // Side padding centres the content in a wide panel (the scrollbar stays at the panel's edge).
+        const float pagePadding = std::max(Px(18), (ImGui::GetContentRegionAvail().x - Px(kPageContentMaxWidth)) * 0.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pagePadding, Px(14)));
         if (ImGui::BeginChild("##page", ImVec2(0.0f, bodyHeight), ImGuiChildFlags_AlwaysUseWindowPadding)) {
             static Page drawnPage = g_page;
             if (drawnPage != g_page) {

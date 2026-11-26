@@ -193,7 +193,7 @@ void OutlinedText(ImDrawList* list, ImFont* font, ImVec2 pos, ImU32 fill, ImU32 
     list->AddText(font, size, pos, fill, text);
 }
 
-void Board(ImDrawList* list, ImVec2 min, ImVec2 max, float rounding) {
+void Board(ImDrawList* list, ImVec2 min, ImVec2 max, float rounding, float alpha) {
     // Drop shadow, then the gradient body, then the edges.
     for (int i = 3; i >= 1; --i) {
         const float grow = Px(4.0f * static_cast<float>(i));
@@ -201,7 +201,7 @@ void Board(ImDrawList* list, ImVec2 min, ImVec2 max, float rounding) {
                             Col(Colour::Ink, 0.12f), rounding + grow);
     }
     const int start = list->VtxBuffer.Size;
-    list->AddRectFilled(min, max, Col(Colour::BoardTop), rounding);
+    list->AddRectFilled(min, max, Col(Colour::BoardTop, alpha), rounding);  // the gradient below keeps this alpha
     ImGui::ShadeVertsLinearColorGradientKeepAlpha(list, start, list->VtxBuffer.Size, min, ImVec2(min.x, max.y),
                                                   Col(Colour::BoardTop), Col(Colour::BoardBottom));
     list->AddRect(min, max, Col(Colour::Ink), rounding, 0, Px(3));
@@ -334,9 +334,11 @@ void Hint(const char* text) {
 }
 
 void RowLabel(const char* label, float labelWidth, float controlWidth) {
+    // From where the row starts, not the window's edge: a page centred in a wide panel starts well inside it.
+    const float rowStart = ImGui::GetCursorPosX();
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(labelWidth);
+    ImGui::SameLine(rowStart + labelWidth);
     ImGui::SetNextItemWidth(controlWidth);
 }
 
