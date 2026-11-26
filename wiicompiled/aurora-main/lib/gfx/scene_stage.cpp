@@ -75,7 +75,8 @@ Camera g_camera;
 //   unlit KEY                    (a texture drawn as the game draws it: the sky band, painted backdrops)
 //   hide KEY                     (a texture not drawn at all: the game's painted shadow decals)
 //   opaque KEY                   (a texture drawn solid, never blended: trees the game fades near the camera)
-//   emissive KEY STRENGTH        (a texture that glows: lit as usual, then STRENGTH (0..1) of its own colour added)
+//   emissive KEY STRENGTH [HALO] (a texture that glows: lit as usual, then STRENGTH (0..1) of its own colour added;
+//                                 with HALO (0..1), that share of its colour also feeds the bloom, a halo round it)
 //   spin KEY                     (models with this texture turned about their own up axis by an angle from where they
 //                                 stand: pickups the game spins in step start at different angles)
 //   deblue S                     (0..1: how much blue the original textures lose under the new light)
@@ -126,7 +127,7 @@ struct RelightScene {
   std::unordered_set<std::string> unlit;
   std::unordered_set<std::string> hidden;
   std::unordered_set<std::string> opaque;
-  std::unordered_map<std::string, float> emissive;  // "emissive KEY STRENGTH"
+  std::unordered_map<std::string, std::array<float, 2>> emissive;  // "emissive KEY STRENGTH [HALO]"
   std::unordered_set<std::string> spin;
   std::vector<std::array<float, 3>> lamps;    // "lamp X GROUND_Y Z"
   float lampColor[3] = {0.5f, 0.85f, 1.f};   // "lampcolor R G B [RADIUS]": the light each lamp adds at its globe
@@ -188,8 +189,9 @@ RelightScene load_relight_scene() {
         continue;
       }
       float strength = 0.f;
-      if (w == "emissive" && std::sscanf(line, "%15s %127s %f", word, key, &strength) == 3) {
-        s.emissive[key] = std::clamp(strength, 0.f, 1.f);
+      float halo = 0.f;
+      if (w == "emissive" && std::sscanf(line, "%15s %127s %f %f", word, key, &strength, &halo) >= 3) {
+        s.emissive[key] = {std::clamp(strength, 0.f, 1.f), std::clamp(halo, 0.f, 1.f)};
         continue;
       }
       if (w == "moontex" && std::sscanf(line, "%15s %127s", word, key) == 2) {
@@ -1231,7 +1233,14 @@ uint8_t emissive_strength(const std::string& key) noexcept {
   if (key.empty()) return 0;
   const auto& emissive = relight_scene().emissive;
   const auto it = emissive.find(key);
-  return it == emissive.end() ? 0 : static_cast<uint8_t>(std::lround(it->second * 255.f));
+  return it == emissive.end() ? 0 : static_cast<uint8_t>(std::lround(it->second[0] * 255.f));
+}
+
+uint8_t emissive_halo(const std::string& key) noexcept {
+  if (key.empty()) return 0;
+  const auto& emissive = relight_scene().emissive;
+  const auto it = emissive.find(key);
+  return it == emissive.end() ? 0 : static_cast<uint8_t>(std::lround(it->second[1] * 255.f));
 }
 
 bool is_unlit_texture(const std::string& key) noexcept {

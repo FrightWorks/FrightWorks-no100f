@@ -1624,7 +1624,67 @@ struct SkyInsert {
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& passes, u32 idx,
                              int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight = false,
                              bool shadow = false, const SkyInsert* sky = nullptr,
-                             int lampSlot = -1, bool emissive = false);
+                             int lampSlot = -1, bool emissive = false, bool halo = false);
+
+static bool pass_has(const RenderPass& rp, bool gx::DrawData::*flag) {
+  const auto has = [flag](const CommandList& list) {
+    return std::any_of(list.begin(), list.end(), [flag](const Command& command) {
+      return command.type == CommandType::Draw && command.data.draw.type == ShaderType::GX &&
+             command.data.draw.gx.*flag;
+    });
+  };
+  return has(rp.commands) || has(rp.deferred) || has(rp.translucent);
+}
+
+// Reimagined emissive halos ("emissive KEY STRENGTH HALO"): the halo draws of the EFB passes before `afterPass`, drawn
+// once more alone over black with their halo pipelines into the halo's target, against the depth kept at the stage;
+// then bloom::encode_halo blurs that a short way and adds it over the EFB, a thin glow round them.
+static void encode_halo(const wgpu::CommandEncoder& cmd, const std::vector<RenderPass>& renderPasses, u32 afterPass,
+                        int32_t interpolatedFrame, DebugFrameData& debugFrame) {
+  const auto& after = renderPasses[afterPass];
+  std::vector<u32> passes;
+  for (u32 i = 0; i < afterPass; ++i) {
+    if (renderPasses[i].colorView.Get() == after.colorView.Get() && pass_has(renderPasses[i], &gx::DrawData::halo))
+      passes.push_back(i);
+  }
+  if (passes.empty())
+    return;
+  const auto target = bloom::halo_target(after.targetSize, after.msaaSamples);
+  const bool motionPass =
+      after.motionView != nullptr && after.motionDepthView != nullptr && after.motionMarkView != nullptr;
+  const auto scratch = motionPass ? bloom::motion_scratch(after.targetSize, after.msaaSamples) : bloom::MotionScratch{};
+  const std::array attachments{
+      wgpu::RenderPassColorAttachment{
+          .view = target.view,
+          .resolveTarget = target.resolve,
+          .loadOp = wgpu::LoadOp::Clear,
+          .storeOp = target.resolve ? wgpu::StoreOp::Discard : wgpu::StoreOp::Store,
+          .clearValue = {.r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0},
+      },
+      wgpu::RenderPassColorAttachment{
+          .view = scratch.motion, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+      wgpu::RenderPassColorAttachment{
+          .view = scratch.depth, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+      wgpu::RenderPassColorAttachment{
+          .view = scratch.mark, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+  };
+  const wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{
+      .view = bloom::stage_depth(),
+      .depthLoadOp = wgpu::LoadOp::Load,
+      .depthStoreOp = wgpu::StoreOp::Store,  // the bloom draws against it next
+  };
+  const wgpu::RenderPassDescriptor renderPassDescriptor{
+      .label = "Emissive halos",
+      .colorAttachmentCount = motionPass ? attachments.size() : 1,
+      .colorAttachments = attachments.data(),
+      .depthStencilAttachment = &depthStencilAttachment,
+  };
+  auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
+  for (const u32 i : passes)
+    render_pass_impl(pass, renderPasses, i, interpolatedFrame, debugFrame, false, false, nullptr, -1, false, true);
+  pass.End();
+  bloom::encode_halo(cmd, after.colorView, after.targetSize, after.msaaSamples, after.sceneCamera.viewport);
+}
 
 // The bloom (bloom.hpp), at the scene stage: the frame's light draws up to the end of its see-through tail
 // (gx::DrawData::emitsLight, in the EFB passes before `afterPass`, the pass after the tail) are drawn once more, alone
@@ -1635,6 +1695,8 @@ static void encode_bloom(const wgpu::CommandEncoder& cmd, const std::vector<Rend
                          int32_t interpolatedFrame, DebugFrameData& debugFrame) {
   if (!bloom::wanted() || !bloom::stage_depth())
     return;
+  // The halos first: the bloom's last pass lets the kept depth go.
+  encode_halo(cmd, renderPasses, afterPass, interpolatedFrame, debugFrame);
   const auto& after = renderPasses[afterPass];
   const auto target = bloom::tail_target(after.targetSize, after.msaaSamples);
   const bool motionPass =
@@ -2179,7 +2241,7 @@ void after_submit() noexcept {
 
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& renderPasses, u32 idx,
                              int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight, bool shadow,
-                             const SkyInsert* sky, int lampSlot, bool emissive) {
+                             const SkyInsert* sky, int lampSlot, bool emissive, bool halo) {
   // Per-invocation, not per-process: two encoders can be recording at once.
   gx::DrawEncodeState encodeState{};
   encodeState.boundTextureBindGroup = gx::g_emptyTextureBindGroup.Get();
@@ -2296,6 +2358,8 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
       case ShaderType::GX: {
         if (onlyLight && !draw.gx.emitsLight)
           break;
+        if (halo && !draw.gx.halo)
+          break;
         if (emissive && !draw.gx.emissive)
           break;
         const gfx::Range* shadowRange = !shadow        ? nullptr
@@ -2309,16 +2373,16 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
             draw.gx.interpolatedUniformRanges[interpolatedFrame].size != 0) {
           uniformOverride = &draw.gx.interpolatedUniformRanges[interpolatedFrame];
         }
-        if (emissive) {
+        if (emissive || halo) {
           gx::DrawData replay = draw.gx;
-          replay.pipeline = draw.gx.emissivePipeline;
+          replay.pipeline = halo ? draw.gx.haloPipeline : draw.gx.emissivePipeline;
           gx::render(replay, pass, encodeState, renderPasses[idx].requireReadyPipelines, uniformOverride);
         } else {
           gx::render(draw.gx, pass, encodeState, renderPasses[idx].requireReadyPipelines, uniformOverride);
         }
       } break;
       case ShaderType::Clear:
-        if (!onlyLight && !shadow && !emissive)
+        if (!onlyLight && !shadow && !emissive && !halo)
           clear::render(draw.clear, pass, renderPasses[idx].targetSize, encodeState.currentPipeline);
         break;
       }

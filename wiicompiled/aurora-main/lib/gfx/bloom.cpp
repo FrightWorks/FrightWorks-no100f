@@ -37,6 +37,11 @@ constexpr float kOnLight = 0.3f;
 // The blur's sizes: half the picture, then halving; the last is 1/64 of the picture's height, so the glow's reach
 // follows the picture, not its resolution.
 constexpr size_t kLevels = 6;
+// Emissive halos (encode_halo): blurred over fewer sizes (half, quarter, eighth), so they stay close to what glows,
+// added at this strength, with this share of it on the glowing thing itself.
+constexpr size_t kHaloLevels = 3;
+constexpr float kHaloIntensity = 3.f;
+constexpr float kHaloOnLight = 0.4f;
 
 std::atomic<float> g_strength{0.f};
 std::atomic_int g_viewMode{0};
@@ -192,11 +197,17 @@ std::array<webgpu::TextureWithSampler, 3> g_motionScratch;
 // The EFB's depth at the scene stage.
 webgpu::TextureWithSampler g_stageDepth;
 std::array<webgpu::TextureWithSampler, kLevels> g_levels;
+// The halo draws alone (as g_tail / g_tailResolved) and their glow at its sizes.
+webgpu::TextureWithSampler g_haloTail;
+webgpu::TextureWithSampler g_haloTailResolved;
+std::array<webgpu::TextureWithSampler, kHaloLevels> g_haloLevels;
 // Whether encode made the glow for this frame's view (encode_view shows it once).
 bool g_viewReady = false;
 // One parameters buffer per draw: source, the halvings, the doublings, composite.
 constexpr size_t kDraws = 2 + 2 * (kLevels - 1);
-std::array<wgpu::Buffer, kDraws> g_params;
+// Then the halo's: source, halvings, doublings, composite.
+constexpr size_t kHaloDraws = 2 + 2 * (kHaloLevels - 1);
+std::array<wgpu::Buffer, kDraws + kHaloDraws> g_params;
 
 constexpr wgpu::TextureFormat kGlowFormat = wgpu::TextureFormat::RGBA16Float;
 
@@ -487,6 +498,59 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
        {.tail = &g_tailResolved.view, .src = &g_levels[0].view}, &scissor);
 }
 
+TailTarget halo_target(wgpu::Extent3D size, uint32_t samples) {
+  const auto format = webgpu::g_graphicsConfig.surfaceConfiguration.format;
+  prepare(g_haloTailResolved, size, "Emissive halos", format);
+  if (samples <= 1) {
+    g_haloTail = {};
+    return {.view = g_haloTailResolved.view};
+  }
+  prepare(g_haloTail, size, "Emissive halos (multisampled)", format, samples);
+  return {.view = g_haloTail.view, .resolve = g_haloTailResolved.view};
+}
+
+void encode_halo(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, wgpu::Extent3D size,
+                 uint32_t samples, const webgpu::Viewport& viewport) {
+  if (!g_haloTailResolved.texture || !color || size.width == 0 || size.height == 0 || view() != 0) {
+    return;
+  }
+  ZoneScoped;
+  build_pipelines(webgpu::g_graphicsConfig.surfaceConfiguration.format, samples);
+  std::array<wgpu::Extent3D, kHaloLevels> sizes{};
+  sizes[0] = half_of(size);
+  for (size_t i = 1; i < kHaloLevels; ++i)
+    sizes[i] = half_of(sizes[i - 1]);
+  for (size_t i = 0; i < kHaloLevels; ++i)
+    prepare(g_haloLevels[i], sizes[i], "Emissive halo glow");
+  auto params = picture_params(size, viewport);
+  // All of the halo draws glow, dark or grey (their share is already in their colour).
+  params.tune[0] = 0.f;
+  params.tune[1] = 0.01f;
+  params.tune2 = {kHaloOnLight, 0.f, 0.f, 1.f};
+  size_t slot = kDraws;
+  params.dst = size_of(sizes[0]);
+  draw(encoder, Kind::Source, slot++, params, g_haloLevels[0].view, sizes[0], false,
+       {.tail = &g_haloTailResolved.view});
+  for (size_t i = 1; i < kHaloLevels; ++i) {
+    params.src = size_of(sizes[i - 1]);
+    params.dst = size_of(sizes[i]);
+    draw(encoder, Kind::Down, slot++, params, g_haloLevels[i].view, sizes[i], false,
+         {.src = &g_haloLevels[i - 1].view});
+  }
+  for (size_t i = kHaloLevels - 1; i > 0; --i) {
+    params.src = size_of(sizes[i]);
+    params.dst = size_of(sizes[i - 1]);
+    draw(encoder, Kind::Up, slot++, params, g_haloLevels[i - 1].view, sizes[i - 1], true,
+         {.src = &g_haloLevels[i].view});
+  }
+  params.src = size_of(sizes[0]);
+  params.dst = size_of(size);
+  params.tune[2] = kHaloIntensity / static_cast<float>(kHaloLevels);
+  const auto scissor = picture_scissor(params);
+  draw(encoder, Kind::Composite, slot, params, color, size, true,
+       {.tail = &g_haloTailResolved.view, .src = &g_haloLevels[0].view}, &scissor);
+}
+
 void encode_view(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, wgpu::Extent3D size,
                  uint32_t samples, const webgpu::Viewport& viewport) {
   const int mode = view();
@@ -514,6 +578,9 @@ void release_unused_targets() noexcept {
     g_motionScratch = {};
     g_stageDepth = {};
     g_levels = {};
+    g_haloTail = {};
+    g_haloTailResolved = {};
+    g_haloLevels = {};
   }
 }
 
@@ -527,6 +594,9 @@ void shutdown() noexcept {
   g_motionScratch = {};
   g_stageDepth = {};
   g_levels = {};
+  g_haloTail = {};
+  g_haloTailResolved = {};
+  g_haloLevels = {};
   g_params = {};
 }
 } // namespace aurora::gfx::bloom

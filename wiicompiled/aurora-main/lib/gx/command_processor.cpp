@@ -3423,6 +3423,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   bool opaque = false;
   bool spin = false;
   u8 emissive = 0;
+  u8 halo = 0;
   if (gfx::scene_stage::relighting()) {
     spin = samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_spin_texture);
     if (draws_game_shadow(pipelineStatePtr->shaderInfo) ||
@@ -3440,6 +3441,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
         const auto& bind = g_gxState.textures[i];
         if (pipelineStatePtr->shaderInfo.sampledTextures.test(i) && bind) {
           emissive = std::max(emissive, gfx::scene_stage::emissive_strength(bind.ref->debugKey));
+          halo = std::max(halo, gfx::scene_stage::emissive_halo(bind.ref->debugKey));
         }
       }
     }
@@ -3540,13 +3542,20 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   };
   // Reimagined emissive: the game's own pipeline with ShaderConfig.emissive (straight to a pipeline ref, not through
   // cached_pipeline_state, whose slots the memos above point into).
-  if (emissive != 0) {
+  if (emissive != 0 || halo != 0) {
     PipelineConfig emissiveConfig{};
     populate_pipeline_config(emissiveConfig, prim, fmt);
     if (emissiveConfig.shaderConfig.relight) {
-      emissiveConfig.shaderConfig.emissive = emissive;
-      draw.emissive = true;
-      draw.emissivePipeline = gfx::pipeline_ref(emissiveConfig);
+      if (emissive != 0) {
+        emissiveConfig.shaderConfig.emissive = emissive;
+        draw.emissive = true;
+        draw.emissivePipeline = gfx::pipeline_ref(emissiveConfig);
+      }
+      if (halo != 0) {
+        emissiveConfig.shaderConfig.emissive = halo;
+        draw.halo = true;
+        draw.haloPipeline = gfx::pipeline_ref(emissiveConfig);
+      }
     }
   }
   const auto cutoutMode = cutout_mode();

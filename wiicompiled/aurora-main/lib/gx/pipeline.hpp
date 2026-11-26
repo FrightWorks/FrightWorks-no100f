@@ -31,6 +31,9 @@ struct DrawData {
   // its colour scaled and added, depth equal, no depth write), so it glows on top of the new light.
   bool emissive = false;
   gfx::PipelineRef emissivePipeline{};
+  // Its halo: drawn with this pipeline (the same, at the HALO share) into the bloom's light target.
+  bool halo = false;
+  gfx::PipelineRef haloPipeline{};
 };
 
 constexpr uint32_t GXPipelineConfigVersion = 23;  // 21: ShaderConfig.relight (relighting experiment); 22: deblue;

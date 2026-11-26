@@ -55,6 +55,18 @@ struct MotionScratch {
   wgpu::TextureView mark;
 };
 MotionScratch motion_scratch(wgpu::Extent3D size, uint32_t samples);
+// Reimagined emissive halos: the target their draws are drawn into alone (as tail_target), then encode_halo blurs it a
+// short way (kHaloLevels sizes, a thin glow) and adds it over `color` at its own strength (the halo draws' share is in
+// their pipelines; the bloom slider only has to be on).
+TailTarget halo_target(wgpu::Extent3D size, uint32_t samples);
+void encode_halo(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, wgpu::Extent3D size,
+                 uint32_t samples, const webgpu::Viewport& viewport);
+// Reimagined emissive halos: the target their draws are drawn into alone (as tail_target), then encode_halo blurs it a
+// short way (kHaloLevels sizes, a thin glow) and adds it over `color` at its own strength (the halo draws' share is in
+// their pipelines; the bloom slider only has to be on).
+TailTarget halo_target(wgpu::Extent3D size, uint32_t samples);
+void encode_halo(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, wgpu::Extent3D size,
+                 uint32_t samples, const webgpu::Viewport& viewport);
 // At the scene stage: keeps a copy of the EFB's depth (`depth`, `samples` per pixel) to draw the lights against
 // (stage_depth; empty before the first copy).
 void encode_keep_depth(const wgpu::CommandEncoder& encoder, const wgpu::Texture& depth, uint32_t samples);

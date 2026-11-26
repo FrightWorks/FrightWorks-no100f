@@ -85,7 +85,7 @@ is -1. `NO100F_REIMAGINED` (or the older `NO100F_RELIGHT`) overrides that for ev
 | `unlit KEY` | Texture drawn as the game draws it |
 | `hide KEY` | Texture not drawn |
 | `opaque KEY` | Texture drawn solid, never blended (trees the game fades near the camera) |
-| `emissive KEY STRENGTH` | Texture that glows: lit as usual, then STRENGTH (0..1) of its own colour added on top (drawn once more after the relighting, depth equal, no depth write) |
+| `emissive KEY STRENGTH [HALO]` | Texture that glows: lit as usual, then STRENGTH (0..1) of its own colour added on top (drawn once more after the relighting, depth equal, no depth write). With HALO (0..1), that share of its colour is also blurred a short way (3 sizes, not the bloom's 6) and added round it: a thin halo. Needs the bloom on (any strength); the halo's own strength doesn't follow the slider |
 | `spin KEY` | Models with this texture start their spin at an angle from where they stand |
 | `sky ZR ZG ZB HR HG HB` | Night sky: zenith and horizon colours (hide the game's sky band) |
 | `moondisc RADIUS_DEG R G B` | The moon in the sky at the moon's direction |
