@@ -421,6 +421,11 @@ target_include_directories(recomp_monitor_labels_tests PRIVATE "${CMAKE_CURRENT_
 target_compile_features(recomp_monitor_labels_tests PRIVATE cxx_std_20)
 add_test(NAME recomp_monitor_labels_tests COMMAND recomp_monitor_labels_tests)
 
+add_executable(recomp_log_privacy_tests "${CMAKE_CURRENT_LIST_DIR}/tests/log_privacy_tests.cpp")
+target_include_directories(recomp_log_privacy_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
+target_compile_features(recomp_log_privacy_tests PRIVATE cxx_std_20)
+add_test(NAME recomp_log_privacy_tests COMMAND recomp_log_privacy_tests)
+
 add_executable(recomp_hdr_presentation_tests "${CMAKE_CURRENT_LIST_DIR}/tests/hdr_presentation_tests.cpp")
 target_include_directories(recomp_hdr_presentation_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../aurora-main/lib")
 target_compile_features(recomp_hdr_presentation_tests PRIVATE cxx_std_17)

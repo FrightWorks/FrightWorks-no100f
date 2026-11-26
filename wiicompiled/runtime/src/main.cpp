@@ -94,6 +94,7 @@
 #include "runtime_product.h"
 #include "recomp_mod_loader.h"
 #include "system_report.h"
+#include "log_privacy.h"
 #include <aurora/aurora.h>
 #include <aurora/gfx.h>
 #include <dolphin/gx/GXAurora.h>
@@ -299,6 +300,9 @@ void WriteProcessTranscriptChunk(ProcessTranscriptState& state, const char* data
 
 void PumpTranscriptPipe(ProcessTranscriptState& state, int readFd, int mirrorFd) {
     std::array<char, 4096> buffer{};
+    // console.log gets whole lines with the home folder rewritten (log_privacy.h); a line is held until its end
+    // arrives, or until the pipe is drained (a prompt without a newline, the last words before a crash).
+    std::string pending;
     for (;;) {
 #if defined(_WIN32)
         const int bytesRead = _read(readFd, buffer.data(), static_cast<unsigned int>(buffer.size()));
@@ -328,7 +332,19 @@ void PumpTranscriptPipe(ProcessTranscriptState& state, int readFd, int mirrorFd)
             }
         }
 
-        WriteProcessTranscriptChunk(state, buffer.data(), static_cast<size_t>(bytesRead));
+        pending.append(buffer.data(), static_cast<size_t>(bytesRead));
+        const bool drained = static_cast<size_t>(bytesRead) < buffer.size();
+        const size_t end = drained ? pending.size() : pending.rfind('\n') + 1;  // npos + 1 == 0: no whole line yet
+        if (end != 0) {
+            std::string lines = pending.substr(0, end);
+            pending.erase(0, end);
+            LogPrivacy::Apply(lines, LogPrivacy::CurrentRules());
+            WriteProcessTranscriptChunk(state, lines.data(), lines.size());
+        }
+    }
+    if (!pending.empty()) {
+        LogPrivacy::Apply(pending, LogPrivacy::CurrentRules());
+        WriteProcessTranscriptChunk(state, pending.data(), pending.size());
     }
 }
 
@@ -484,14 +500,14 @@ void InitializeProcessTranscript(int argc, char** argv) {
                    << (setupVersion.empty() ? "version unknown" : setupVersion) << "\n";
         state.file << "[runtime] process transcript started\n";
         state.file << "[runtime] pid=" << pid << "\n";
-        state.file << "[runtime] argv=";
+        std::string args;
         for (int i = 0; i < argc; ++i) {
             if (i != 0) {
-                state.file << ' ';
+                args += ' ';
             }
-            state.file << argv[i];
+            args += argv[i];
         }
-        state.file << "\n";
+        state.file << "[runtime] argv=" << LogPrivacy::Sanitized(std::move(args)) << "\n";
         state.file.flush();
     }
 
@@ -795,7 +811,7 @@ void WriteFatalLogImpl(std::string_view reason, std::string_view extraDetails = 
     out << "[runtime] timestamp(seconds): " << nowSecs << std::endl;
     out << "[runtime] entry: " << (g_lastEntryLabel.empty() ? "<unknown>" : g_lastEntryLabel) << std::endl;
     if (!extraDetails.empty()) {
-        out << "[runtime] details: " << extraDetails << std::endl;
+        out << "[runtime] details: " << LogPrivacy::Sanitized(std::string(extraDetails)) << std::endl;
     }
     if (missingGuestTarget) {
         out << "[runtime] guest jump target: 0x" << std::hex << std::uppercase
