@@ -1245,7 +1245,14 @@ void ReportUnhandledSignalFault(int sig, void* faultAddress) {
 }
 
 void PosixMemoryFaultHandler(int sig, siginfo_t* info, void* ucontextVoid) {
-    void* faultAddress = info != nullptr ? info->si_addr : nullptr;
+    // si_addr means something only when the CPU raised the signal (si_code > 0); a signal another process or raise()
+    // sent (kill -SEGV, si_code <= 0) carries the sender's pid and uid there instead.
+    const bool sentByProcess = info != nullptr && info->si_code <= 0;
+    void* faultAddress = info != nullptr && !sentByProcess ? info->si_addr : nullptr;
+    if (sentByProcess) {
+        RT_LOGF(RT_TAG_RUNTIME, "Signal %d was sent by a process (pid %d), not raised by the CPU\n", sig,
+                static_cast<int>(info->si_pid));
+    }
     bool isWrite = false;
 #if defined(__x86_64__)
     // Standard glibc technique for a POSIX fastmem-style handler: bit 1 (0x2) of the hardware
