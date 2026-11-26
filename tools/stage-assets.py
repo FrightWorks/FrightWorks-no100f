@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Puts the files the game ships besides the program into its folder (beside "FrightWorks Game.exe"): the button prompt
-icons in button_icons (tools/make-button-icons.py). They are program files: an installed game's folder is replaced on
-every update.
+icons in button_icons (tools/make-button-icons.py) and Reimagined's light files in reimagined (one per level, from the
+repo's reimagined folder). They are program files: an installed game's folder is replaced on every update.
 
 No build ships an HD texture pack since 2026-11-24: packs hold pictures made from the game's textures, so the launcher
 downloads one only when the player chooses it (launcher/TexturePacks.cs, into UserData/texture_packs). A copy of
@@ -105,7 +105,31 @@ def stage(game_dir, required):
         except OSError:
             pass
 
-    # 2. Button prompt icons, drawn from tools/button-art in the HD pack's layout. Rebuilt when the tool or the art is
+    # 2. Reimagined's light files (reimagined/<level>.txt): copied when changed; one gone from the repo goes here too.
+    source = os.path.join(ROOT, "reimagined")
+    target = os.path.join(game_dir, "reimagined")
+    if not os.path.isdir(source):
+        fail("no %s: Reimagined has no light files" % source, required)
+    else:
+        os.makedirs(target, exist_ok=True)
+        wanted = sorted(name for name in os.listdir(source) if name.lower().endswith(".txt"))
+        copied = 0
+        for name in wanted:
+            src, dst = os.path.join(source, name), os.path.join(target, name)
+            with open(src, "rb") as f:
+                data = f.read()
+            if os.path.isfile(dst):
+                with open(dst, "rb") as f:
+                    if f.read() == data:
+                        continue
+            shutil.copyfile(src, dst)
+            copied += 1
+        for name in os.listdir(target):
+            if name.lower().endswith(".txt") and name not in wanted:
+                os.remove(os.path.join(target, name))
+        say("Reimagined light files: %s (%d, %d copied)" % (target, len(wanted), copied))
+
+    # 3. Button prompt icons, drawn from tools/button-art in the HD pack's layout. Rebuilt when the tool or the art is
     # newer than the icons (or the folder has the old layout).
     icons = os.path.join(game_dir, "button_icons")
     layout = os.path.join(icons, "layout.txt")
@@ -136,7 +160,7 @@ def stage(game_dir, required):
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(description="Stages the button icons into a game folder.")
+    parser = argparse.ArgumentParser(description="Stages the button icons and Reimagined's light files into a game folder.")
     parser.add_argument("--game-dir", required=True, help="the folder beside FrightWorks Game.exe")
     parser.add_argument("--required", action="store_true", help="stop on anything missing instead of warning")
     args = parser.parse_args(argv)

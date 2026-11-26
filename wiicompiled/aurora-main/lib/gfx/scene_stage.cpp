@@ -137,13 +137,27 @@ struct RelightScene {
   float starDensity = 0.035f;
 };
 
+// The light file: the one set_relight_file gave (the runtime: this level's), else NO100F_REIMAGINED / NO100F_RELIGHT.
+std::mutex g_relightPathMutex;
+std::string g_relightPath;
+bool g_relightPathSet = false;
+
 RelightScene load_relight_scene() {
     RelightScene s;
-    const char* path = std::getenv("NO100F_REIMAGINED");
-    if (path == nullptr || *path == '\0') path = std::getenv("NO100F_RELIGHT");
-    if (path == nullptr || *path == '\0') {
+    std::string chosen;
+    {
+      std::lock_guard lock(g_relightPathMutex);
+      if (g_relightPathSet) chosen = g_relightPath;
+    }
+    if (chosen.empty()) {
+      const char* env = std::getenv("NO100F_REIMAGINED");
+      if (env == nullptr || *env == '\0') env = std::getenv("NO100F_RELIGHT");
+      if (env != nullptr && !g_relightPathSet) chosen = env;
+    }
+    if (chosen.empty()) {
       return s;
     }
+    const char* path = chosen.c_str();
     FILE* f = std::fopen(path, "r");
     if (f == nullptr) {
       Log.warn("Relight: can't open {}", path);
@@ -1178,6 +1192,16 @@ bool relighting() noexcept { return g_relightOn.load(std::memory_order_relaxed) 
 int relight_state() noexcept {
   if (!relight_scene().loaded) return -1;
   return g_relightOn.load(std::memory_order_relaxed) ? 1 : 0;
+}
+
+void set_relight_file(const std::string& path) noexcept {
+  {
+    std::lock_guard lock(g_relightPathMutex);
+    g_relightPath = path;
+    g_relightPathSet = true;
+  }
+  g_relightScene.store(new RelightScene(load_relight_scene()), std::memory_order_release);
+  g_relightGeneration.fetch_add(1, std::memory_order_relaxed);
 }
 
 void set_relight(int mode) noexcept {

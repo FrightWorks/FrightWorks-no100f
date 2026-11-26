@@ -62,6 +62,7 @@ struct RuntimeUserConfig {
     std::optional<bool> fps60;
     std::optional<std::string> holiday;  // NO100F [game] holiday: "auto" (today), "off", "confetti" or "MM-DD"
     std::optional<bool> devTools;        // NO100F [game] dev_tools: F8 dev menu + DEV build mark (launcher Extras)
+    std::optional<bool> reimagined;      // NO100F [game] reimagined: the experimental new look (launcher Extras)
     std::optional<bool> recordAudio;     // NO100F [game] record_audio: F3 videos (dev tools) include the game's sound
     std::optional<bool> captureOverlay;  // NO100F [game] capture_overlay: F2/F3 captures show the F8/F10 menus (dev tools)
     std::optional<uint32_t> msaa;
@@ -409,6 +410,8 @@ inline void EnsureConfigFile() {
               "# \"off\" = never, \"confetti\" = fireworks with the colours mixed through each burst,\n"
               "# or \"MM-DD\" to pretend it is that day (e.g. \"10-31\").\n"
               "holiday = \"auto\"\n"
+              "# Reimagined (experimental): a new look where a level has one (reimagined/<level>.txt beside the game).\n"
+              "reimagined = false\n"
               "# Developer tools: the F8 dev menu (travel, spots, free camera, texture finder) and a DEV build mark.\n"
               "dev_tools = false\n"
               "# With the developer tools on, F3 records a video of the game (needs ffmpeg); this adds the game's sound.\n"
@@ -608,6 +611,7 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
     if (auto value = FindConfigValue<bool>(document, "game", "dev_tools")) {
         config.devTools = *value;
     }
+    config.reimagined = FindConfigValue<bool>(document, "game", "reimagined");
     config.recordAudio = FindConfigValue<bool>(document, "game", "record_audio");
     config.captureOverlay = FindConfigValue<bool>(document, "game", "capture_overlay");
     if (auto value = FindConfigValue<std::string>(document, "game", "holiday"); value && IsSupportedHoliday(*value)) {
@@ -1315,6 +1319,12 @@ inline bool DevTools() {
         return *env != '0';
     }
     return Get().devTools.value_or(false);
+}
+
+// NO100F [game] reimagined: the experimental new look, for the levels with a light file (reimagined/<level>.txt beside
+// the game). Read at startup (the launcher's Extras option); the dev menu's "reimagined 0|1" switches it in the game.
+inline bool Reimagined() {
+    return Get().reimagined.value_or(false);
 }
 
 // NO100F [game] record_audio: F3 videos (developer tools) include the game's own sound (default on). Read when a

@@ -268,6 +268,8 @@ int aurora_get_scene_stage_view();
 // texture rules. 0 off, 1 on, 2 reload the file. Get: -1 = no file.
 void aurora_set_reimagined(int mode);
 int aurora_get_reimagined();
+// Reimagined: the light file from now on (the level's; NULL or "" = none, the game as made). Read at once.
+void aurora_set_reimagined_file(const char* path);
 // Reimagined: blocks of the game's data (a level's texture assets) where a texture the file names is looked for when no
 // pack has it. Clear, then add.
 void aurora_clear_texture_sources();

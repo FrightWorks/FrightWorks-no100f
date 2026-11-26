@@ -77,6 +77,8 @@ bool relighting() noexcept;
 // -1 = no light file, 0 = off, 1 = on. set_relight: 0 off, 1 on, 2 reload the light file (dev menu "relight").
 int relight_state() noexcept;
 void set_relight(int mode) noexcept;
+// The light file to use from now on (read at once; empty = none): the runtime gives each level's.
+void set_relight_file(const std::string& path) noexcept;
 // Changes with every set_relight: the pipeline state memo is redone (the relight bit is in the pipeline config).
 unsigned relight_generation() noexcept;
 // The light file's unlit textures ("unlit KEY", KEY as TextureRef::debugKey): drawn as the game draws them.

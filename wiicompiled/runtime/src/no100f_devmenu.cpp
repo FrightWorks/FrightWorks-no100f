@@ -278,7 +278,7 @@ uint32_t CurrentScenePtr() {
     return IsGuestPtr(scene) ? scene : 0;
 }
 bool InPlay();
-uint64_t g_reimaginedToastUntil = 0;
+uint32_t CurrentSceneId();
 
 // Reimagined experiment: the file's entity moves ("move ID X Y Z [YAW]", ID in hex, YAW in degrees, 0 = facing +z).
 // While Reimagined is on and the game is in play, the entity's frame is held there every frame (its AI does not
@@ -362,14 +362,29 @@ void AddReimaginedTextureSource(const std::string& file) {
     RT_LOGF(RT_TAG_RUNTIME, "[devmenu] reimagined: %zu texture assets from %s\n", added, file.c_str());
 }
 
+// Reimagined's light file: NO100F_REIMAGINED (or NO100F_RELIGHT) when set (test runs: that file for every level), else
+// this level's reimagined/<level>.txt beside the game, when there is one.
+std::string g_reimaginedLevel;
+std::string g_reimaginedPath;
+
+std::string ReimaginedFileFor(const std::string& level) {
+    const char* env = std::getenv("NO100F_REIMAGINED");
+    if (env == nullptr || *env == '\0') env = std::getenv("NO100F_RELIGHT");
+    if (env != nullptr && *env != '\0') return env;
+    if (level.empty()) return {};
+    const auto dir = RuntimeConfigFile::ExecutableDirectory();
+    if (!dir) return {};
+    const auto file = *dir / "reimagined" / (level + ".txt");
+    std::error_code error;
+    return std::filesystem::is_regular_file(file, error) ? file.string() : std::string{};
+}
+
 void LoadReimaginedMoves() {
     g_reimaginedMoves.clear();
     g_reimaginedMovesLoaded = true;
     aurora_clear_texture_sources();
-    const char* path = std::getenv("NO100F_REIMAGINED");
-    if (path == nullptr || *path == '\0') path = std::getenv("NO100F_RELIGHT");
-    if (path == nullptr || *path == '\0') return;
-    std::ifstream in(path);
+    if (g_reimaginedPath.empty()) return;
+    std::ifstream in(g_reimaginedPath);
     for (std::string line; std::getline(in, line);) {
         std::istringstream ls(line.substr(0, line.find('#')));
         std::string word, id;
@@ -413,7 +428,32 @@ void ReloadReimaginedMoves() {
 }
 
 void UpdateReimagined() {
-    if (!g_reimaginedMovesLoaded) LoadReimaginedMoves();
+    // On or off from the launcher's option ([game] reimagined), or on for a test run's NO100F_REIMAGINED; the dev menu's
+    // "reimagined 0|1" switches it afterwards.
+    static bool started = false;
+    if (!started) {
+        started = true;
+        const char* env = std::getenv("NO100F_REIMAGINED");
+        const bool test = (env != nullptr && *env != '\0') || std::getenv("NO100F_RELIGHT") != nullptr;
+        aurora_set_reimagined(test || RuntimeConfigFile::Reimagined() ? 1 : 0);
+    }
+    // Each level its own file: a new level's is read once its scene is there (between levels the last one stays).
+    if (const uint32_t id = CurrentSceneId(); id != 0) {
+        const std::string level = Lower(IdString(id));
+        if (level != g_reimaginedLevel || !g_reimaginedMovesLoaded) {
+            g_reimaginedLevel = level;
+            const std::string path = ReimaginedFileFor(level);
+            if (path != g_reimaginedPath || !g_reimaginedMovesLoaded) {
+                for (auto& m : g_reimaginedMoves) RestoreReimaginedMove(m);
+                g_reimaginedPath = path;
+                aurora_set_reimagined_file(path.c_str());
+                LoadReimaginedMoves();
+                RT_LOGF(RT_TAG_RUNTIME, "[devmenu] reimagined: %s for %s\n", path.empty() ? "no file" : path.c_str(),
+                        level.c_str());
+            }
+        }
+    }
+    if (!g_reimaginedMovesLoaded) return;
     if (g_reimaginedMoves.empty()) return;
     const bool on = aurora_get_reimagined() == 1;
     const uint32_t scene = CurrentScenePtr();
@@ -1742,7 +1782,7 @@ void PollCommandFile() {
             if (arg == "reload") ReloadReimaginedMoves();
             aurora_set_reimagined(arg == "reload" ? 2 : std::atoi(arg.c_str()));
             const int state = aurora_get_reimagined();
-            g_status = state < 0 ? "reimagined: no file (NO100F_REIMAGINED)"
+            g_status = state < 0 ? "reimagined: no file for this level"
                                  : std::string("reimagined ") + (state ? "on" : "off") +
                                        (arg == "reload" ? " (reloaded)" : "");
         } else if (cmd == "ao") {
@@ -2341,24 +2381,6 @@ void DrawFindToast() {
 // F7 (branches with aurora's cut-out modes): cycle the mode, shown for 2 s at the bottom of the screen.
 uint64_t g_cutoutToastUntil = 0;
 
-// F6 (Reimagined experiment): shown for 2 s at the bottom of the screen.
-void DrawReimaginedToast() {
-#ifdef AURORA_HAS_SCENE_STAGE
-    if (SDL_GetTicks() >= g_reimaginedToastUntil) return;
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y - 120.0f),
-                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-    ImGui::SetNextWindowBgAlpha(0.75f);
-    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                                        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
-                                        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
-                                        ImGuiWindowFlags_NoDocking;
-    if (ImGui::Begin("##devmenu_reimagined", nullptr, kFlags))
-        ImGui::Text("Reimagined: %s", aurora_get_reimagined() == 1 ? "on" : "off");
-    ImGui::End();
-#endif
-}
-
 void CycleCutoutMode() {
 #ifdef AURORA_HAS_CUTOUT_MODE
     aurora_set_cutout_mode((aurora_get_cutout_mode() + 1) % 4);
@@ -2492,15 +2514,6 @@ void HandleSdlEvent(const SDL_Event& event, bool settingsOpen) noexcept {
     if (!Enabled()) return;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F8) g_open = !g_open;
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F7) CycleCutoutMode();
-#ifdef AURORA_HAS_SCENE_STAGE
-    // Reimagined experiment: F6 switches between the game as made and Reimagined (NO100F_REIMAGINED).
-    if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F6 &&
-        aurora_get_reimagined() >= 0) {
-        aurora_set_reimagined(aurora_get_reimagined() == 1 ? 0 : 1);
-        g_reimaginedToastUntil = SDL_GetTicks() + 2000;
-        RT_LOGF(RT_TAG_RUNTIME, "[devmenu] F6: reimagined %s\n", aurora_get_reimagined() == 1 ? "on" : "off");
-    }
-#endif
     if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && event.key.scancode == SDL_SCANCODE_F3)
         no100f_recorder::Toggle();
     // LB opens and closes the menu like F8 (not mapped on the default controller layouts; it is L on the NSO GameCube
@@ -2554,6 +2567,9 @@ void ApplyFreecam(uint32_t camera, CpuContext* ctx) {
 }
 
 void Draw() noexcept {
+#ifdef AURORA_HAS_SCENE_STAGE
+    UpdateReimagined();  // every game, not only with the developer tools: the launcher's Reimagined option
+#endif
     if (!Enabled() || !kReserved) return;
     ObserveGallery();
     if (InPlay() && CurrentSceneId() == kGalleryScene &&
@@ -2583,13 +2599,11 @@ void Draw() noexcept {
     ObservePlayerEdits();
     UpdateGod();
     UpdateMonsters();
-    UpdateReimagined();
     PollCommandFile();
     UpdateDrawn();
     UpdateTexLog();
     DrawFindToast();
     DrawCutoutToast();
-    DrawReimaginedToast();
     UpdateFreecam(g_open && g_focused);
     g_focused = false;
     if (!g_open) {

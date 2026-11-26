@@ -626,6 +626,9 @@ sealed class MainWindow : Window
         // Game
         card = Section(game, "Holidays");
         card.Children.Add(new SettingRow("Holiday events", "Outside Mystic Manor and in the playground, on their real dates.", HolidayBox()));
+        card = Section(game, "Reimagined");
+        card.Children.Add(new SettingRow("Reimagined (experimental)",
+            "A new look: moonlit night, lamps and shadows. Only the playground so far. From the next game start.", ReimaginedBox()));
         card = Section(game, "Developer tools");
         card.Children.Add(new SettingRow("Developer tools", "F8 dev menu, F3 video recording and a DEV mark. From the next game start.", DevToolsBox()));
         ffmpegStatus = Hint("");
@@ -904,6 +907,22 @@ sealed class MainWindow : Window
             if (box.SelectedIndex < 0 || box.SelectedIndex >= Holidays.Length) return;
             var c = new GameConfig(configPath);
             c.SetString("game", "holiday", Holidays[box.SelectedIndex].value);
+            c.Save();
+        };
+        return box;
+    }
+
+    // [game] reimagined: the experimental new look, for the levels that have one (the game reads it at startup).
+    Control ReimaginedBox()
+    {
+        var box = new ThemedCombo();
+        box.Items.Add("Off");
+        box.Items.Add("On");
+        box.SelectedIndex = new GameConfig(configPath).Get("game", "reimagined") == "true" ? 1 : 0;
+        box.SelectedIndexChanged += (_, _) =>
+        {
+            var c = new GameConfig(configPath);
+            c.Set("game", "reimagined", box.SelectedIndex == 1 ? "true" : "false");
             c.Save();
         };
         return box;
