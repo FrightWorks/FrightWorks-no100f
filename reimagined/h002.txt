@@ -1,0 +1,76 @@
+# h002 relighting experiment (world space). Lights from h002.HIP LITE assets; moon from h001 through the gate.
+ambient 0.33 0.32 0.38
+moon -0.519 0.349 0.781 0.86 0.98 1.06
+# the original textures lose half their blue (positive Cb); the blue goes into the moonlight instead
+deblue 0.5
+scale 1.6 0.9
+# light 24.19 4.00 10.20 7.0 0.102 0.741 0.902   # HEDGE LIGHTS (off: not a lamp post, human 2026-11-25; may return)
+# light -6.06 5.69 3.14 6.0 0.502 1.000 1.000   # FOUNTAIN LIGHT (off: not a lamp post, human 2026-11-25; may return)
+# light -21.17 6.07 30.40 11.0 0.200 1.000 0.000   # FISH LIGHT (off: not a lamp post, human 2026-11-25; may return)
+# light 2.00 5.50 10.44 10.0 1.000 1.000 0.000   # PORCH LIGHT (yellow; not a visible lamp)
+# light 14.17 4.09 -11.06 5.0 0.000 0.604 1.000   # POST LIGHT 10   (replaced by the lamp below)
+# light 25.57 4.29 -18.41 5.0 0.000 0.604 1.000   # POST LIGHT 11   (replaced by the lamp below)
+# light 35.54 4.29 3.71 5.0 0.000 0.604 1.000   # POST LIGHT 12   (replaced by the lamp below)
+# light 33.98 4.09 11.72 5.0 0.000 0.604 1.000   # POST LIGHT 1   (replaced by the lamp below)
+# light 13.36 4.09 30.10 5.0 0.000 0.604 1.000   # POST LIGHT 2   (replaced by the lamp below)
+# light -3.89 4.09 26.63 5.0 0.000 0.604 1.000   # POST LIGHT 3   (replaced by the lamp below)
+# light 8.86 4.09 11.88 5.0 0.000 0.604 1.000   # POST LIGHT 4   (replaced by the lamp below)
+# light -4.89 4.09 11.68 5.0 0.000 0.604 1.000   # POST LIGHT 5   (replaced by the lamp below)
+# light -16.86 4.09 -2.63 5.0 0.000 0.604 1.000   # POST LIGHT 6   (replaced by the lamp below)
+# light -7.01 4.09 -20.13 5.0 0.000 0.604 1.000   # POST LIGHT 7   (replaced by the lamp below)
+# light -2.32 4.09 -10.90 5.0 0.000 0.604 1.000   # POST LIGHT 8   (replaced by the lamp below)
+# light 8.90 4.09 -10.72 5.0 0.000 0.604 1.000   # POST LIGHT 9   (replaced by the lamp below)
+# light 25.49 4.00 3.33 7.0 0.102 0.741 0.902   # HEDGE LIGHTS0 (off: not a lamp post, human 2026-11-25; may return)
+far 110 150
+shadow 40 2048 0.15
+hide tex1_256x256_33613af462796201_14   # the game's sky band: replaced by the sky below
+unlit tex1_256x256_48a3b632592e82e4_5
+unlit tex1_256x256_883098cda0e19e12_5
+unlit tex1_64x64_cf90f86eba636d7e_6
+unlit tex1_64x64_cbf1eeab8a69dedb_6
+# painted shadow decals (shadow.RW3): the four at the swings' feet, and any others using it
+hide tex1_64x64_c82927875c2f2297_6
+# night sky (zenith RGB, horizon RGB), the moon in it (radius in degrees, disc RGB), stars
+sky 0.02 0.035 0.07 0.08 0.20 0.19
+moondisc 3.5 1 1 1
+# the moon's picture: h001's moon texture (a pack or the Xbox textures win; else from h001's level file on the disc;
+# else the drawn disc)
+moontex tex1_64x64_1b4b0b5ce7d49c44_5 H0/h001.HIP
+stars 0.035
+# the groundskeeper (NPC 40379556) moved into the open, in front of the start, facing it (was 27.5 0.09 3.94)
+move 40379556 24.7 0.09 -7.4 0
+# the cypresses: drawn solid, never faded near the camera
+opaque tex1_64x64_82bd14487a104e38_14
+# its talk trigger (GROUNDS TRIGGER) moved by the same offset
+shift a18357f8 -2.8 0 -11.34
+# a campfire in front of the groundskeeper (he stands at 24.7 0.09 -7.4 facing +z)
+fire 24.7 0.09 -5.8 0.6 1.0
+# mountains round the horizon where the old sky band had them painted (heights in degrees above the horizon)
+mountains 8 15 0.11 0.24 0.30
+spin tex1_128x128_133e6c02869897d7_a8839ec1b6d562bf_9
+spin tex1_128x128_eb148b4e961bb6c5_14
+# mercury-vapour post-top lamps where the game's 12 POST LIGHT lamps stood (ground = old light height - 4);
+# each adds its light in its globe (lampcolor R G B RADIUS: mercury's blue-green white)
+lampcolor 0.45 0.85 1.0 5.0
+lamp 14.17 0.09 -11.06   # POST LIGHT 10
+lamp 25.57 0.29 -18.41   # POST LIGHT 11
+lamp 35.54 0.29 3.71   # POST LIGHT 12
+lamp 33.98 0.09 11.72   # POST LIGHT 1
+lamp 13.36 0.09 30.10   # POST LIGHT 2
+lamp -3.89 0.09 26.63   # POST LIGHT 3
+lamp 8.86 0.09 11.88   # POST LIGHT 4
+lamp -4.89 0.09 11.68   # POST LIGHT 5
+lamp -16.86 0.09 -2.63   # POST LIGHT 6
+lamp -7.01 0.09 -20.13   # POST LIGHT 7
+lamp -2.32 0.09 -10.90   # POST LIGHT 8
+lamp 8.90 0.09 -10.72   # POST LIGHT 9
+# the game's lamp posts (one texture: pole and head) and their glow sprite
+hide tex1_64x64_f3267f25b29cb776_14
+hide tex1_64x64_1a9b33aaeeb4c2e1_5
+hide tex1_128x128_9ef4f6af9813cb73_4   # the near lamps' texture
+# the game's blob shadows (under the lamps, snacks, clue glasses): the moon casts real ones
+hide tex1_64x64_edaca560e0dc2d89_6
+hide tex1_32x32_0c70a6131a32eee8_5   # the pickups' blob shadows (snacks, clue glasses)
+# the moon's shadows a little lighter (sky light fills them); the 4 lamps nearest the view cast shadows (depth maps)
+moonshadow 0.75
+lampshadow 4 1024 0.05
