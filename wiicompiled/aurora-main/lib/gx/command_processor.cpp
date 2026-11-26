@@ -3480,12 +3480,14 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   // Reimagined "spin": this draw's model turned about its own up axis (position and normal matrices times a rotation
   // about Y) by an angle from where it stands, for these uniforms only.
   std::optional<std::pair<u32, PnMtx>> spunMatrix;
-  if (spin) {
+  float spinBy = 0.f;
+  if (spin && gfx::scene_stage::spin_angle(reinterpret_cast<const float*>(
+                  &g_gxState.pnMtx[std::min<u32>(g_gxState.currentPnMtx, MaxPnMtx - 1)].pos),
+              g_gxState.proj.m0.m[0], g_gxState.proj.m1.m[1], spinBy)) {
     const u32 slot = std::min<u32>(g_gxState.currentPnMtx, MaxPnMtx - 1);
     auto& mtx = g_gxState.pnMtx[slot];
     spunMatrix.emplace(slot, mtx);
-    const float at[3] = {mtx.pos.m0.m[3], mtx.pos.m1.m[3], mtx.pos.m2.m[3]};
-    const float angle = gfx::scene_stage::spin_angle(at);
+    const float angle = spinBy;
     const float c = std::cos(angle), sn = std::sin(angle);
     for (auto* rows : {&mtx.pos, &mtx.nrm}) {
       for (auto* row : {&rows->m0, &rows->m1, &rows->m2}) {

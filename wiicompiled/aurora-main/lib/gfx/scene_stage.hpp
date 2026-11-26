@@ -63,7 +63,7 @@ struct Camera {
 };
 void note_camera(const Mat4x4<float>& projection, const webgpu::Viewport& viewport) noexcept;
 // A solid perspective draw's position matrix (12 floats, rows of a 3x4): a vote for the view matrix.
-void note_world_matrix(const float* matrix) noexcept;
+void note_world_matrix(const float* matrix, float projX, float projY) noexcept;
 const Camera& camera() noexcept;
 
 // Relighting experiment (NO100F_RELIGHT=<light file>): solid perspective draws lose their baked vertex colours
@@ -81,9 +81,9 @@ bool is_hidden_texture(const std::string& key) noexcept;
 // The file's opaque textures ("opaque KEY"): drawn without blending, so the game can't fade them.
 bool is_opaque_texture(const std::string& key) noexcept;
 // Reimagined "spin KEY": a model with this texture is turned by spin_angle (from where it stands in the world, given its
-// position in view space) about its own up axis.
+// position matrix: rows of a 3x4) about its own up axis; false (no turn) when it isn't upright in the level.
 bool is_spin_texture(const std::string& key) noexcept;
-float spin_angle(const float viewPos[3]) noexcept;
+bool spin_angle(const float* positionMatrix, float projX, float projY, float& angle) noexcept;
 // The file's "deblue" (0-255) for the relit draws' shader (ShaderConfig.deblue).
 uint8_t relight_deblue() noexcept;
 
@@ -103,6 +103,10 @@ struct ShadowTargets {
   uint32_t size = 0;
 };
 const ShadowTargets& shadow_targets(uint32_t samples, bool motion);
+// Reimagined props (lamp posts, the campfire's logs and rocks) into the moon's shadow map `depth`, in a pass of their
+// own after the game's draws there.
+void encode_props_shadow(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& depth, const Camera& camera,
+                         uint32_t samples);
 
 // The light file's night sky ("sky", "moondisc", "stars"): drawn over the whole EFB at the start of the scene's pass
 // (right after its clear, before the game draws anything), from the stage camera; the game's draws cover it.

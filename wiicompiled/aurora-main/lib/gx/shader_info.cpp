@@ -650,7 +650,8 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
     gfx::scene_stage::note_camera(effectiveProj, g_gxState.renderViewport);
     if (gfx::scene_stage::relighting()) {
       gfx::scene_stage::note_world_matrix(reinterpret_cast<const float*>(
-          &g_gxState.pnMtx[std::min<u32>(g_gxState.currentPnMtx, MaxPnMtx - 1)].pos));
+          &g_gxState.pnMtx[std::min<u32>(g_gxState.currentPnMtx, MaxPnMtx - 1)].pos),
+          effectiveProj.m0.m[0], effectiveProj.m1.m[1]);
     }
   }
 

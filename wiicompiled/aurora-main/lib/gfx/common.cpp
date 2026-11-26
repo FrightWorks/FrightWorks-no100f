@@ -1749,6 +1749,8 @@ static void encode_moon_shadow(const wgpu::CommandEncoder& cmd, const std::vecto
     render_pass_impl(pass, renderPasses, passes[n], interpolatedFrame, debugFrame, false, true);
     pass.End();
   }
+  if (!passes.empty())
+    scene_stage::encode_props_shadow(cmd, targets.depth, stage.sceneCamera, stage.msaaSamples);
 }
 
 static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEncoder& cmd, int32_t interpolatedFrame,
