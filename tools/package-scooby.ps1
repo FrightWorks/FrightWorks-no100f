@@ -5,19 +5,25 @@
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 -Installer [-Version <v>] [-Feed <dir>] [-NoDownload]
 # -Build first rebuilds the game (build-no100f.ps1, without -SkipTools: the pinned dependencies are brought up to date
 # first, so a changed pin is picked up) and the launcher.
-# -Zip also writes dist\FrightWorks.zip from a clean copy (never the player's disc, saves or settings).
+# -Zip also writes dist\FrightWorks-<ver>-Windows-x64.zip, the release's zip under its release name, from a clean copy
+# (never the player's disc, saves or settings). The system and processor in the name are how RecompLauncher picks a
+# release file; frightworks.dev finds it with the zipPattern in FrightWorks-site (src/content/games/no100f.md).
 # Updating dist in place only replaces program files: data\Disc and data\UserData (saves, Config.toml, mods) are kept,
 # so a disc set up there by the launcher survives a repackage. An old Play\ layout is moved into data\ first.
 # -Installer packs the same program files, without the portable marker, with Velopack (vpk, fetched into dist\.vpk) into
 # -Feed (default dist\installer): FrightWorks-win-Setup.exe, the full package, a delta from the previous release, and
 # releases.win.json, which the installed launcher reads from GitHub Releases. It first downloads the latest GitHub
 # release's package into the feed so the delta can be made (-NoDownload: use what the feed holds, for a local test feed).
-# -Version defaults to <Version> in the launcher's .csproj. Uploading is a separate step (docs/testing.md).
+# -Version (the zip's name and the installer's version) defaults to <Version> in the launcher's .csproj. Uploading is a
+# separate step (docs/testing.md).
 [CmdletBinding()] param([switch]$Build, [switch]$Zip, [switch]$Installer, [string]$Version, [string]$Feed, [switch]$NoDownload)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $launcher = "$root\launcher\publish\FrightWorks.exe"
 $VpkVersion = '1.2.161'  # keep in step with the Velopack PackageReference in the launcher's .csproj
+if (-not $Version) {
+    $Version = ([xml](Get-Content -Raw "$root\launcher\FrightWorks.Launcher.csproj")).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+}
 $RepoUrl = 'https://github.com/FrightWorks/FrightWorks-no100f'
 if ($Build) { & "$PSScriptRoot\build-no100f.ps1"; & "$PSScriptRoot\build-launcher.ps1" }
 elseif (-not (Test-Path -LiteralPath $launcher)) { & "$PSScriptRoot\build-launcher.ps1" }
@@ -67,8 +73,9 @@ if ($Zip) {
     # Entries with forward slashes (Compress-Archive in Windows PowerShell 5.1 writes backslashes, which some
     # unzip tools reject).
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
-    $zipPath = "$root\dist\FrightWorks.zip"
+    $zipPath = "$root\dist\FrightWorks-$Version-Windows-x64.zip"
     Remove-Item -LiteralPath $zipPath -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath "$root\dist\FrightWorks.zip" -ErrorAction SilentlyContinue  # the name before v1.3.0
     $archive = [IO.Compression.ZipFile]::Open($zipPath, 'Create')
     try {
         $base = Split-Path $clean
@@ -79,12 +86,9 @@ if ($Zip) {
         $archive.CreateEntry('FrightWorks/data/UserData/mods/') | Out-Null  # keep the empty mods folder
     } finally { $archive.Dispose() }
     Remove-Item -Recurse -Force (Split-Path $clean)
-    Write-Host "DONE: $root\dist\FrightWorks.zip"
+    Write-Host "DONE: $zipPath"
 }
 if ($Installer) {
-    if (-not $Version) {
-        $Version = ([xml](Get-Content -Raw "$root\launcher\FrightWorks.Launcher.csproj")).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-    }
     if (-not $Feed) { $Feed = "$root\dist\installer" }
     New-Item -ItemType Directory -Force $Feed | Out-Null
     # The title names the shortcuts and the uninstall entry: no ':' (on NTFS "A: B.lnk" becomes a stream of a file "A").

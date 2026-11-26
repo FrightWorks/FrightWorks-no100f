@@ -450,8 +450,9 @@ A maintainer runs releases:
 1. Version PR: `<Version>` in `launcher/FrightWorks.Launcher.csproj` and the version line in `tools/package-README.txt`.
 2. After the merge, on a clean `main`: local tag `v<ver>` (the build ID is then just `<ver>`), then `tools/package-scooby.ps1 -Build`, then `-Zip` as a second call (`-Build` resets PATH), then `-Installer`.
 3. Smoke test: the zip has no game data, saves or settings, and has `recomplauncher.json` beside `FrightWorks.exe`; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
-4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `dist\FrightWorks.zip` uploaded as `FrightWorks-<ver>-Windows-x64.zip`, every `dist\installer\*` and `dist\installer-linux\*` file (the Linux `.tar.gz` is RecompLauncher's) and the notes.
-   RecompLauncher picks a release file by the system and processor in its name, hence `Windows-x64` (up to v1.2.0 the zip was `FrightWorks-<ver>.zip`); frightworks.dev finds the zip with the `zipPattern` in FrightWorks-site's `src/content/games/no100f.md`, which must match the new name before the first release with it.
+4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `dist\FrightWorks-<ver>-Windows-x64.zip` (`-Zip` names it), every `dist\installer\*` and `dist\installer-linux\*` file (the Linux `.tar.gz` is RecompLauncher's) and the notes.
+   RecompLauncher picks a release file by the system and processor in its name when no catalog entry names it, hence `Windows-x64` (up to v1.2.0 the zip was `FrightWorks-<ver>.zip`); frightworks.dev finds the zip with the `zipPattern` in FrightWorks-site's `src/content/games/no100f.md` (`^FrightWorks-[0-9.]+(-Windows-x64)?\.zip$` takes both names).
+   RecompLauncher's own catalog entry `frightworks-no100f` names `FrightWorks-win-Setup.exe` and `FrightWorks.AppImage`, so its players get the installed game until it's switched: after the first release with `recomplauncher.json`, a maintainer asks RecompLauncher (Messages in its developer hub) to list `FrightWorks-*-Windows-x64.zip` and `FrightWorks-*-Linux-x64.tar.gz` instead.
    `FrightWorks-win-Setup.exe` and `FrightWorks.AppImage` keep their names: the site links them by name.
    A maintainer publishes.
 
