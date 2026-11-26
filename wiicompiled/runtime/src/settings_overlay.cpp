@@ -1932,9 +1932,9 @@ struct PageItem {
     Page page;
     const char* label;
 };
-constexpr std::array<PageItem, 5> kPages = {{
-    {Page::Video, "Video"}, {Page::Audio, "Audio"}, {Page::Controls, "Controls"}, {Page::LanPlay, "LAN Play"},
-    {Page::About, "About"},
+// LAN Play ({Page::LanPlay, "LAN Play"}) is hidden until network play is worked on; its page code stays.
+constexpr std::array<PageItem, 4> kPages = {{
+    {Page::Video, "Video"}, {Page::Audio, "Audio"}, {Page::Controls, "Controls"}, {Page::About, "About"},
 }};
 Page g_page = Page::Video;
 
@@ -2103,7 +2103,10 @@ void DrawTopBar() {
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) &&
             !ImGui::IsAnyItemActive()) {
             const int count = static_cast<int>(kPages.size());
-            int index = static_cast<int>(g_page);
+            // The page's place in the list (not its enum value: a hidden page leaves a gap).
+            int index = 0;
+            while (index < count && kPages[index].page != g_page) ++index;
+            if (index == count) index = 0;
             const bool previous = ImGui::IsKeyPressed(ImGuiKey_GamepadL1, false);
             const bool next = ImGui::IsKeyPressed(ImGuiKey_GamepadR1, false);
             if (previous) g_page = kPages[(index + count - 1) % count].page;

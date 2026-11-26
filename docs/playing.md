@@ -40,7 +40,7 @@ version**. Old saves are converted, with a backup.
 
 Settings are in the launcher (**Settings**) and in game (**F10**, or the controller's **Back**/**Select** as long as no
 mapping uses it). The title screen and main menu list the keys in a corner. In play, F10 pauses the game (a cutscene
-finishes first, then it pauses) and closing it carries on; in LAN play the game keeps running.
+finishes first, then it pauses) and closing it carries on.
 
 | Key | |
 | --- | --- |
