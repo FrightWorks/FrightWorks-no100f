@@ -1644,9 +1644,11 @@ static void encode_bloom(const wgpu::CommandEncoder& cmd, const std::vector<Rend
     if (renderPasses[i].colorView.Get() == after.colorView.Get())
       passes.push_back(i);
   }
+  // Reimagined lamps' globes glow too: drawn last, in a pass of their own that then resolves.
+  const bool lampGlow = !passes.empty() && scene_stage::lamps_wanted(after.sceneCamera);
   for (size_t n = 0; n < passes.size(); ++n) {
     const bool first = n == 0;
-    const bool last = n + 1 == passes.size();
+    const bool last = n + 1 == passes.size() && !lampGlow;
     const auto colorStore = target.resolve && last ? wgpu::StoreOp::Discard : wgpu::StoreOp::Store;
     const std::array attachments{
         wgpu::RenderPassColorAttachment{
@@ -1676,6 +1678,28 @@ static void encode_bloom(const wgpu::CommandEncoder& cmd, const std::vector<Rend
     };
     auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
     render_pass_impl(pass, renderPasses, passes[n], interpolatedFrame, debugFrame, true);
+    pass.End();
+  }
+  if (lampGlow) {
+    const wgpu::RenderPassColorAttachment attachment{
+        .view = target.view,
+        .resolveTarget = target.resolve,
+        .loadOp = wgpu::LoadOp::Load,
+        .storeOp = target.resolve ? wgpu::StoreOp::Discard : wgpu::StoreOp::Store,
+    };
+    const wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{
+        .view = bloom::stage_depth(),
+        .depthLoadOp = wgpu::LoadOp::Load,
+        .depthStoreOp = wgpu::StoreOp::Discard,
+    };
+    const wgpu::RenderPassDescriptor renderPassDescriptor{
+        .label = "Bloom lamp globes",
+        .colorAttachmentCount = 1,
+        .colorAttachments = &attachment,
+        .depthStencilAttachment = &depthStencilAttachment,
+    };
+    auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
+    scene_stage::encode_lamp_glow(pass, after.sceneCamera, after.targetSize, after.msaaSamples);
     pass.End();
   }
   if (passes.empty())

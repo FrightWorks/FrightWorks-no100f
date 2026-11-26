@@ -108,6 +108,11 @@ const ShadowTargets& shadow_targets(uint32_t samples, bool motion);
 // (right after its clear, before the game draws anything), from the stage camera; the game's draws cover it.
 // `motion`: the pass has the motion targets (left alone).
 bool sky_wanted(const Camera& camera) noexcept;
+// Reimagined lamps: whether the light file has any, and their glowing globes drawn into `pass` (one colour target in the
+// EFB's format, the scene's depth): at the stage after the relighting, and into the bloom's light target.
+bool lamps_wanted(const Camera& camera) noexcept;
+void encode_lamp_glow(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size,
+                      uint32_t samples);
 void encode_sky(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size, uint32_t samples,
                 bool motion);
 

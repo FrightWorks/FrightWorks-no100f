@@ -85,6 +85,7 @@ Camera g_camera;
 //                                 replace it; the disc's colour multiplies it; none or missing: a drawn disc)
 //   stars DENSITY                (0 to about 0.1)
 constexpr size_t kMaxRelightLights = 32;
+constexpr float kLampGlobeCentreForLight = 3.5f;  // a lamp's light: this far above its ground
 struct RelightLight {
   float pos[3];
   float radius;
@@ -116,6 +117,9 @@ struct RelightScene {
   std::unordered_set<std::string> hidden;
   std::unordered_set<std::string> opaque;
   std::unordered_set<std::string> spin;
+  std::vector<std::array<float, 3>> lamps;    // "lamp X GROUND_Y Z"
+  float lampColor[3] = {0.5f, 0.85f, 1.f};   // "lampcolor R G B [RADIUS]": the light each lamp adds at its globe
+  float lampRadius = 5.f;
   bool hasSky = false;
   float skyZenith[3] = {0.02f, 0.035f, 0.07f};
   float skyHorizon[3] = {0.08f, 0.2f, 0.19f};
@@ -180,6 +184,11 @@ RelightScene load_relight_scene() {
         std::copy(v, v + 3, s.firePos);
         if (n >= 5) s.fireSize = std::max(v[3], 0.05f);
         if (n >= 6) s.fireIntensity = std::max(v[4], 0.f);
+      } else if (w == "lamp" && n >= 4) {
+        s.lamps.push_back({v[0], v[1], v[2]});
+      } else if (w == "lampcolor" && n >= 4) {
+        std::copy(v, v + 3, s.lampColor);
+        if (n >= 5) s.lampRadius = std::max(v[3], 0.f);
       } else if (w == "firemask" && n >= 2) {
         s.fireMask = v[0] != 0.f;
       } else if (w == "mountains" && n >= 6) {
@@ -211,6 +220,11 @@ RelightScene load_relight_scene() {
       }
     }
     std::fclose(f);
+    for (const auto& l : s.lamps) {  // each lamp's light, in its globe
+      if (s.lights.size() >= kMaxRelightLights - 1) break;  // the last slot is the campfire's
+      s.lights.push_back({{l[0], l[1] + kLampGlobeCentreForLight, l[2]}, s.lampRadius,
+                          {s.lampColor[0], s.lampColor[1], s.lampColor[2]}});
+    }
     s.loaded = true;
     Log.info("Reimagined: {} lights, moon {}, {} unlit, {} hidden and {} opaque textures, sky {}, from {}",
              s.lights.size(), s.hasMoon ? "on" : "off", s.unlit.size(), s.hidden.size(), s.opaque.size(),
@@ -1477,12 +1491,161 @@ std::vector<PropVertex> campfire_mesh(const RelightScene& scene) {
   return out;
 }
 
+
+// ---- Reimagined lamps: 1960s mercury-vapour post-tops ("lamp X GROUND_Y Z"). A fluted cast pole on a plinth, a
+// fitter, a ribbed acorn globe and a cap with a finial, 4 units tall. The metal is drawn with the props (lit by the
+// stage); the globe glows: drawn after the relighting, unlit, and again into the bloom's light target.
+constexpr float kLampGlobeBottom = 3.18f;
+constexpr float kLampGlobeTop = 3.92f;
+
+float lamp_globe_radius(float t) {  // t 0..1 up the globe: narrow at the fitter, widest 40% up, a point at the top
+  return 0.21f * std::pow(std::max(std::sin(3.14159265f * (0.18f + 0.8f * t)), 0.f), 0.7f);
+}
+
+// A surface of revolution round `base`'s vertical: `profile` (height, radius) rings from bottom to top, `sides` around;
+// `flute` > 0 alternates the radius (fluting). Flat-coloured (the stage lights it).
+void push_lathe(std::vector<PropVertex>& out, V3 base, const std::vector<std::array<float, 2>>& profile, int sides,
+                V3 colour, float flute = 0.f) {
+  const auto at = [&](size_t ring, int side) {
+    const float a = 6.2831853f * side / sides;
+    const float r = profile[ring][1] * (flute > 0.f && (side & 1) ? 1.f - flute : 1.f);
+    return v_add(base, V3{std::cos(a) * r, profile[ring][0], std::sin(a) * r});
+  };
+  for (size_t ring = 0; ring + 1 < profile.size(); ++ring) {
+    for (int side = 0; side < sides; ++side) {
+      const int next = (side + 1) % sides;
+      const V3 a = at(ring, side), b = at(ring, next), c = at(ring + 1, next), d = at(ring + 1, side);
+      push_tri(out, a, b, c, colour, colour, colour);
+      push_tri(out, a, c, d, colour, colour, colour);
+    }
+  }
+}
+
+void push_lamp_metal(std::vector<PropVertex>& out, V3 g) {
+  const V3 iron{0.07f, 0.1f, 0.09f};    // painted cast iron, dark green-black
+  const V3 trim{0.11f, 0.14f, 0.12f};
+  // Plinth: an octagonal base stepping in to the pole.
+  push_lathe(out, g, {{0.f, 0.17f}, {0.24f, 0.17f}, {0.28f, 0.15f}, {0.36f, 0.15f}, {0.42f, 0.11f}, {0.48f, 0.1f}},
+             8, iron);
+  // Fluted pole, tapering.
+  push_lathe(out, g, {{0.48f, 0.085f}, {3.0f, 0.058f}}, 16, iron, 0.12f);
+  // A ring halfway up and the collar at the top.
+  push_lathe(out, g, {{1.6f, 0.07f}, {1.64f, 0.085f}, {1.7f, 0.085f}, {1.74f, 0.07f}}, 12, trim);
+  push_lathe(out, g, {{2.98f, 0.065f}, {3.02f, 0.09f}, {3.1f, 0.09f}, {kLampGlobeBottom, 0.145f}}, 12, trim);
+  // Cap over the globe's top, and the finial.
+  const float t = kLampGlobeTop;
+  push_lathe(out, g,
+             {{t - 0.11f, 0.12f}, {t - 0.08f, 0.14f}, {t - 0.05f, 0.14f}, {t + 0.02f, 0.09f}, {t + 0.07f, 0.035f},
+              {t + 0.08f, 0.02f}},
+             12, iron);
+  push_lathe(out, g, {{t + 0.08f, 0.f}, {t + 0.1f, 0.03f}, {t + 0.13f, 0.035f}, {t + 0.16f, 0.02f}, {t + 0.18f, 0.f}},
+             8, trim);
+}
+
+struct GlobeVertex {
+  float pos[3];
+  float normal[3];
+  float uv[2];  // round (0..1), up (0..1)
+};
+
+void push_lamp_globe(std::vector<GlobeVertex>& out, V3 g) {
+  constexpr int kSides = 32;
+  constexpr int kRings = 14;
+  const float y0 = kLampGlobeBottom - 0.01f, y1 = kLampGlobeTop - 0.02f;
+  const auto vertex = [&](int ring, int side) {
+    const float t = static_cast<float>(ring) / kRings;
+    const float a = 6.2831853f * side / kSides;
+    const float r = lamp_globe_radius(t);
+    const float dt = 1e-3f;
+    const float slope = (lamp_globe_radius(std::min(t + dt, 1.f)) - lamp_globe_radius(std::max(t - dt, 0.f))) /
+                        ((std::min(t + dt, 1.f) - std::max(t - dt, 0.f)) * (y1 - y0));
+    const V3 n = v_norm(V3{std::cos(a), -slope, std::sin(a)});
+    GlobeVertex v{};
+    v.pos[0] = g[0] + std::cos(a) * r;
+    v.pos[1] = g[1] + y0 + t * (y1 - y0);
+    v.pos[2] = g[2] + std::sin(a) * r;
+    std::copy(n.begin(), n.end(), v.normal);
+    v.uv[0] = static_cast<float>(side) / kSides;
+    v.uv[1] = t;
+    return v;
+  };
+  for (int ring = 0; ring < kRings; ++ring) {
+    for (int side = 0; side < kSides; ++side) {
+      const GlobeVertex a = vertex(ring, side), b = vertex(ring, side + 1), c = vertex(ring + 1, side + 1),
+                        d = vertex(ring + 1, side);
+      out.insert(out.end(), {a, b, c, a, c, d});
+    }
+  }
+}
+
+constexpr char kGlobeWgsl[] = R"WGSL(
+struct Globe {
+    view0: vec4f,
+    view1: vec4f,
+    view2: vec4f,
+    proj: mat4x4f,
+    core: vec4f,
+    rim: vec4f,
+};
+@group(0) @binding(0) var<uniform> globe: Globe;
+
+struct VsOut {
+    @builtin(position) pos: vec4f,
+    @location(0) view_pos: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
+};
+
+@vertex
+fn vs_globe(@location(0) p: vec3f, @location(1) n: vec3f, @location(2) uv: vec2f) -> VsOut {
+    let w = vec4f(p, 1.0);
+    let mv = vec3f(dot(globe.view0, w), dot(globe.view1, w), dot(globe.view2, w));
+    var out: VsOut;
+    out.pos = vec4f(mv, 1.0) * globe.proj;
+    out.view_pos = mv;
+    out.normal = vec3f(dot(globe.view0.xyz, n), dot(globe.view1.xyz, n), dot(globe.view2.xyz, n));
+    out.uv = uv;
+    return out;
+}
+
+// Frosted ribbed glass lit from inside by the arc tube: hottest where it faces the camera and round the tube's height,
+// the cool blue-green of mercury toward the edges, the ribs a little darker between.
+@fragment
+fn fs_globe(in: VsOut) -> @location(0) vec4f {
+    let n = normalize(in.normal);
+    let facing = clamp(abs(dot(n, normalize(-in.view_pos))), 0.0, 1.0);
+    let rib = 0.84 + 0.16 * abs(cos(in.uv.x * 3.14159265 * 16.0));
+    let tube = 1.0 - smoothstep(0.15, 0.45, abs(in.uv.y - 0.42));
+    let hot = clamp(pow(facing, 1.6) * (0.55 + 0.45 * tube), 0.0, 1.0);
+    let col = mix(globe.rim.rgb, globe.core.rgb, hot) * rib;
+    return vec4f(min(col, vec3f(1.0)), 1.0);
+}
+)WGSL";
+
+struct GlobeParams {
+  std::array<std::array<float, 4>, 3> view;
+  Mat4x4<float> projection;
+  std::array<float, 4> core;
+  std::array<float, 4> rim;
+};
+
+struct GlobeState {
+  wgpu::RenderPipeline pipeline;
+  uint32_t samples = 0;
+  wgpu::Buffer vertices;
+  uint32_t vertexCount = 0;
+  wgpu::Buffer params;
+  const RelightScene* scene = nullptr;
+};
+GlobeState g_globes;
+
 void encode_props(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size, uint32_t samples,
                   bool motion) {
   const auto& scene = relight_scene();
-  if (!scene.hasFire || !camera.hasView) return;
+  if ((!scene.hasFire && scene.lamps.empty()) || !camera.hasView) return;
   if (g_props.scene != &scene) {
-    const auto mesh = campfire_mesh(scene);
+    auto mesh = scene.hasFire ? campfire_mesh(scene) : std::vector<PropVertex>{};
+    for (const auto& l : scene.lamps) push_lamp_metal(mesh, V3{l[0], l[1], l[2]});
     const wgpu::BufferDescriptor descriptor{
         .label = "Reimagined props",
         .usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst,
@@ -1567,8 +1730,98 @@ void encode_props(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgp
 }
 
 
+
+bool lamps_wanted(const Camera& camera) noexcept {
+  return relighting() && !relight_scene().lamps.empty() && camera.hasView;
+}
+
+void encode_lamp_glow(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size,
+                      uint32_t samples) {
+  if (!lamps_wanted(camera)) return;
+  const auto& scene = relight_scene();
+  if (g_globes.scene != &scene) {
+    std::vector<GlobeVertex> mesh;
+    for (const auto& l : scene.lamps) push_lamp_globe(mesh, V3{l[0], l[1], l[2]});
+    const wgpu::BufferDescriptor descriptor{
+        .label = "Reimagined lamp globes",
+        .usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst,
+        .size = (mesh.size() * sizeof(GlobeVertex) + 3) & ~size_t{3},
+    };
+    g_globes.vertices = g_device.CreateBuffer(&descriptor);
+    g_queue.WriteBuffer(g_globes.vertices, 0, mesh.data(), mesh.size() * sizeof(GlobeVertex));
+    g_globes.vertexCount = static_cast<uint32_t>(mesh.size());
+    g_globes.scene = &scene;
+  }
+  if (!g_globes.pipeline || g_globes.samples != samples) {
+    wgpu::ShaderSourceWGSL wgsl{};
+    wgsl.code = kGlobeWgsl;
+    const wgpu::ShaderModuleDescriptor moduleDescriptor{.nextInChain = &wgsl, .label = "Reimagined lamp globes"};
+    const auto module = g_device.CreateShaderModule(&moduleDescriptor);
+    const std::array attributes{
+        wgpu::VertexAttribute{.format = wgpu::VertexFormat::Float32x3, .offset = 0, .shaderLocation = 0},
+        wgpu::VertexAttribute{.format = wgpu::VertexFormat::Float32x3, .offset = 12, .shaderLocation = 1},
+        wgpu::VertexAttribute{.format = wgpu::VertexFormat::Float32x2, .offset = 24, .shaderLocation = 2},
+    };
+    const wgpu::VertexBufferLayout layout{
+        .arrayStride = sizeof(GlobeVertex), .attributeCount = attributes.size(), .attributes = attributes.data()};
+    const wgpu::ColorTargetState target{
+        .format = webgpu::g_graphicsConfig.surfaceConfiguration.format,
+        .writeMask = wgpu::ColorWriteMask::Red | wgpu::ColorWriteMask::Green | wgpu::ColorWriteMask::Blue,
+    };
+    const wgpu::FragmentState fragment{.module = module, .entryPoint = "fs_globe", .targetCount = 1, .targets = &target};
+    const wgpu::DepthStencilState depthStencil{
+        .format = webgpu::g_graphicsConfig.depthFormat,
+        .depthWriteEnabled = true,
+        .depthCompare = gx::UseReversedZ ? wgpu::CompareFunction::GreaterEqual : wgpu::CompareFunction::LessEqual,
+    };
+    const wgpu::RenderPipelineDescriptor descriptor{
+        .label = "Reimagined lamp globes",
+        .vertex = {.module = module, .entryPoint = "vs_globe", .bufferCount = 1, .buffers = &layout},
+        .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList, .cullMode = wgpu::CullMode::None},
+        .depthStencil = &depthStencil,
+        .multisample = {.count = samples},
+        .fragment = &fragment,
+    };
+    g_globes.pipeline = g_device.CreateRenderPipeline(&descriptor);
+    g_globes.samples = samples;
+  }
+  if (!g_globes.params) {
+    const wgpu::BufferDescriptor descriptor{
+        .label = "Reimagined lamp globes",
+        .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+        .size = sizeof(GlobeParams),
+    };
+    g_globes.params = g_device.CreateBuffer(&descriptor);
+  }
+  GlobeParams params{};
+  for (int r = 0; r < 3; ++r)
+    for (int c = 0; c < 4; ++c) params.view[r][c] = camera.view[r * 4 + c];
+  params.projection = camera.projection;
+  params.core = {0.86f, 1.f, 1.f, 1.f};
+  for (int c = 0; c < 3; ++c) params.rim[c] = scene.lampColor[c] * 0.8f;
+  g_queue.WriteBuffer(g_globes.params, 0, &params, sizeof(params));
+  const wgpu::BindGroupEntry entry{.binding = 0, .buffer = g_globes.params, .size = sizeof(GlobeParams)};
+  const wgpu::BindGroupDescriptor bindGroupDescriptor{
+      .layout = g_globes.pipeline.GetBindGroupLayout(0), .entryCount = 1, .entries = &entry};
+  const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
+  const auto& vp = camera.viewport;
+  const auto left = static_cast<uint32_t>(std::clamp(vp.left, 0.f, static_cast<float>(size.width)));
+  const auto top = static_cast<uint32_t>(std::clamp(vp.top, 0.f, static_cast<float>(size.height)));
+  const auto right = static_cast<uint32_t>(std::clamp(vp.left + vp.width, 0.f, static_cast<float>(size.width)));
+  const auto bottom = static_cast<uint32_t>(std::clamp(vp.top + vp.height, 0.f, static_cast<float>(size.height)));
+  if (right <= left || bottom <= top) return;
+  pass.SetViewport(vp.left, vp.top, vp.width, vp.height, gx::UseReversedZ ? 1.f - vp.zfar : vp.znear,
+                   gx::UseReversedZ ? 1.f - vp.znear : vp.zfar);
+  pass.SetScissorRect(left, top, right - left, bottom - top);
+  pass.SetPipeline(g_globes.pipeline);
+  pass.SetBindGroup(0, bindGroup);
+  pass.SetVertexBuffer(0, g_globes.vertices);
+  pass.Draw(g_globes.vertexCount);
+}
+
 bool sky_wanted(const Camera& camera) noexcept {
-  return relighting() && (relight_scene().hasSky || relight_scene().hasFire) && camera.hasView;
+  return relighting() && (relight_scene().hasSky || relight_scene().hasFire || !relight_scene().lamps.empty()) &&
+         camera.hasView;
 }
 
 void encode_sky_only(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size,
@@ -1873,6 +2126,21 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       draw(encoder, Kind::Fire, color, size, &depth, nullptr);
       if (scene.fireMask) draw_fire_depth(encoder, depth, size);
     }
+    if (lamps_wanted(camera)) {
+      const wgpu::RenderPassColorAttachment attachment{
+          .view = color, .loadOp = wgpu::LoadOp::Load, .storeOp = wgpu::StoreOp::Store};
+      const wgpu::RenderPassDepthStencilAttachment depthAttachment{
+          .view = depth, .depthLoadOp = wgpu::LoadOp::Load, .depthStoreOp = wgpu::StoreOp::Store};
+      const wgpu::RenderPassDescriptor passDescriptor{
+          .label = "Reimagined lamp globes",
+          .colorAttachmentCount = 1,
+          .colorAttachments = &attachment,
+          .depthStencilAttachment = &depthAttachment,
+      };
+      const auto pass = encoder.BeginRenderPass(&passDescriptor);
+      encode_lamp_glow(pass, camera, size, samples);
+      pass.End();
+    }
   }
   if (mode == 1) {
     draw(encoder, Kind::Tint, color, size, nullptr, nullptr);
@@ -1916,6 +2184,7 @@ void shutdown() noexcept {
   g_sky = {};
   g_skyParams = {};
   g_props = {};
+  g_globes = {};
   g_skySampler = {};
   g_skyNoMoon = {};
   g_skyNoMoonView = {};
