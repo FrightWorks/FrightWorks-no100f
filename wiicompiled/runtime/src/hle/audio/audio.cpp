@@ -318,7 +318,10 @@ extern "C" void AIStartDMA_80124048()
         g_ai.bytesLeft = g_ai.length;
         g_ai.detBlockDueTicks = 0;
     }
-    if (!EnsureAudioBackend(rate)) {
+    // Every DMA start asks again; with no audio output, say so once (the backend logs the reason).
+    static bool s_reportedStartFailure = false;
+    if (!EnsureAudioBackend(rate) && !s_reportedStartFailure) {
+        s_reportedStartFailure = true;
         ReportAudioProblem("AIStartDMA", "audio backend init failed");
     }
 }
