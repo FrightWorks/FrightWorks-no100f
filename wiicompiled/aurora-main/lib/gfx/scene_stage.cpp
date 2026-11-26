@@ -648,24 +648,11 @@ fn fire_ground(c: vec3f) -> vec2f {  // x: light multiplier, y: ember glow
     let r = length(q);
     let s = relight.fire_info.x;  // size (the patch's radius)
     var m = mix(0.3, 1.0, smoothstep(0.3 * s, s, r));
-    var glow = 0.0;
-    for (var k = 0; k < 4; k++) {
-        let a = f32(k) * 1.5708 + 0.4;
-        let dir = vec2f(cos(a), sin(a));
-        let along = dot(q, dir);
-        let perp = abs(q.x * dir.y - q.y * dir.x);
-        if (along > 0.05 * s && along < 0.75 * s && perp < 0.075 * s) {
-            m = min(m, 0.32);
-            glow = max(glow, (1.0 - smoothstep(0.05 * s, 0.4 * s, along)) * (1.0 - perp / (0.075 * s)));
-        }
+    var glow = (1.0 - smoothstep(0.0, 0.45 * s, r)) * 0.8;
+    // The logs' feet glow where they sit in the fire.
+    if (h > 0.0 && h < 0.35 * s && r < 0.6 * s) {
+        glow = max(glow, (1.0 - smoothstep(0.1 * s, 0.6 * s, r)) * (1.0 - h / (0.35 * s)));
     }
-    // A ring of stones: lighter bumps round the edge.
-    let ring = abs(r - 0.9 * s);
-    let bumps = 0.5 + 0.5 * sin(atan2(q.y, q.x) * 11.0);
-    if (ring < 0.09 * s * (0.6 + 0.4 * bumps)) {
-        m = max(m, 0.9);
-    }
-    glow = max(glow, (1.0 - smoothstep(0.0, 0.35 * s, r)) * 0.8);
     return vec2f(m, glow);
 }
 
@@ -719,17 +706,21 @@ fn fs_fire(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             let right = normalize(cross(up, nrm));
             let x = dot(q, right) / s;
             let y = dot(q, up) / s;
-            let height = 1.9;
-            if (y > -0.05 && y < height) {
-                let v = clamp(y / height, 0.0, 1.0);
-                let sway = (fire_noise(vec2f(y * 2.0 - t * 3.0, t * 0.7)) - 0.5) * 0.35 * v;
-                let width = 0.6 * pow(1.0 - v, 0.7) * (0.85 + 0.3 * fire_noise(vec2f(t * 4.0, y * 3.0)));
+            let foot = 0.12;
+            let height = 2.1;
+            if (y > foot && y < height) {
+                let v = clamp((y - foot) / (height - foot), 0.0, 1.0);
+                let sway = (fire_noise(vec2f(y * 2.0 - t * 3.0, t * 0.7)) - 0.5) * 0.3 * v;
+                // A teardrop: rounded at the bottom, widest a quarter of the way up, a point at the top.
+                let shape = smoothstep(0.0, 0.22, v) * pow(1.0 - v, 0.85);
+                let width = 0.46 * shape * (0.88 + 0.24 * fire_noise(vec2f(t * 4.0, y * 3.0)));
                 let lick = fire_noise(vec2f(x * 5.0, y * 4.0 - t * 5.0));
                 let d = abs(x - sway) / max(width, 1e-3);
-                let density = clamp((1.0 - d) * 1.6 - v * 0.9 * (1.0 - lick), 0.0, 1.0);
-                let heat = clamp(1.0 - v * 1.3 + (1.0 - d) * 0.4, 0.0, 1.0);
-                let flame = mix(vec3f(0.9, 0.15, 0.02), mix(vec3f(1.0, 0.55, 0.1), vec3f(1.0, 0.92, 0.6), heat), heat);
-                col += flame * density * flick * 1.2;
+                let density = smoothstep(0.0, 0.12, (1.0 - d) - v * 0.5 * (1.0 - lick));
+                // Cartoon bands: a red-orange outside, a yellow heart low down.
+                let inner = smoothstep(0.62, 0.5, d) * smoothstep(0.7, 0.35, v);
+                let flame = mix(mix(vec3f(0.95, 0.22, 0.03), vec3f(1.0, 0.5, 0.08), 1.0 - v), vec3f(1.0, 0.85, 0.3), inner);
+                col += flame * density * flick * 0.95;
             }
             // Glow round the flame.
             let gd = length(vec2f(x, (y - 0.5) * 0.8));
@@ -1016,6 +1007,12 @@ fn noise2(p: vec2f) -> f32 {
     return mix(mix(hash2(i), hash2(i + vec2f(1.0, 0.0)), u.x),
                mix(hash2(i + vec2f(0.0, 1.0)), hash2(i + vec2f(1.0, 1.0)), u.x), u.y);
 }
+fn far_height(az: f32, lo: f32, hi: f32, seed: f32) -> f32 {
+    return lo + (hi - lo) * ridge(vec2f(cos(az), sin(az)) * 3.0 + vec2f(seed, 1.7));
+}
+fn near_height(az: f32, lo: f32, hi: f32, seed: f32) -> f32 {
+    return lo * 0.6 + (hi - lo) * 0.55 * ridge(vec2f(cos(az), sin(az)) * 5.0 + vec2f(9.1, seed));
+}
 fn ridge(p: vec2f) -> f32 {  // 0..1, peaky
     let n = 0.55 * noise2(p) + 0.3 * noise2(p * 2.3 + 5.2) + 0.15 * noise2(p * 5.1 + 1.3);
     return clamp((1.0 - abs(n * 2.0 - 1.0)) * 1.25 - 0.2, 0.0, 1.0);
@@ -1055,17 +1052,40 @@ fn fs_sky(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if (sky.mountains.z > 0.0) {
         let az = atan2(d.x, d.z);
         let el = asin(clamp(h, -1.0, 1.0));
-        let circ = vec2f(cos(az), sin(az));
         let lo = sky.mountains.x;
         let hi = sky.mountains.y;
-        let far_ridge = lo + (hi - lo) * ridge(circ * 3.0 + vec2f(sky.mountains.w, 1.7));
-        let near_ridge = lo * 0.6 + (hi - lo) * 0.55 * ridge(circ * 5.0 + vec2f(9.1, sky.mountains.w));
-        // Soft edges (a fraction of a degree), the far range lighter and hazier toward its foot.
+        let seed = sky.mountains.w;
+        let far_ridge = far_height(az, lo, hi, seed);
+        let near_ridge = near_height(az, lo, hi, seed);
+        // Which way the slope faces against the moon's side of the sky: lit faces lighter, the others darker.
+        let moon_az = atan2(sky.moon_dir.x, sky.moon_dir.z);
+        let side = sign(sin(moon_az - az));
+        // Faces: the slope of the ridge over a wide window, sampled a little to the side with height (the spine
+        // running down from each peak wanders), so whole faces are lit or dark rather than thin stripes.
+        let wob = (noise2(vec2f(az * 40.0, el * 60.0)) - 0.5) * 0.02;
+        let fa = az + wob;
+        let far_slope = far_height(fa + 0.02, lo, hi, seed) - far_height(fa - 0.02, lo, hi, seed);
+        let near_slope = near_height(fa + 0.02, lo, hi, seed) - near_height(fa - 0.02, lo, hi, seed);
+        let far_depth = clamp((far_ridge - el) / max(far_ridge, 1e-3), 0.0, 1.0);
+        let near_depth = clamp((near_ridge - el) / max(near_ridge, 1e-3), 0.0, 1.0);
+        let far_lit = mix(smoothstep(-0.004, 0.004, -far_slope * side), 0.5, far_depth * 0.7);
+        let near_lit = mix(smoothstep(-0.004, 0.004, -near_slope * side), 0.5, near_depth * 0.7);
+        // Gullies: faint streaks down the faces.
+        let gully = noise2(vec2f(az * 90.0, el * 14.0)) * 0.6 + noise2(vec2f(az * 210.0, el * 30.0)) * 0.4;
+        // The far range: shaded faces, gullies, snow above a jagged snowline, hazier toward its foot.
+        var far_col = sky.mountain_color.rgb * mix(0.72, 1.2, far_lit) * (0.86 + 0.14 * gully);
+        let snowline = lo + 0.66 * (hi - lo) + (noise2(vec2f(az * 30.0, 1.3)) - 0.5) * 0.25 * (hi - lo)
+                     - (gully - 0.5) * 0.12 * (hi - lo);
+        let snow = smoothstep(snowline - 0.0015, snowline + 0.0015, el);
+        let snow_col = mix(sky.mountain_color.rgb, vec3f(0.44, 0.52, 0.6), 0.7) * mix(0.68, 1.1, far_lit);
+        far_col = mix(far_col, snow_col, snow);
+        far_col = mix(far_col, sky.horizon.rgb, 0.3 * (1.0 - smoothstep(0.0, far_ridge, el)));
+        // Soft edges (a fraction of a degree).
         let far_cover = 1.0 - smoothstep(far_ridge - 0.004, far_ridge, el);
-        let far_col = mix(sky.mountain_color.rgb, sky.horizon.rgb, 0.3 * (1.0 - smoothstep(0.0, far_ridge, el)));
         col = mix(col, far_col, far_cover);
+        let near_col = sky.mountain_color.rgb * 0.62 * mix(0.75, 1.2, near_lit) * (0.88 + 0.12 * gully);
         let near_cover = 1.0 - smoothstep(near_ridge - 0.004, near_ridge, el);
-        col = mix(col, sky.mountain_color.rgb * 0.65, near_cover);
+        col = mix(col, near_col, near_cover);
     }
 
     // The moon: a disc with soft limb darkening and darker patches, and its glow.
@@ -1169,13 +1189,280 @@ void write_shadow_uniforms(uint8_t* uniforms) noexcept {
 
 void drop_shadow_uniforms() noexcept { g_shadowOffsets.clear(); }
 
-bool sky_wanted(const Camera& camera) noexcept {
-  return relighting() && relight_scene().hasSky && camera.hasView;
+// ---- Reimagined campfire props: logs in a teepee and a ring of rocks round the light file's fire, real geometry drawn
+// into the scene's pass after the sky (depth written, so the game's draws hide them and the stage lights them).
+constexpr char kPropsWgsl[] = R"WGSL(
+struct Props {
+    view0: vec4f,
+    view1: vec4f,
+    view2: vec4f,
+    proj: mat4x4f,
+};
+@group(0) @binding(0) var<uniform> props: Props;
+
+struct VsOut {
+    @builtin(position) pos: vec4f,
+    @location(0) color: vec3f,
+};
+
+@vertex
+fn vs_props(@location(0) p: vec3f, @location(1) color: vec3f) -> VsOut {
+    let w = vec4f(p, 1.0);
+    let mv = vec3f(dot(props.view0, w), dot(props.view1, w), dot(props.view2, w));
+    var out: VsOut;
+    out.pos = vec4f(mv, 1.0) * props.proj;
+    out.color = color;
+    return out;
 }
+
+@fragment
+fn fs_props(in: VsOut) -> @location(0) vec4f {
+    return vec4f(in.color, 1.0);
+}
+)WGSL";
+
+struct PropVertex {
+  float pos[3];
+  float color[3];
+};
+struct PropParams {
+  std::array<std::array<float, 4>, 3> view;
+  Mat4x4<float> projection;
+};
+
+struct PropState {
+  wgpu::RenderPipeline pipeline;
+  uint32_t samples = 0;
+  bool motion = false;
+  wgpu::Buffer vertices;
+  uint32_t vertexCount = 0;
+  wgpu::Buffer params;
+  const RelightScene* scene = nullptr;
+};
+PropState g_props;
+
+float prop_hash(float x) {
+  const float s = std::sin(x * 12.9898f) * 43758.5453f;
+  return s - std::floor(s);
+}
+
+using V3 = std::array<float, 3>;
+V3 v_add(V3 a, V3 b) { return {a[0] + b[0], a[1] + b[1], a[2] + b[2]}; }
+V3 v_sub(V3 a, V3 b) { return {a[0] - b[0], a[1] - b[1], a[2] - b[2]}; }
+V3 v_mul(V3 a, float s) { return {a[0] * s, a[1] * s, a[2] * s}; }
+float v_dot(V3 a, V3 b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+V3 v_cross(V3 a, V3 b) { return {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]}; }
+V3 v_norm(V3 a) {
+  const float l = std::sqrt(v_dot(a, a));
+  return l > 0.f ? v_mul(a, 1.f / l) : a;
+}
+
+void push_tri(std::vector<PropVertex>& out, V3 a, V3 b, V3 c, V3 ca, V3 cb, V3 cc) {
+  out.push_back({{a[0], a[1], a[2]}, {ca[0], ca[1], ca[2]}});
+  out.push_back({{b[0], b[1], b[2]}, {cb[0], cb[1], cb[2]}});
+  out.push_back({{c[0], c[1], c[2]}, {cc[0], cc[1], cc[2]}});
+}
+
+// A log from `a` to `b`: bark round the side (a little uneven), cut ends with light wood and a darker rim.
+void push_log(std::vector<PropVertex>& out, V3 a, V3 b, float radius, float seed) {
+  constexpr int kSides = 10;
+  const V3 axis = v_norm(v_sub(b, a));
+  const V3 t1 = v_norm(v_cross(std::abs(axis[1]) < 0.9f ? V3{0.f, 1.f, 0.f} : V3{1.f, 0.f, 0.f}, axis));
+  const V3 t2 = v_cross(axis, t1);
+  const V3 wood{0.66f, 0.47f, 0.26f}, rim{0.36f, 0.22f, 0.11f};
+  std::array<V3, kSides> ra, rb;
+  std::array<V3, kSides> bark;
+  for (int i = 0; i < kSides; ++i) {
+    const float ang = 6.2831853f * i / kSides;
+    const float r = radius * (0.9f + 0.2f * prop_hash(seed * 7.f + i));
+    const V3 off = v_add(v_mul(t1, std::cos(ang) * r), v_mul(t2, std::sin(ang) * r));
+    ra[i] = v_add(a, off);
+    rb[i] = v_add(b, off);
+    const float k = 0.8f + 0.35f * prop_hash(seed * 3.f + i * 1.7f);
+    bark[i] = {0.32f * k, 0.19f * k, 0.1f * k};
+  }
+  for (int i = 0; i < kSides; ++i) {
+    const int j = (i + 1) % kSides;
+    push_tri(out, ra[i], ra[j], rb[j], bark[i], bark[j], bark[j]);
+    push_tri(out, ra[i], rb[j], rb[i], bark[i], bark[j], bark[i]);
+    push_tri(out, a, ra[j], ra[i], wood, rim, rim);
+    push_tri(out, b, rb[i], rb[j], wood, rim, rim);
+  }
+}
+
+// A rounded rock: a subdivided octahedron, lumpy, squashed, sitting partly in the ground.
+void push_rock(std::vector<PropVertex>& out, V3 centre, float size, float seed) {
+  std::vector<std::array<V3, 3>> tris{
+      {V3{1, 0, 0}, V3{0, 1, 0}, V3{0, 0, 1}},    {V3{0, 0, 1}, V3{0, 1, 0}, V3{-1, 0, 0}},
+      {V3{-1, 0, 0}, V3{0, 1, 0}, V3{0, 0, -1}},  {V3{0, 0, -1}, V3{0, 1, 0}, V3{1, 0, 0}},
+      {V3{1, 0, 0}, V3{0, 0, 1}, V3{0, -1, 0}},   {V3{0, 0, 1}, V3{-1, 0, 0}, V3{0, -1, 0}},
+      {V3{-1, 0, 0}, V3{0, 0, -1}, V3{0, -1, 0}}, {V3{0, 0, -1}, V3{1, 0, 0}, V3{0, -1, 0}},
+  };
+  for (int level = 0; level < 2; ++level) {
+    std::vector<std::array<V3, 3>> next;
+    for (const auto& t : tris) {
+      const V3 ab = v_norm(v_add(t[0], t[1])), bc = v_norm(v_add(t[1], t[2])), ca = v_norm(v_add(t[2], t[0]));
+      next.push_back({t[0], ab, ca});
+      next.push_back({ab, t[1], bc});
+      next.push_back({ca, bc, t[2]});
+      next.push_back({ab, bc, ca});
+    }
+    tris = std::move(next);
+  }
+  const float tone = 0.2f + 0.07f * prop_hash(seed * 5.f);
+  const float yaw = prop_hash(seed * 11.f) * 6.2831853f;
+  const auto place = [&](V3 n, V3& colour) {
+    const float bump = 1.f + 0.16f * (prop_hash(n[0] * 3.1f + n[1] * 5.7f + n[2] * 2.3f + seed) - 0.5f) +
+                       0.1f * std::sin(n[0] * 4.f + seed) * std::cos(n[2] * 3.f);
+    V3 p{n[0] * 1.15f * bump, n[1] * 0.68f * bump, n[2] * 0.95f * bump};
+    p = {p[0] * std::cos(yaw) - p[2] * std::sin(yaw), p[1], p[0] * std::sin(yaw) + p[2] * std::cos(yaw)};
+    const float shade = 0.85f + 0.25f * (n[1] * 0.5f + 0.5f);
+    colour = {tone * shade, tone * shade * 0.95f, tone * shade * 0.88f};
+    return v_add(centre, v_mul(p, size));
+  };
+  for (const auto& t : tris) {
+    V3 c0, c1, c2;
+    const V3 p0 = place(t[0], c0), p1 = place(t[1], c1), p2 = place(t[2], c2);
+    push_tri(out, p0, p1, p2, c0, c1, c2);
+  }
+}
+
+std::vector<PropVertex> campfire_mesh(const RelightScene& scene) {
+  std::vector<PropVertex> out;
+  const V3 base{scene.firePos[0], scene.firePos[1], scene.firePos[2]};
+  const float s = scene.fireSize;
+  // A teepee of five logs leaning in, their tops crossing just past the middle.
+  constexpr int kLogs = 5;
+  for (int i = 0; i < kLogs; ++i) {
+    const float ang = 6.2831853f * i / kLogs + 0.3f;
+    const V3 dir{std::cos(ang), 0.f, std::sin(ang)};
+    const V3 foot = v_add(base, v_add(v_mul(dir, 0.62f * s), V3{0.f, 0.02f * s, 0.f}));
+    const V3 top = v_add(base, v_add(v_mul(dir, -0.14f * s), V3{0.f, 1.0f * s, 0.f}));
+    push_log(out, foot, top, 0.085f * s, static_cast<float>(i) + 1.f);
+  }
+  // Two short logs lying at the foot.
+  push_log(out, v_add(base, V3{-0.75f * s, 0.07f * s, 0.35f * s}), v_add(base, V3{-0.05f * s, 0.07f * s, 0.78f * s}),
+           0.08f * s, 9.f);
+  push_log(out, v_add(base, V3{0.55f * s, 0.07f * s, -0.62f * s}), v_add(base, V3{0.82f * s, 0.07f * s, 0.15f * s}),
+           0.075f * s, 13.f);
+  // A ring of rocks.
+  constexpr int kRocks = 11;
+  for (int i = 0; i < kRocks; ++i) {
+    const float ang = 6.2831853f * i / kRocks + 0.15f * prop_hash(i * 2.3f);
+    const float size = (0.17f + 0.08f * prop_hash(i * 4.1f)) * s;
+    const float ring = 1.08f * s + 0.05f * s * prop_hash(i * 6.7f);
+    push_rock(out, v_add(base, V3{std::cos(ang) * ring, size * 0.25f, std::sin(ang) * ring}), size,
+              static_cast<float>(i) * 1.37f + 0.5f);
+  }
+  return out;
+}
+
+void encode_props(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size, uint32_t samples,
+                  bool motion) {
+  const auto& scene = relight_scene();
+  if (!scene.hasFire || !camera.hasView) return;
+  if (g_props.scene != &scene) {
+    const auto mesh = campfire_mesh(scene);
+    const wgpu::BufferDescriptor descriptor{
+        .label = "Reimagined props",
+        .usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst,
+        .size = (mesh.size() * sizeof(PropVertex) + 3) & ~size_t{3},
+    };
+    g_props.vertices = g_device.CreateBuffer(&descriptor);
+    g_queue.WriteBuffer(g_props.vertices, 0, mesh.data(), mesh.size() * sizeof(PropVertex));
+    g_props.vertexCount = static_cast<uint32_t>(mesh.size());
+    g_props.scene = &scene;
+  }
+  const auto format = webgpu::g_graphicsConfig.surfaceConfiguration.format;
+  if (!g_props.pipeline || g_props.samples != samples || g_props.motion != motion) {
+    wgpu::ShaderSourceWGSL wgsl{};
+    wgsl.code = kPropsWgsl;
+    const wgpu::ShaderModuleDescriptor moduleDescriptor{.nextInChain = &wgsl, .label = "Reimagined props"};
+    const auto module = g_device.CreateShaderModule(&moduleDescriptor);
+    const std::array attributes{
+        wgpu::VertexAttribute{.format = wgpu::VertexFormat::Float32x3, .offset = 0, .shaderLocation = 0},
+        wgpu::VertexAttribute{.format = wgpu::VertexFormat::Float32x3, .offset = 12, .shaderLocation = 1},
+    };
+    const wgpu::VertexBufferLayout layout{
+        .arrayStride = sizeof(PropVertex), .attributeCount = attributes.size(), .attributes = attributes.data()};
+    const std::array targets{
+        wgpu::ColorTargetState{.format = format,
+                               .writeMask = wgpu::ColorWriteMask::Red | wgpu::ColorWriteMask::Green |
+                                            wgpu::ColorWriteMask::Blue},
+        wgpu::ColorTargetState{.format = wgpu::TextureFormat::RG16Float, .writeMask = wgpu::ColorWriteMask::None},
+        wgpu::ColorTargetState{.format = wgpu::TextureFormat::R32Float, .writeMask = wgpu::ColorWriteMask::None},
+        wgpu::ColorTargetState{.format = wgpu::TextureFormat::R8Unorm, .writeMask = wgpu::ColorWriteMask::None},
+    };
+    const wgpu::FragmentState fragment{.module = module,
+                                       .entryPoint = "fs_props",
+                                       .targetCount = motion ? targets.size() : 1,
+                                       .targets = targets.data()};
+    const wgpu::DepthStencilState depthStencil{
+        .format = webgpu::g_graphicsConfig.depthFormat,
+        .depthWriteEnabled = true,
+        .depthCompare = gx::UseReversedZ ? wgpu::CompareFunction::GreaterEqual : wgpu::CompareFunction::LessEqual,
+    };
+    const wgpu::RenderPipelineDescriptor descriptor{
+        .label = "Reimagined props",
+        .vertex = {.module = module, .entryPoint = "vs_props", .bufferCount = 1, .buffers = &layout},
+        .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList, .cullMode = wgpu::CullMode::None},
+        .depthStencil = &depthStencil,
+        .multisample = {.count = samples},
+        .fragment = &fragment,
+    };
+    g_props.pipeline = g_device.CreateRenderPipeline(&descriptor);
+    g_props.samples = samples;
+    g_props.motion = motion;
+  }
+  if (!g_props.params) {
+    const wgpu::BufferDescriptor descriptor{
+        .label = "Reimagined props",
+        .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+        .size = sizeof(PropParams),
+    };
+    g_props.params = g_device.CreateBuffer(&descriptor);
+  }
+  PropParams params{};
+  for (int r = 0; r < 3; ++r)
+    for (int c = 0; c < 4; ++c) params.view[r][c] = camera.view[r * 4 + c];
+  params.projection = camera.projection;
+  g_queue.WriteBuffer(g_props.params, 0, &params, sizeof(params));
+  const wgpu::BindGroupEntry entry{.binding = 0, .buffer = g_props.params, .size = sizeof(PropParams)};
+  const wgpu::BindGroupDescriptor bindGroupDescriptor{
+      .layout = g_props.pipeline.GetBindGroupLayout(0), .entryCount = 1, .entries = &entry};
+  const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
+  const auto& vp = camera.viewport;
+  pass.SetViewport(vp.left, vp.top, vp.width, vp.height, gx::UseReversedZ ? 1.f - vp.zfar : vp.znear,
+                   gx::UseReversedZ ? 1.f - vp.znear : vp.zfar);
+  const auto left = static_cast<uint32_t>(std::clamp(vp.left, 0.f, static_cast<float>(size.width)));
+  const auto top = static_cast<uint32_t>(std::clamp(vp.top, 0.f, static_cast<float>(size.height)));
+  const auto right = static_cast<uint32_t>(std::clamp(vp.left + vp.width, 0.f, static_cast<float>(size.width)));
+  const auto bottom = static_cast<uint32_t>(std::clamp(vp.top + vp.height, 0.f, static_cast<float>(size.height)));
+  if (right <= left || bottom <= top) return;
+  pass.SetScissorRect(left, top, right - left, bottom - top);
+  pass.SetPipeline(g_props.pipeline);
+  pass.SetBindGroup(0, bindGroup);
+  pass.SetVertexBuffer(0, g_props.vertices);
+  pass.Draw(g_props.vertexCount);
+}
+
+
+bool sky_wanted(const Camera& camera) noexcept {
+  return relighting() && (relight_scene().hasSky || relight_scene().hasFire) && camera.hasView;
+}
+
+void encode_sky_only(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size,
+                     uint32_t samples, bool motion);
 
 void encode_sky(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size, uint32_t samples,
                 bool motion) {
   if (!sky_wanted(camera)) return;
+  if (relight_scene().hasSky) encode_sky_only(pass, camera, size, samples, motion);
+  encode_props(pass, camera, size, samples, motion);
+}
+
+void encode_sky_only(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgpu::Extent3D size,
+                     uint32_t samples, bool motion) {
   const auto& scene = relight_scene();
   const auto format = webgpu::g_graphicsConfig.surfaceConfiguration.format;
   if (!g_sky.pipeline || g_sky.samples != samples || g_sky.motion != motion || g_sky.format != format) {
@@ -1505,6 +1792,7 @@ void shutdown() noexcept {
   g_relightParams = {};
   g_sky = {};
   g_skyParams = {};
+  g_props = {};
   g_skySampler = {};
   g_skyNoMoon = {};
   g_skyNoMoonView = {};
