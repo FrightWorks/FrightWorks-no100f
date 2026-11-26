@@ -1,7 +1,8 @@
 #pragma once
 
 // Keeps the player's user name out of the logs they send us: their home folder becomes "~" (Linux, macOS) or
-// "%USERPROFILE%" (Windows) wherever a log line has it. console.log goes through this as it is written (main.cpp),
+// "%USERPROFILE%" (Windows) wherever a log line has it; under Wine or Proton the Linux home (Z:\home\name) becomes "~"
+// too. console.log goes through this as it is written (main.cpp),
 // and so do the crash files' details. Names elsewhere (a disc image in another folder that happens to carry it) stay.
 // Header-only so tests/log_privacy_tests.cpp can check it without the runtime.
 
@@ -12,6 +13,16 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 namespace LogPrivacy {
 
@@ -48,6 +59,12 @@ inline void AddRule(std::vector<Rule>& rules, std::string prefix, const char* re
     rules.push_back({std::move(prefix), replacement, ignoreCase});
 }
 
+// Longest first, so /var/home/name is replaced before /home/name (which it contains).
+inline void SortLongestFirst(std::vector<Rule>& rules) {
+    std::stable_sort(rules.begin(), rules.end(),
+                     [](const Rule& a, const Rule& b) { return a.prefix.size() > b.prefix.size(); });
+}
+
 }  // namespace detail
 
 // The rules for a home folder. windows: home is like C:\Users\Name (both slash forms get a rule); otherwise like
@@ -73,9 +90,36 @@ inline std::vector<Rule> RulesForHome(const std::string& home, bool windows) {
             detail::AddRule(rules, std::string(kVarHome) + home.substr(kHome.size()), "~", false);
         }
     }
-    // Longest first: /var/home/name before /home/name.
-    std::sort(rules.begin(), rules.end(), [](const Rule& a, const Rule& b) { return a.prefix.size() > b.prefix.size(); });
+    detail::SortLongestFirst(rules);
     return rules;
+}
+
+// The Linux home folder as the Windows build sees it under Wine or Proton: through drive Z: (Wine maps Z: to /), as
+// Z:\home\name or Z:/home/name, and in Unix form in values Wine passes through. unixHome is the Linux $HOME; an empty
+// or non-Unix value gives no rules.
+inline std::vector<Rule> RulesForWineHost(const std::string& unixHome) {
+    std::vector<Rule> rules;
+    if (unixHome.empty() || unixHome.front() != '/') return rules;
+    for (const Rule& unixRule : RulesForHome(unixHome, false)) {
+        detail::AddRule(rules, unixRule.prefix, "~", false);
+        std::string dos = "Z:" + unixRule.prefix;
+        detail::AddRule(rules, dos, "~", true);
+        std::replace(dos.begin(), dos.end(), '/', '\\');
+        detail::AddRule(rules, dos, "~", true);
+    }
+    detail::SortLongestFirst(rules);
+    return rules;
+}
+
+// The Linux home from Wine's WINEHOMEDIR ("\??\Z:\home\name"), for when HOME isn't passed through; "" if it isn't
+// in that form.
+inline std::string UnixHomeFromWineHomeDir(std::string value) {
+    constexpr std::string_view kNtPrefix = "\\??\\";
+    if (value.rfind(kNtPrefix, 0) == 0) value.erase(0, kNtPrefix.size());
+    if (value.size() < 3 || value[1] != ':' || (value[2] != '\\' && value[2] != '/')) return {};
+    value.erase(0, 2);  // the drive letter: Wine's Z: is /
+    std::replace(value.begin(), value.end(), '\\', '/');
+    return value;
 }
 
 // Replaces each rule's folder where it stands as a whole path part: not "/home/name2", not "x/home/name".
@@ -101,10 +145,22 @@ inline const std::vector<Rule>& CurrentRules() {
 #if defined(_WIN32)
         // The wide variable, as UTF-8 like the log's paths (getenv would give the ANSI code page, which doesn't match
         // a user name with letters outside it).
-        const wchar_t* home = _wgetenv(L"USERPROFILE");
-        if (home == nullptr) return std::vector<Rule>{};
-        const std::u8string utf8 = std::filesystem::path(home).u8string();
-        return RulesForHome(std::string(utf8.begin(), utf8.end()), true);
+        const auto envUtf8 = [](const wchar_t* name) -> std::string {
+            const wchar_t* value = _wgetenv(name);
+            if (value == nullptr) return {};
+            const std::u8string utf8 = std::filesystem::path(value).u8string();
+            return std::string(utf8.begin(), utf8.end());
+        };
+        std::vector<Rule> all = RulesForHome(envUtf8(L"USERPROFILE"), true);
+        // Under Wine or Proton (ntdll has wine_get_version), the Linux home shows up too, through Z:.
+        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        if (ntdll != nullptr && GetProcAddress(ntdll, "wine_get_version") != nullptr) {
+            std::string unixHome = envUtf8(L"HOME");
+            if (unixHome.empty() || unixHome.front() != '/') unixHome = UnixHomeFromWineHomeDir(envUtf8(L"WINEHOMEDIR"));
+            for (Rule& rule : RulesForWineHost(unixHome)) all.push_back(std::move(rule));
+            detail::SortLongestFirst(all);
+        }
+        return all;
 #else
         const char* home = std::getenv("HOME");
         return RulesForHome(home != nullptr ? home : "", false);

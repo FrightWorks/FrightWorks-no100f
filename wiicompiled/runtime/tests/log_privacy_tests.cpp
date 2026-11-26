@@ -3,6 +3,8 @@
 
 #include <cstdio>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
 int g_failures = 0;
@@ -12,6 +14,25 @@ void Check(const char* name, const std::string& home, bool windows, std::string 
     if (text == expected) return;
     ++g_failures;
     std::fprintf(stderr, "FAIL %s\n  got  '%s'\n  want '%s'\n", name, text.c_str(), expected.c_str());
+}
+
+// The Windows build under Wine: the Wine profile's rules (if any) plus the Linux home's, as CurrentRules builds them.
+void CheckWine(const char* name, const std::string& unixHome, std::string text, const std::string& expected,
+               const std::string& wineProfile = "") {
+    std::vector<LogPrivacy::Rule> rules = LogPrivacy::RulesForHome(wineProfile, true);
+    for (LogPrivacy::Rule& rule : LogPrivacy::RulesForWineHost(unixHome)) rules.push_back(std::move(rule));
+    LogPrivacy::detail::SortLongestFirst(rules);
+    LogPrivacy::Apply(text, rules);
+    if (text == expected) return;
+    ++g_failures;
+    std::fprintf(stderr, "FAIL %s\n  got  '%s'\n  want '%s'\n", name, text.c_str(), expected.c_str());
+}
+
+void CheckHomeDir(const char* name, const std::string& wineHomeDir, const std::string& expected) {
+    const std::string got = LogPrivacy::UnixHomeFromWineHomeDir(wineHomeDir);
+    if (got == expected) return;
+    ++g_failures;
+    std::fprintf(stderr, "FAIL %s\n  got  '%s'\n  want '%s'\n", name, got.c_str(), expected.c_str());
 }
 }  // namespace
 
@@ -45,6 +66,24 @@ int main() {
     Check("windows other drive kept", "C:\\Users\\Nick", true, "D:\\My Documents\\x", "D:\\My Documents\\x");
     Check("windows utf8 name", "C:\\Users\\Jos\xC3\xA9", true, "C:\\Users\\Jos\xC3\xA9\\x C:\\Users\\Jos\xC3\xA9s\\y",
           "%USERPROFILE%\\x C:\\Users\\Jos\xC3\xA9s\\y");
+
+    // Wine / Proton: the Windows build also sees the Linux home through Z: and in Unix form.
+    CheckWine("wine z backslashes", "/home/nick", "Z:\\home\\nick\\Games\\FrightWorks\\data\\FrightWorks Game.exe",
+              "~\\Games\\FrightWorks\\data\\FrightWorks Game.exe");
+    CheckWine("wine z slashes", "/home/nick", "dvd_root=Z:/home/nick/Games/DATA", "dvd_root=~/Games/DATA");
+    CheckWine("wine any case", "/home/nick", "z:\\HOME\\NICK\\x", "~\\x");
+    CheckWine("wine unix form", "/home/nick", "HOME=/home/nick, /home/nick/x", "HOME=~, ~/x");
+    CheckWine("wine bazzite", "/var/home/nick", "Z:\\var\\home\\nick\\a Z:\\home\\nick\\b /var/home/nick/c",
+              "~\\a ~\\b ~/c");
+    CheckWine("wine longer name kept", "/home/nick", "Z:\\home\\nicky\\x", "Z:\\home\\nicky\\x");
+    CheckWine("wine other folders kept", "/home/nick", "Z:\\mnt\\games\\x C:\\windows\\x", "Z:\\mnt\\games\\x C:\\windows\\x");
+    CheckWine("wine with its own profile", "/home/nick", "C:\\users\\nick\\AppData\\x Z:\\home\\nick\\y",
+              "%USERPROFILE%\\AppData\\x ~\\y", "C:\\users\\nick");
+    CheckWine("wine no home", "", "Z:\\home\\nick\\x", "Z:\\home\\nick\\x");
+    CheckHomeDir("winehomedir", "\\??\\Z:\\home\\nick", "/home/nick");
+    CheckHomeDir("winehomedir plain", "Z:\\var\\home\\nick", "/var/home/nick");
+    CheckHomeDir("winehomedir not a path", "nick", "");
+    CheckHomeDir("winehomedir empty", "", "");
 
     if (g_failures == 0) std::printf("log_privacy_tests: all passed\n");
     return g_failures == 0 ? 0 : 1;
