@@ -414,6 +414,9 @@ To build old source there, set only the paths that differ with `git restore --so
 - Its setup step runs `FrightWorks.exe --prepare --game=<image>` with no window (`launcher/Prepare.cs`): it extracts the disc into `data/Disc/DATA` and sets `dvd_root`, copies an installed game's saves and settings into a fresh copy, and fills the HDR keys.
   Texture packs are only ever downloaded from this launcher's Extras > Textures, never by the setup step (maintainer, 2026-11-25).
   It prints `progress <0..1> <text>` lines; exit 0 done, 1 error, 2 incomplete image, 3 wrong disc.
+  RecompLauncher runs it again after every update: `data/Disc/DATA.source` records which image (path, size, date) the disc folder came from, and the same image with its files in place isn't unpacked again.
+- The game's exit codes in `exit_codes`: 0 is a normal quit; 3 is no usable disc folder on Linux and macOS (`GameFolder::kNoGameExitCode`), shown as its message instead of a crash report. Windows asks for the folder instead.
+  Another code the game uses on purpose gets a message there too; a crash (1) stays unlisted so the player gets the crash report.
 - Play starts `data/FrightWorks Game` directly, not this launcher, so anything the launcher does before Play (patch mods are built when added, not only before Play) must also work without it.
 - The game reads `RECOMPLAUNCHER=1` and `RECOMPLAUNCHER_MODE` (`runtime_config.h`): under RecompLauncher it doesn't read pads in the background (its overlay uses them), and from its Big Picture mode a saved window opens borderless for that run only.
 - Its crash report takes the newest `.log` in `UserData/Logs`: the game mirrors the run's `console.log` to `Logs/latest.log`.
