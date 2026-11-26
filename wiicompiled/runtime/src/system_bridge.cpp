@@ -331,7 +331,8 @@ void SystemBridge::WriteGuestMemorySnapshot(std::ostream& os, const std::filesys
         std::ofstream dump(mem1Path, std::ios::binary | std::ios::trunc);
         dump.write(reinterpret_cast<const char*>(Memory::GetPointer(kMem1Base, kMem1Size)),
                    kMem1Size);
-        os << "[runtime] MEM1 snapshot written to " << RuntimeConfigFile::PathToUtf8(mem1Path)
+        // The file name only: it is beside the crash file, and the folder holds the player's user name.
+        os << "[runtime] MEM1 snapshot written to " << RuntimeConfigFile::PathToUtf8(mem1Path.filename())
            << (dump.good() ? "" : " (write failed)") << std::endl;
     }
     constexpr uint32_t kMem2Base = 0x90000000u;
@@ -344,7 +345,7 @@ void SystemBridge::WriteGuestMemorySnapshot(std::ostream& os, const std::filesys
         std::ofstream dump(mem2Path, std::ios::binary | std::ios::trunc);
         dump.write(reinterpret_cast<const char*>(Memory::GetPointer(kMem2Base, mem2Size)),
                    mem2Size);
-        os << "[runtime] MEM2 snapshot written to " << RuntimeConfigFile::PathToUtf8(mem2Path)
+        os << "[runtime] MEM2 snapshot written to " << RuntimeConfigFile::PathToUtf8(mem2Path.filename())
            << (dump.good() ? "" : " (write failed)") << std::endl;
         break;
     }
