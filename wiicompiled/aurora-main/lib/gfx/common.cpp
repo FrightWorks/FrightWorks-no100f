@@ -1890,10 +1890,6 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
     render_pass_impl(pass, renderPasses, i, interpolatedFrame, debugFrame, false, false,
                      i == skyPass ? &skyInsert : nullptr);
     pass.End();
-    if (i == sceneStagePass) {
-      scene_stage::encode_fire(cmd, passInfo.colorView, passInfo.resolveView, passInfo.depthView,
-                               passInfo.targetSize);
-    }
 
     if (finalize && i == renderPasses.size() - 1) {
       depth_peek::encode_frame_snapshot(cmd, passInfo.copySourceDepthView, passInfo.targetSize, passInfo.msaaSamples, depthMapping);

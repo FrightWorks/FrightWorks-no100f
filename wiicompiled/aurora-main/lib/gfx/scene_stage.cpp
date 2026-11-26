@@ -100,6 +100,7 @@ struct RelightScene {
   bool hasFire = false;
   float firePos[3] = {};
   float fireSize = 0.6f;
+  bool fireMask = true;  // "firemask 0": no flame core in the depth buffer (for comparing)
   float fireIntensity = 1.f;
   bool hasMountains = false;
   float mountainLow = 2.f, mountainHigh = 7.f;
@@ -174,6 +175,8 @@ RelightScene load_relight_scene() {
         std::copy(v, v + 3, s.firePos);
         if (n >= 5) s.fireSize = std::max(v[3], 0.05f);
         if (n >= 6) s.fireIntensity = std::max(v[4], 0.f);
+      } else if (w == "firemask" && n >= 2) {
+        s.fireMask = v[0] != 0.f;
       } else if (w == "mountains" && n >= 6) {
         s.hasMountains = true;
         s.mountainLow = v[0];
@@ -669,6 +672,66 @@ fn fire_noise(p: vec2f) -> f32 {
 
 // Added over the lit scene: the flame (a camera-facing sheet through the fire, hidden behind nearer surfaces), a soft
 // glow round it and the embers on the ground.
+// Where the camera ray `dir` (view space) meets the flame's sheet (upright through the fire, facing the camera): across
+// and up it in fire sizes, and the distance; w = 0 when it misses.
+fn flame_hit(dir: vec3f) -> vec4f {
+    let base = relight.fire_pos.xyz;
+    let up = relight.fire_up.xyz;
+    let nrm = normalize(base - up * dot(base, up));
+    let denom = dot(dir, nrm);
+    if (abs(denom) <= 1e-4) {
+        return vec4f(0.0);
+    }
+    let dist = dot(base, nrm) / denom;
+    if (dist <= 0.0) {
+        return vec4f(0.0);
+    }
+    let q = dir * dist - base;
+    let right = normalize(cross(up, nrm));
+    let s = relight.fire_info.x;
+    return vec4f(dot(q, right) / s, dot(q, up) / s, dist, 1.0);
+}
+
+// The flame at (x, y) on its sheet: density (0 outside), how far up (0..1), distance from its middle line (0..1 inside).
+// A teardrop: rounded at the bottom, widest a quarter of the way up, a point at the top, swaying and licking.
+fn flame_shape(x: f32, y: f32) -> vec3f {
+    let t = relight.fire_info.z;
+    let foot = 0.25;
+    let height = 2.5;
+    if (y <= foot || y >= height) {
+        return vec3f(0.0, 0.0, 1.0);
+    }
+    let v = clamp((y - foot) / (height - foot), 0.0, 1.0);
+    let sway = (fire_noise(vec2f(y * 2.0 - t * 3.0, t * 0.7)) - 0.5) * 0.3 * v;
+    let shape = smoothstep(0.0, 0.22, v) * pow(1.0 - v, 0.85);
+    let width = 0.62 * shape * (0.88 + 0.24 * fire_noise(vec2f(t * 4.0, y * 3.0)));
+    let lick = fire_noise(vec2f(x * 5.0, y * 4.0 - t * 5.0));
+    let d = abs(x - sway) / max(width, 1e-3);
+    return vec3f(smoothstep(0.0, 0.12, (1.0 - d) - v * 0.5 * (1.0 - lick)), v, d);
+}
+
+fn camera_ray(frag: vec2f) -> vec3f {
+    let uv = (frag - params.viewport.xy) / params.viewport.zw;
+    let r4 = vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.5, 1.0) * params.inv_proj;
+    return normalize(r4.xyz / r4.w);
+}
+
+// The flame's solid middle into the depth buffer (after its colour is added), so the game's late see-through draws
+// behind it (Scooby's footprints) are hidden there while anything in front of it (Scooby) still draws over it.
+@fragment
+fn fs_fire_depth(@builtin(position) pos: vec4f) -> @builtin(frag_depth) f32 {
+    let dir = camera_ray(pos.xy);
+    let hit = flame_hit(dir);
+    if (hit.w == 0.0) {
+        discard;
+    }
+    if (flame_shape(hit.x, hit.y).x < 0.5) {
+        discard;
+    }
+    let clip = vec4f(dir * hit.z, 1.0) * params.proj;
+    return params.depth_map.x + clip.z / clip.w * params.depth_map.y;
+}
+
 @fragment
 fn fs_fire(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let p = vec2i(pos.xy);
@@ -697,35 +760,16 @@ fn fs_fire(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     }
 
     // The flame sheet: faces the camera, upright.
-    let nrm = normalize(base - up * dot(base, up));
-    let denom = dot(dir, nrm);
-    if (abs(denom) > 1e-4) {
-        let dist = dot(base, nrm) / denom;
-        if (dist > 0.0 && dist < scene_dist + 0.05 * s) {
-            let q = dir * dist - base;
-            let right = normalize(cross(up, nrm));
-            let x = dot(q, right) / s;
-            let y = dot(q, up) / s;
-            let foot = 0.12;
-            let height = 2.1;
-            if (y > foot && y < height) {
-                let v = clamp((y - foot) / (height - foot), 0.0, 1.0);
-                let sway = (fire_noise(vec2f(y * 2.0 - t * 3.0, t * 0.7)) - 0.5) * 0.3 * v;
-                // A teardrop: rounded at the bottom, widest a quarter of the way up, a point at the top.
-                let shape = smoothstep(0.0, 0.22, v) * pow(1.0 - v, 0.85);
-                let width = 0.46 * shape * (0.88 + 0.24 * fire_noise(vec2f(t * 4.0, y * 3.0)));
-                let lick = fire_noise(vec2f(x * 5.0, y * 4.0 - t * 5.0));
-                let d = abs(x - sway) / max(width, 1e-3);
-                let density = smoothstep(0.0, 0.12, (1.0 - d) - v * 0.5 * (1.0 - lick));
-                // Cartoon bands: a red-orange outside, a yellow heart low down.
-                let inner = smoothstep(0.62, 0.5, d) * smoothstep(0.7, 0.35, v);
-                let flame = mix(mix(vec3f(0.95, 0.22, 0.03), vec3f(1.0, 0.5, 0.08), 1.0 - v), vec3f(1.0, 0.85, 0.3), inner);
-                col += flame * density * flick * 0.95;
-            }
-            // Glow round the flame.
-            let gd = length(vec2f(x, (y - 0.5) * 0.8));
-            col += vec3f(1.0, 0.45, 0.12) * exp(-gd * 2.2) * 0.12 * flick;
-        }
+    let hit = flame_hit(dir);
+    if (hit.w != 0.0 && hit.z < scene_dist + 0.05 * s) {
+        let f = flame_shape(hit.x, hit.y);
+        let v = f.y;
+        let inner = smoothstep(0.62, 0.5, f.z) * smoothstep(0.7, 0.35, v);
+        let flame = mix(mix(vec3f(0.95, 0.22, 0.03), vec3f(1.0, 0.5, 0.08), 1.0 - v), vec3f(1.0, 0.85, 0.3), inner);
+        col += flame * f.x * flick * 0.95;
+        // Glow round the flame.
+        let gd = length(vec2f(hit.x, (hit.y - 0.9) * 0.7));
+        col += vec3f(1.0, 0.45, 0.12) * exp(-gd * 2.2) * 0.12 * flick;
     }
     return vec4f(col, 1.0);
 }
@@ -766,6 +810,7 @@ struct Pipelines {
   uint32_t samples = 0;
   wgpu::TextureFormat format = wgpu::TextureFormat::Undefined;
   std::array<wgpu::RenderPipeline, static_cast<size_t>(Kind::Count)> pipelines;
+  wgpu::RenderPipeline fireDepth;  // the flame's middle into the scene's depth (no colour)
 };
 Pipelines g_pipelines;
 wgpu::Buffer g_params;
@@ -843,6 +888,23 @@ void build_pipelines(wgpu::TextureFormat format, uint32_t samples) {
   p[static_cast<size_t>(Kind::Relight)] = make("fs_relight", true, true, true);
   p[static_cast<size_t>(Kind::RelightView)] = make("fs_relight_view", true, false);
   p[static_cast<size_t>(Kind::Fire)] = make("fs_fire", true, false, false, true);
+  {
+    const wgpu::FragmentState fragment{.module = module, .entryPoint = "fs_fire_depth", .targetCount = 0};
+    const wgpu::DepthStencilState depthStencil{
+        .format = webgpu::g_graphicsConfig.depthFormat,
+        .depthWriteEnabled = true,
+        .depthCompare = gx::UseReversedZ ? wgpu::CompareFunction::GreaterEqual : wgpu::CompareFunction::LessEqual,
+    };
+    const wgpu::RenderPipelineDescriptor descriptor{
+        .label = "fs_fire_depth",
+        .vertex = {.module = module, .entryPoint = "vs_main"},
+        .primitive = {.topology = wgpu::PrimitiveTopology::TriangleList},
+        .depthStencil = &depthStencil,
+        .multisample = {.count = samples},
+        .fragment = &fragment,
+    };
+    g_pipelines.fireDepth = g_device.CreateRenderPipeline(&descriptor);
+  }
   g_pipelines.samples = samples;
   g_pipelines.format = format;
 }
@@ -868,7 +930,7 @@ void prepare_ao_targets(uint32_t width, uint32_t height) {
 // One full-screen triangle with `kind`'s pipeline into `target` (`size`). Only the bindings the pass reads are bound
 // (the pipelines' layouts are derived from what each entry point uses).
 void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureView& target, wgpu::Extent3D size,
-          const wgpu::TextureView* depth, const wgpu::TextureView* ao, const wgpu::TextureView* resolve = nullptr) {
+          const wgpu::TextureView* depth, const wgpu::TextureView* ao) {
   const auto& pipeline = g_pipelines.pipelines[static_cast<size_t>(kind)];
   std::vector<wgpu::BindGroupEntry> entries{
       wgpu::BindGroupEntry{.binding = 0, .buffer = g_params, .size = sizeof(Params)},
@@ -891,7 +953,6 @@ void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureVie
   const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
   const wgpu::RenderPassColorAttachment attachment{
       .view = target,
-      .resolveTarget = resolve != nullptr ? *resolve : wgpu::TextureView{},
       .loadOp = wgpu::LoadOp::Load,
       .storeOp = wgpu::StoreOp::Store,
   };
@@ -899,6 +960,34 @@ void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureVie
       .label = "Scene stage",
       .colorAttachmentCount = 1,
       .colorAttachments = &attachment,
+  };
+  const auto pass = encoder.BeginRenderPass(&passDescriptor);
+  pass.SetViewport(0.f, 0.f, static_cast<float>(size.width), static_cast<float>(size.height), 0.f, 1.f);
+  pass.SetPipeline(pipeline);
+  pass.SetBindGroup(0, bindGroup);
+  pass.Draw(3);
+  pass.End();
+}
+
+// The flame's middle into `depth` (the scene's depth buffer), tested against what is there.
+void draw_fire_depth(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& depth, wgpu::Extent3D size) {
+  const auto& pipeline = g_pipelines.fireDepth;
+  const std::array entries{
+      wgpu::BindGroupEntry{.binding = 0, .buffer = g_params, .size = sizeof(Params)},
+      wgpu::BindGroupEntry{.binding = 3, .buffer = g_relightParams, .size = sizeof(RelightParams)},
+  };
+  const wgpu::BindGroupDescriptor bindGroupDescriptor{
+      .layout = pipeline.GetBindGroupLayout(0), .entryCount = entries.size(), .entries = entries.data()};
+  const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
+  const wgpu::RenderPassDepthStencilAttachment depthAttachment{
+      .view = depth,
+      .depthLoadOp = wgpu::LoadOp::Load,
+      .depthStoreOp = wgpu::StoreOp::Store,
+  };
+  const wgpu::RenderPassDescriptor passDescriptor{
+      .label = "Reimagined flame depth",
+      .colorAttachmentCount = 0,
+      .depthStencilAttachment = &depthAttachment,
   };
   const auto pass = encoder.BeginRenderPass(&passDescriptor);
   pass.SetViewport(0.f, 0.f, static_cast<float>(size.width), static_cast<float>(size.height), 0.f, 1.f);
@@ -1190,7 +1279,6 @@ void write_shadow_uniforms(uint8_t* uniforms) noexcept {
 
 void drop_shadow_uniforms() noexcept { g_shadowOffsets.clear(); }
 
-bool g_fireReady = false;
 
 // ---- Reimagined campfire props: logs in a teepee and a ring of rocks round the light file's fire, real geometry drawn
 // into the scene's pass after the sky (depth written, so the game's draws hide them and the stage lights them).
@@ -1449,13 +1537,6 @@ void encode_props(const wgpu::RenderPassEncoder& pass, const Camera& camera, wgp
   pass.Draw(g_props.vertexCount);
 }
 
-
-void encode_fire(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color, const wgpu::TextureView& resolve,
-                 const wgpu::TextureView& depth, wgpu::Extent3D size) {
-  if (!g_fireReady || !color || !depth) return;
-  g_fireReady = false;
-  draw(encoder, Kind::Fire, color, size, &depth, nullptr, resolve ? &resolve : nullptr);
-}
 
 bool sky_wanted(const Camera& camera) noexcept {
   return relighting() && (relight_scene().hasSky || relight_scene().hasFire) && camera.hasView;
@@ -1759,7 +1840,10 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       return;
     }
     draw(encoder, Kind::Relight, color, size, &depth, nullptr);
-    g_fireReady = scene.hasFire;  // drawn by encode_fire once the scene pass's translucent draws are in
+    if (scene.hasFire) {
+      draw(encoder, Kind::Fire, color, size, &depth, nullptr);
+      if (scene.fireMask) draw_fire_depth(encoder, depth, size);
+    }
   }
   if (mode == 1) {
     draw(encoder, Kind::Tint, color, size, nullptr, nullptr);
