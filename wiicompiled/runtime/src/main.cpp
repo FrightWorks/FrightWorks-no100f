@@ -566,9 +566,13 @@ void InitializeProcessTranscript(int argc, char** argv) {
     });
 }
 
-void ShutdownProcessTranscript() {
+// how: why the game is ending, for the transcript's last line. A log without that line ended some other way: killed,
+// out of memory, power lost, or a crash (those leave a crash_*.txt beside it).
+void ShutdownProcessTranscript(const char* how) {
     auto& state = GetProcessTranscriptState();
-    if (!state.enabled) {
+    // Once: a window close and a game reset can race to end the run.
+    static std::atomic_flag s_ending = ATOMIC_FLAG_INIT;
+    if (!state.enabled || s_ending.test_and_set()) {
         return;
     }
 
@@ -619,12 +623,20 @@ void ShutdownProcessTranscript() {
 
     {
         std::lock_guard<std::mutex> lock(state.fileMutex);
-        state.file << "\n[runtime] process transcript ended\n";
+        state.file << "\n[runtime] process transcript ended: " << how << "\n";
         state.file.flush();
     }
     state.file.close();
     state.enabled = false;
 }
+
+} // namespace
+
+void EndProcessTranscriptForExit(const char* how) {
+    ShutdownProcessTranscript(how);
+}
+
+namespace {
 
 // The one host stack walker. Every caller - the CRT report hook, the fatal log
 // and the stderr crash dump - goes through this, so the log and the console see
@@ -1504,7 +1516,7 @@ int RuntimeMain(int argc, char** argv) {
         // The player's own extracted game (game_folder.h); on Windows it is asked for at first start.
         if (!GameFolder::EnsureConfigured()) {
             SetRuntimeExitCodeImpl(0);
-            ShutdownProcessTranscript();
+            ShutdownProcessTranscript("quit (no game folder chosen)");
             return 0;
         }
 #if defined(__ANDROID__)
@@ -1787,7 +1799,7 @@ int RuntimeMain(int argc, char** argv) {
         aurora_shutdown();
         DiscordPresence::Shutdown();
         SetRuntimeExitCodeImpl(0);
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("quit (the game loop returned)");
         return 0;
     } catch (const aurora::window_owner::CloseRequested&) {
         aurora::window_owner::begin_shutdown();
@@ -1799,7 +1811,7 @@ int RuntimeMain(int argc, char** argv) {
         aurora_shutdown();
         DiscordPresence::Shutdown();
         SetRuntimeExitCodeImpl(0);
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("quit (window closed)");
         return 0;
     } catch (const Memory::AccessViolation& ex) {
         if (aurora::window_owner::enabled()) aurora::window_owner::begin_shutdown();
@@ -1818,7 +1830,7 @@ int RuntimeMain(int argc, char** argv) {
         if (aurora::window_owner::enabled()) AudioBackend::Instance().Shutdown();
         aurora_shutdown();
         DiscordPresence::Shutdown();
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("stopped by a guest memory error (exit code 1)");
         return 1;
     } catch (const std::exception& ex) {
         if (aurora::window_owner::enabled()) aurora::window_owner::begin_shutdown();
@@ -1832,7 +1844,7 @@ int RuntimeMain(int argc, char** argv) {
         if (aurora::window_owner::enabled()) AudioBackend::Instance().Shutdown();
         aurora_shutdown();
         DiscordPresence::Shutdown();
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("stopped by a runtime error (exit code 1)");
         return 1;
     }
 }

@@ -476,6 +476,7 @@ void StartStallWatchdogOnce() {
                 std::thread([seconds] {
                     std::this_thread::sleep_for(std::chrono::seconds(seconds));
                     std::cerr << "[runtime] autoexit after " << seconds << " s" << std::endl;
+                    EndProcessTranscriptForExit("quit (autoexit.txt)");
                     std::_Exit(0);
                 }).detach();
             }

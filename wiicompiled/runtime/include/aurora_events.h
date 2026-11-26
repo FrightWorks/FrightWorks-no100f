@@ -4,6 +4,7 @@
 #include "no100f_recorder.h"
 #include "runtime_config.h"
 #include "display_settings.h"
+#include "runtime_log.h"
 
 #include <aurora/aurora.h>
 #include <aurora/event.h>
@@ -65,6 +66,7 @@ inline void Flush(bool force = false) {
     no100f_recorder::FinishForExit();  // a running F3 video: finish the file first
     settings_overlay::ReleaseControllers();
     WindowPlacementPersistence::Flush(true);
+    EndProcessTranscriptForExit("quit (window closed)");
 #if defined(_WIN32)
     ::ExitProcess(0);
 #else
