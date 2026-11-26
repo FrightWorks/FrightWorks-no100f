@@ -30,6 +30,7 @@ unlit tex1_64x64_cf90f86eba636d7e_6
 unlit tex1_64x64_cbf1eeab8a69dedb_6
 # painted shadow decals (shadow.RW3): the four at the swings' feet, and any others using it
 hide tex1_64x64_c82927875c2f2297_6
+hide tex1_256x256_28d8ee449edb5338_6   # the bare tree's shadow painted on the ice rink
 # night sky (zenith RGB, horizon RGB), the moon in it (radius in degrees, disc RGB), stars
 sky 0.02 0.035 0.07 0.08 0.20 0.19
 moondisc 3.5 1 1 1
