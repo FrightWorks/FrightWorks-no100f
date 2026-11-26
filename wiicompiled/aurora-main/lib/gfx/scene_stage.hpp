@@ -89,6 +89,8 @@ uint8_t emissive_strength(const std::string& key) noexcept;
 // Its HALO ("emissive KEY STRENGTH HALO") the same way: that share of its colour is drawn into the bloom's light
 // target too, so the bloom glows round it (0: no halo).
 uint8_t emissive_halo(const std::string& key) noexcept;
+// Its colour ("emissive KEY STRENGTH HALO R G B"), 0-255 each; all 0: its own colour.
+std::array<uint8_t, 3> emissive_tint(const std::string& key) noexcept;
 // The light file's hidden textures ("hide KEY"): draws that sample one are skipped (painted shadow decals).
 bool is_hidden_texture(const std::string& key) noexcept;
 // The file's opaque textures ("opaque KEY"): drawn without blending, so the game can't fade them.

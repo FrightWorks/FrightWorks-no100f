@@ -1863,8 +1863,18 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config) noexcept {
   // them: the positive blue difference (Cb) is scaled down, brightness (Y) and the red difference (Cr) are kept.
   // Reimagined (ShaderConfig.emissive): the emissive replay adds the colour at this share of its strength.
   if (config.emissive != 0) {
-    fragmentReturn = fmt::format("    prev = vec4f(prev.rgb * {:.4f}, prev.a);\n", config.emissive / 255.0f) +
-                     fragmentReturn;
+    const auto& t = config.emissiveTint;
+    if (t[0] != 0 || t[1] != 0 || t[2] != 0) {
+      // Tinted: the tint at the colour's brightness.
+      fragmentReturn =
+          fmt::format("    prev = vec4f(vec3f({:.4f}, {:.4f}, {:.4f}) * dot(prev.rgb, vec3f(0.2126, 0.7152, 0.0722)) * "
+                      "{:.4f}, prev.a);\n",
+                      t[0] / 255.0f, t[1] / 255.0f, t[2] / 255.0f, config.emissive / 255.0f) +
+          fragmentReturn;
+    } else {
+      fragmentReturn = fmt::format("    prev = vec4f(prev.rgb * {:.4f}, prev.a);\n", config.emissive / 255.0f) +
+                       fragmentReturn;
+    }
   }
   if (config.relight != 0 && config.deblue != 0) {
     fragmentReturn = fmt::format("    {{\n"

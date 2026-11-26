@@ -52,6 +52,8 @@ spin tex1_128x128_133e6c02869897d7_a8839ec1b6d562bf_9
 spin tex1_128x128_eb148b4e961bb6c5_14
 # the sandwiches glow dimly from within (lit as usual, then this share of their own colour added), with a thin halo
 emissive tex1_64x64_6ada02c5c5bf3c0d_14 0.2 1.0
+# the clue magnifying glasses glow purple the same way (R G B: the glow's colour)
+emissive tex1_256x256_96e481791e6e3ba3_d4bd82352ce0569e_9 0.1 1.0 0.7 0.3 1.0
 # the pickups' glow sprite (tinted per pickup: yellow round the sandwiches, purple round the clue glasses)
 hide tex1_32x32_f88f03b76eb01a39_6
 # mercury-vapour post-top lamps where the game's 12 POST LIGHT lamps stood (ground = old light height - 4);

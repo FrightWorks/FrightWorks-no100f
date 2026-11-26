@@ -587,6 +587,9 @@ struct ShaderConfig {
   u8 deblue = 0;  // Reimagined: how much blue its textures lose (0-255, the light file's "deblue"), relit draws only
   u8 emissive = 0; // Reimagined: the emissive replay of a relit draw (its colour times emissive/255, added on top)
   u8 _relightPad[1]{};
+  // Reimagined: the emissive replay's colour (0-255 each; all 0: the draw's own colour), at the draw's brightness.
+  u8 emissiveTint[3]{};
+  u8 _tintPad[1]{};
   u32 zTexture = 0; // bias[0:23], format[24:25], op[26:27]; 0 disables shader depth output.
   std::array<AttrConfig, MaxVtxAttr> attrs;
   std::array<TevSwap, MaxTevSwap> tevSwapTable;

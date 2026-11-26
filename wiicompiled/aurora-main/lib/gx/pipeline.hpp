@@ -36,8 +36,8 @@ struct DrawData {
   gfx::PipelineRef haloPipeline{};
 };
 
-constexpr uint32_t GXPipelineConfigVersion = 23;  // 21: ShaderConfig.relight (relighting experiment); 22: deblue;
-                                                  // 23: ShaderConfig.emissive
+constexpr uint32_t GXPipelineConfigVersion = 24;  // 21: ShaderConfig.relight (relighting experiment); 22: deblue;
+                                                  // 23: ShaderConfig.emissive; 24: emissiveTint
 
 constexpr GXFogType effective_pipeline_fog_type(GXFogType fogType, GXZTexOp zTextureOp,
                                                 bool zCompLocBeforeTex, GXBlendMode blendMode,

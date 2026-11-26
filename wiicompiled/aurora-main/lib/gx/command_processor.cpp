@@ -3424,6 +3424,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
   bool spin = false;
   u8 emissive = 0;
   u8 halo = 0;
+  std::array<u8, 3> tint{};
   if (gfx::scene_stage::relighting()) {
     spin = samples_listed_texture(pipelineStatePtr->shaderInfo, gfx::scene_stage::is_spin_texture);
     if (draws_game_shadow(pipelineStatePtr->shaderInfo) ||
@@ -3442,6 +3443,8 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
         if (pipelineStatePtr->shaderInfo.sampledTextures.test(i) && bind) {
           emissive = std::max(emissive, gfx::scene_stage::emissive_strength(bind.ref->debugKey));
           halo = std::max(halo, gfx::scene_stage::emissive_halo(bind.ref->debugKey));
+          if (const auto t = gfx::scene_stage::emissive_tint(bind.ref->debugKey); t != std::array<u8, 3>{})
+            tint = t;
         }
       }
     }
@@ -3546,6 +3549,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
     PipelineConfig emissiveConfig{};
     populate_pipeline_config(emissiveConfig, prim, fmt);
     if (emissiveConfig.shaderConfig.relight) {
+      std::copy(tint.begin(), tint.end(), emissiveConfig.shaderConfig.emissiveTint);
       if (emissive != 0) {
         emissiveConfig.shaderConfig.emissive = emissive;
         draw.emissive = true;
