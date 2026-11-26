@@ -23,6 +23,8 @@ struct DrawData {
   bool emitsLight;
   // Relighting experiment: its uniforms for the moon's shadow map (size 0: not drawn there).
   gfx::Range shadowUniformRange{};
+  // Reimagined: its uniforms for each lamp shadow map (scene_stage.hpp kMaxLampShadows; size 0: not drawn there).
+  std::array<gfx::Range, 4> lampShadowUniformRanges{};
   // Reimagined: the game's frame clear (an untextured ortho quad that writes depth); the night sky is drawn after it.
   bool clearQuad = false;
 };

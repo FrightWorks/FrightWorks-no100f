@@ -1623,7 +1623,8 @@ struct SkyInsert {
 };
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& passes, u32 idx,
                              int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight = false,
-                             bool shadow = false, const SkyInsert* sky = nullptr);
+                             bool shadow = false, const SkyInsert* sky = nullptr,
+                             int lampSlot = -1);
 
 // The bloom (bloom.hpp), at the scene stage: the frame's light draws up to the end of its see-through tail
 // (gx::DrawData::emitsLight, in the EFB passes before `afterPass`, the pass after the tail) are drawn once more, alone
@@ -1753,6 +1754,55 @@ static void encode_moon_shadow(const wgpu::CommandEncoder& cmd, const std::vecto
     scene_stage::encode_props_shadow(cmd, targets.depth, stage.sceneCamera, stage.msaaSamples);
 }
 
+// Reimagined lamp shadows: the same solid scene into each chosen lamp's map, with that map's uniform copies.
+static void encode_lamp_shadows(const wgpu::CommandEncoder& cmd, const std::vector<RenderPass>& renderPasses,
+                                u32 stagePass, int32_t interpolatedFrame, DebugFrameData& debugFrame) {
+  const auto& stage = renderPasses[stagePass];
+  const auto& camera = stage.sceneCamera;
+  if (camera.lampShadowCount == 0)
+    return;
+  const bool motionPass =
+      stage.motionView != nullptr && stage.motionDepthView != nullptr && stage.motionMarkView != nullptr;
+  const auto& targets = scene_stage::lamp_shadow_targets(stage.msaaSamples, motionPass);
+  std::vector<u32> passes;
+  for (u32 i = 0; i < stagePass; ++i) {
+    if (renderPasses[i].colorView.Get() == stage.colorView.Get())
+      passes.push_back(i);
+  }
+  for (u32 k = 0; k < camera.lampShadowCount; ++k) {
+    for (size_t n = 0; n < passes.size(); ++n) {
+      const std::array attachments{
+          wgpu::RenderPassColorAttachment{
+              .view = targets.color, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+          wgpu::RenderPassColorAttachment{
+              .view = targets.motion, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+          wgpu::RenderPassColorAttachment{
+              .view = targets.motionDepth, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+          wgpu::RenderPassColorAttachment{
+              .view = targets.mark, .loadOp = wgpu::LoadOp::Clear, .storeOp = wgpu::StoreOp::Discard},
+      };
+      const wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{
+          .view = targets.depth[k],
+          .depthLoadOp = n == 0 ? wgpu::LoadOp::Clear : wgpu::LoadOp::Load,
+          .depthStoreOp = wgpu::StoreOp::Store,
+          .depthClearValue = gx::UseReversedZ ? 0.f : 1.f,
+      };
+      const wgpu::RenderPassDescriptor renderPassDescriptor{
+          .label = "Lamp shadow map",
+          .colorAttachmentCount = motionPass ? attachments.size() : 1,
+          .colorAttachments = attachments.data(),
+          .depthStencilAttachment = &depthStencilAttachment,
+      };
+      auto pass = cmd.BeginRenderPass(&renderPassDescriptor);
+      render_pass_impl(pass, renderPasses, passes[n], interpolatedFrame, debugFrame, false, true, nullptr,
+                       static_cast<int>(k));
+      pass.End();
+    }
+    if (!passes.empty())
+      scene_stage::encode_props_shadow(cmd, targets.depth[k], camera, stage.msaaSamples, static_cast<int>(k));
+  }
+}
+
 static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEncoder& cmd, int32_t interpolatedFrame,
                         bool finalize, DebugFrameData& debugFrame, const depth_peek::FrameMapping& depthMapping) {
   ZoneScoped;
@@ -1838,6 +1888,7 @@ static void render_impl(std::vector<RenderPass>& renderPasses, wgpu::CommandEnco
     }
     if (i == sceneStagePass) {
       encode_moon_shadow(cmd, renderPasses, i, interpolatedFrame, debugFrame);
+      encode_lamp_shadows(cmd, renderPasses, i, interpolatedFrame, debugFrame);
       scene_stage::encode(cmd, passInfo.colorView, passInfo.depthView, passInfo.targetSize, passInfo.msaaSamples,
                           passInfo.sceneCamera);
       if (afterTailPass != UINT32_MAX && passInfo.depthView.Get() == webgpu::g_depthBuffer.view.Get()) {
@@ -2079,7 +2130,7 @@ void after_submit() noexcept {
 
 static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vector<RenderPass>& renderPasses, u32 idx,
                              int32_t interpolatedFrame, DebugFrameData& debugFrame, bool onlyLight, bool shadow,
-                             const SkyInsert* sky) {
+                             const SkyInsert* sky, int lampSlot) {
   // Per-invocation, not per-process: two encoders can be recording at once.
   gx::DrawEncodeState encodeState{};
   encodeState.boundTextureBindGroup = gx::g_emptyTextureBindGroup.Get();
@@ -2196,9 +2247,12 @@ static void render_pass_impl(const wgpu::RenderPassEncoder& pass, const std::vec
       case ShaderType::GX: {
         if (onlyLight && !draw.gx.emitsLight)
           break;
-        if (shadow && draw.gx.shadowUniformRange.size == 0)
+        const gfx::Range* shadowRange = !shadow        ? nullptr
+                                        : lampSlot >= 0 ? &draw.gx.lampShadowUniformRanges[lampSlot]
+                                                        : &draw.gx.shadowUniformRange;
+        if (shadowRange != nullptr && shadowRange->size == 0)
           break;
-        const gfx::Range* uniformOverride = shadow ? &draw.gx.shadowUniformRange : nullptr;
+        const gfx::Range* uniformOverride = shadowRange;
         if (!shadow && interpolatedFrame >= 0 &&
             static_cast<size_t>(interpolatedFrame) < draw.gx.interpolatedUniformRanges.size() &&
             draw.gx.interpolatedUniformRanges[interpolatedFrame].size != 0) {

@@ -58,6 +58,11 @@ struct Camera {
   // Moon shadows: view space to the moon's shadow map's clip space (rows of a 4x4), when the frame has them.
   std::array<float, 16> shadow{};
   bool hasShadow = false;
+  // Reimagined lamps' shadow maps this frame: how many, each one's light (index in the light file's lights) and its
+  // view space to clip space (rows of a 4x4).
+  uint32_t lampShadowCount = 0;
+  std::array<uint32_t, 4> lampShadowLight{};
+  std::array<std::array<float, 16>, 4> lampShadow{};
   // Reimagined sky: the file's moon texture ("moontex KEY"), found at the capture (texture packs can replace it).
   TextureHandle moonTexture;
 };
@@ -103,10 +108,23 @@ struct ShadowTargets {
   uint32_t size = 0;
 };
 const ShadowTargets& shadow_targets(uint32_t samples, bool motion);
-// Reimagined props (lamp posts, the campfire's logs and rocks) into the moon's shadow map `depth`, in a pass of their
-// own after the game's draws there.
+// Reimagined props (lamp posts, the campfire's logs and rocks) into a shadow map `depth`, in a pass of their own after
+// the game's draws there: the moon's (`lampSlot` -1) or lamp map `lampSlot` (without that lamp's own post).
 void encode_props_shadow(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& depth, const Camera& camera,
-                         uint32_t samples);
+                         uint32_t samples, int lampSlot = -1);
+// Reimagined lamp shadows: up to kMaxLampShadows maps, each drawn like the moon's from the solid draws' own uniform
+// copies (lamp_shadow_slots per draw, noted with note_lamp_shadow_uniform; matrices written with the moon's).
+constexpr uint32_t kMaxLampShadows = 4;
+constexpr float kLampShadowNear = 0.3f;     // its map starts this far below the light
+constexpr float kLampShadowTanHalf = 2.75f;  // about 70 degrees each way from straight down
+struct LampShadowTargets {
+  std::array<wgpu::TextureView, kMaxLampShadows> depth;
+  wgpu::TextureView color, motion, motionDepth, mark;
+  uint32_t size = 0;
+};
+const LampShadowTargets& lamp_shadow_targets(uint32_t samples, bool motion);
+uint32_t lamp_shadow_slots() noexcept;
+void note_lamp_shadow_uniform(uint32_t slot, size_t offset) noexcept;
 
 // The light file's night sky ("sky", "moondisc", "stars"): drawn over the whole EFB at the start of the scene's pass
 // (right after its clear, before the game draws anything), from the stage camera; the game's draws cover it.

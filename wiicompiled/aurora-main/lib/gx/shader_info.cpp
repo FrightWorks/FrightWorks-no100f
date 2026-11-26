@@ -782,9 +782,15 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
   }
   // Relighting experiment: a solid draw's copy for the moon's shadow map; its projection is written at the stage.
   gfx::Range shadowRange{};
+  std::array<gfx::Range, 4> lampShadowRanges{};
   if (info.relight && gfx::scene_stage::relighting()) {
     shadowRange = gfx::copy_uniform(range).second;
     gfx::scene_stage::note_shadow_uniform(shadowRange.offset + projectionOffset);
+    const uint32_t lampSlots = std::min<uint32_t>(gfx::scene_stage::lamp_shadow_slots(), lampShadowRanges.size());
+    for (uint32_t k = 0; k < lampSlots; ++k) {
+      lampShadowRanges[k] = gfx::copy_uniform(range).second;
+      gfx::scene_stage::note_lamp_shadow_uniform(k, lampShadowRanges[k].offset + projectionOffset);
+    }
   }
   if (!perspective || (frame_interpolation_fps() == 0 && motionPrevData == nullptr)) {
     g_gxState.stateDirty = false;
@@ -792,6 +798,7 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
         .current = range,
         .interpolated = {},
         .shadow = shadowRange,
+        .lampShadow = lampShadowRanges,
     };
   }
 
@@ -818,6 +825,7 @@ UniformRanges build_uniform(const ShaderInfo& info, u32 vtxStart, const BindGrou
       .current = range,
       .interpolated = interpolatedRanges,
       .shadow = shadowRange,
+      .lampShadow = lampShadowRanges,
   };
 }
 } // namespace aurora::gx

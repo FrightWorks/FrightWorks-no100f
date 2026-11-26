@@ -70,8 +70,8 @@ Camera g_camera;
 //   far NEAR FAR                 (the light fades out from NEAR to FAR units away: distant backdrops stay as painted)
 //   shadow RADIUS SIZE BIAS      (moon shadows within RADIUS units round the view, SIZE texels; RADIUS 0 = none)
 //   moonshadow STRENGTH          (how dark the moon's shadows are: 1 = all its light blocked, 0 = none)
-//   lampshadow STEPS [THICKNESS [SKIP]] (the lamps' lights cast shadows from what is on screen: STEPS along each ray,
-//                                 0 = off; a blocker is up to THICKNESS units deep; the last SKIP units are the lamp)
+//   lampshadow COUNT [SIZE [BIAS]] (the COUNT (up to 4, 0 = none) lamps nearest the view cast shadows, each from a
+//                                 depth map of SIZE texels looking down from its globe; BIAS in units)
 //   unlit KEY                    (a texture drawn as the game draws it: the sky band, painted backdrops)
 //   hide KEY                     (a texture not drawn at all: the game's painted shadow decals)
 //   opaque KEY                   (a texture drawn solid, never blended: trees the game fades near the camera)
@@ -125,9 +125,9 @@ struct RelightScene {
   float lampColor[3] = {0.5f, 0.85f, 1.f};   // "lampcolor R G B [RADIUS]": the light each lamp adds at its globe
   float lampRadius = 5.f;
   float moonShadowStrength = 1.f;
-  int lampShadowSteps = 24;
-  float lampShadowThickness = 0.8f;
-  float lampShadowSkip = 0.35f;
+  uint32_t lampShadowCount = kMaxLampShadows;
+  uint32_t lampShadowSize = 1024;
+  float lampShadowBias = 0.05f;
   bool hasSky = false;
   float skyZenith[3] = {0.02f, 0.035f, 0.07f};
   float skyHorizon[3] = {0.08f, 0.2f, 0.19f};
@@ -197,9 +197,9 @@ RelightScene load_relight_scene() {
       } else if (w == "moonshadow" && n >= 2) {
         s.moonShadowStrength = std::clamp(v[0], 0.f, 1.f);
       } else if (w == "lampshadow" && n >= 2) {
-        s.lampShadowSteps = std::clamp(static_cast<int>(v[0]), 0, 64);
-        if (n >= 3) s.lampShadowThickness = std::max(v[1], 0.05f);
-        if (n >= 4) s.lampShadowSkip = std::max(v[2], 0.f);
+        s.lampShadowCount = static_cast<uint32_t>(std::clamp(v[0], 0.f, static_cast<float>(kMaxLampShadows)));
+        if (n >= 3) s.lampShadowSize = static_cast<uint32_t>(std::clamp(v[1], 128.f, 4096.f));
+        if (n >= 4) s.lampShadowBias = std::max(v[2], 0.f);
       } else if (w == "lampcolor" && n >= 4) {
         std::copy(v, v + 3, s.lampColor);
         if (n >= 5) s.lampRadius = std::max(v[3], 0.f);
@@ -277,7 +277,9 @@ struct RelightParams {
   std::array<float, 4> fireInfo;   // size, unused, time (s), flicker
   std::array<float, 4> fireUp;     // world up in view space
   std::array<float, 4> fireEast;   // world +x in view space
-  std::array<float, 4> extra;      // moon shadow strength, lamp shadow steps, thickness, skip
+  std::array<float, 4> extra;      // moon shadow strength, unused
+  std::array<std::array<float, 4>, kMaxLampShadows * 4> lampShadow;  // each: view space to its map's clip (rows)
+  std::array<float, 4> lampInfo;   // map size, near, bias (units), tan(half the view)
   std::array<std::array<float, 4>, kMaxRelightLights * 2> lights; // (view pos, radius), (colour, 0)
 };
 
@@ -291,6 +293,10 @@ std::array<MatrixVote, 16> g_votes;
 size_t g_voteCount = 0;
 // This frame's shadow uniform copies (their projections' offsets in the staging buffer).
 std::vector<size_t> g_shadowOffsets;
+std::array<std::vector<size_t>, kMaxLampShadows> g_lampShadowOffsets;  // per lamp map, like g_shadowOffsets
+LampShadowTargets g_lampShadowTargets;
+std::array<wgpu::Texture, kMaxLampShadows + 4> g_lampShadowTextures;
+uint32_t g_lampShadowSamples = 0;
 // Half the depth range of the shadow map, in units along the moon's direction.
 constexpr float kShadowDepth = 200.f;
 
@@ -350,6 +356,29 @@ std::array<float, 16> shadow_matrix(const std::array<float, 12>& v, const float*
   return m;
 }
 
+// A lamp's shadow map: from `light` (world) straight down, a perspective view kLampShadowTanHalf wide each way, depth
+// reversed as near / distance. Returned as view space to its clip space (rows of a 4x4). Screen right is world +x and
+// screen up world -z, so right x up points back at the lamp, as in a camera (winding and culling unchanged).
+std::array<float, 16> lamp_shadow_matrix(const std::array<float, 12>& v, const float* light) {
+  const float R[3][3] = {{v[0], v[1], v[2]}, {v[4], v[5], v[6]}, {v[8], v[9], v[10]}};
+  const float t[3] = {v[3], v[7], v[11]};
+  float cam[3];
+  for (int i = 0; i < 3; ++i) cam[i] = -(R[0][i] * t[0] + R[1][i] * t[1] + R[2][i] * t[2]);
+  const float k = 1.f / kLampShadowTanHalf;
+  const float W[4][4] = {
+      {k, 0.f, 0.f, -light[0] * k},
+      {0.f, 0.f, -k, light[2] * k},
+      {0.f, 0.f, 0.f, kLampShadowNear},
+      {0.f, -1.f, 0.f, light[1]},
+  };
+  std::array<float, 16> m{};
+  for (int r = 0; r < 4; ++r) {
+    for (int c = 0; c < 3; ++c) m[r * 4 + c] = W[r][0] * R[c][0] + W[r][1] * R[c][1] + W[r][2] * R[c][2];
+    m[r * 4 + 3] = W[r][0] * cam[0] + W[r][1] * cam[1] + W[r][2] * cam[2] + W[r][3];
+  }
+  return m;
+}
+
 // Every pass's parameters.
 struct Params {
   Mat4x4<float> inverseProjection; // clip -> view, used as vec4f(ndc, 1.0) * inv_proj like the GX shader's proj
@@ -393,10 +422,16 @@ struct Relight {
     fire_up: vec4f,
     fire_east: vec4f,
     extra: vec4f,
+    lamp_shadow: array<vec4f, 16>,
+    lamp_info: vec4f,
     lights: array<vec4f, 64>,
 };
 @group(0) @binding(3) var<uniform> relight: Relight;
 @group(0) @binding(4) var shadow_tex: EfbDepth;
+@group(0) @binding(5) var lamp_tex0: EfbDepth;
+@group(0) @binding(6) var lamp_tex1: EfbDepth;
+@group(0) @binding(7) var lamp_tex2: EfbDepth;
+@group(0) @binding(8) var lamp_tex3: EfbDepth;
 
 // How much of the moon reaches view-space point `c` (normal `n`): 3x3 samples of the moon's depth map (depth
 // reversed: an occluder is nearer the moon, so larger). Outside the map: lit.
@@ -640,52 +675,61 @@ fn fs_ink_view(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     return vec4f(k, k, k, 1.0);
 }
 
-// How much of point light `lp` (view space) reaches surface point `c`, from the solid scene's depth: steps along the
-// ray to the light, and where the picture shows something nearer the camera than a step (but not far in front of it:
-// a surface behind is no blocker), something stands in the way. Only what is on screen blocks; the light's own fitting
-// (the last `skip` units) doesn't.
-fn point_shadow(p: vec2i, c: vec3f, n: vec3f, lp: vec3f) -> f32 {
-    let steps = i32(relight.extra.y);
-    if (steps <= 0) {
+// The shadow maps of the nearest lamps (each looks straight down from its globe, a wide perspective; depth reversed,
+// near / distance), one texture each: WGSL has no arrays of textures.
+fn lamp_depth(k: i32, p: vec2i) -> f32 {
+    var d = 0.0;
+    switch k {
+        case 0: { d = textureLoad(lamp_tex0, p, 0); }
+        case 1: { d = textureLoad(lamp_tex1, p, 0); }
+        case 2: { d = textureLoad(lamp_tex2, p, 0); }
+        default: { d = textureLoad(lamp_tex3, p, 0); }
+    }
+    return d;
+}
+
+// How much of lamp shadow map `k`'s light reaches view-space point `c` (normal `n`), filtered like the moon's. Outside
+// the map (above the lamp, or beyond its view): lit.
+fn lamp_shadow(k: i32, c: vec3f, n: vec3f) -> f32 {
+    let size = relight.lamp_info.x;
+    let z_near = relight.lamp_info.y;
+    let m0 = relight.lamp_shadow[k * 4];
+    let m1 = relight.lamp_shadow[k * 4 + 1];
+    let m2 = relight.lamp_shadow[k * 4 + 2];
+    let m3 = relight.lamp_shadow[k * 4 + 3];
+    let dist = dot(m3, vec4f(c, 1.0));
+    if (dist <= z_near) {
         return 1.0;
     }
-    let origin = c + n * (0.03 + 0.004 * abs(c.z));
-    let to_light = lp - origin;
-    let dist = length(to_light);
-    let span = dist - relight.extra.w;
-    if (span <= 0.05) {
+    // Pushed out along the normal by a texel and a half there (texels grow with the distance from the lamp).
+    let texel = 2.0 * relight.lamp_info.w * dist / size;
+    let p = vec4f(c + n * texel * 1.5, 1.0);
+    let s = vec4f(dot(m0, p), dot(m1, p), dot(m2, p), dot(m3, p));
+    if (s.w <= z_near) {
         return 1.0;
     }
-    let dir = to_light / dist;
-    let jitter = fract(52.9829189 * fract(dot(vec2f(p), vec2f(0.06711056, 0.00583715))));
-    let thickness = relight.extra.z;
-    var lit = 1.0;
-    for (var i = 0; i < steps; i++) {
-        let t = (f32(i) + jitter) / f32(steps);
-        let q = origin + dir * (span * t * t + 0.02);  // closer steps near the surface: contact shadows stay sharp
-        let clip = vec4f(q, 1.0) * params.proj;
-        if (clip.w <= 0.0) {
-            break;
-        }
-        let ndc = clip.xy / clip.w;
-        if (any(abs(ndc) >= vec2f(1.0))) {
-            break;
-        }
-        let px = vec2i(params.viewport.xy + (vec2f(ndc.x, -ndc.y) * 0.5 + 0.5) * params.viewport.zw);
-        let s = view_pos(px);
-        if (s.w == 0.0) {
-            continue;
-        }
-        let ahead = s.z - q.z;  // > 0: the picture's surface there is nearer the camera than the step
-        let bias = 0.02 + 0.004 * abs(q.z);
-        if (ahead > bias && ahead < thickness) {
-            lit = min(lit, smoothstep(0.85, 0.6, t));  // a blocker right by the light fades out (soft far end)
-            if (lit == 0.0) {
-                break;
-            }
+    let ndc = s.xy / s.w;
+    if (any(abs(ndc) >= vec2f(1.0))) {
+        return 1.0;
+    }
+    let uv = vec2f(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * size;
+    let last = vec2i(i32(size) - 1);
+    let t = uv - 0.5;
+    let base = vec2i(floor(t));
+    let f = t - floor(t);
+    var wx = array<f32, 4>(1.0 - f.x, 1.0, 1.0, f.x);
+    var wy = array<f32, 4>(1.0 - f.y, 1.0, 1.0, f.y);
+    let reach = s.w - relight.lamp_info.z;
+    var lit = 0.0;
+    for (var j = 0; j < 4; j++) {
+        for (var i = 0; i < 4; i++) {
+            let d = lamp_depth(k, clamp(base + vec2i(i - 1, j - 1), vec2i(0), last));
+            // Stored near / distance; 0 = nothing there.
+            let blocker = select(1e9, z_near / max(d, 1e-9), d > 0.0);
+            lit += wx[i] * wy[j] * select(0.0, 1.0, blocker >= reach);
         }
     }
-    return lit;
+    return lit / 9.0;
 }
 
 // Relighting: the light falling on the solid scene's surface at EFB pixel `p` (1 = the texture as drawn), from the
@@ -718,7 +762,7 @@ fn light_at(p: vec2i) -> vec3f {
             continue;
         }
         let colour = relight.lights[i * 2 + 1];
-        let blocked = select(1.0, point_shadow(p, c, n, lp.xyz), colour.w > 0.0);
+        let blocked = select(1.0, lamp_shadow(i32(colour.w) - 1, c, n), colour.w > 0.5);
         light += colour.rgb * f * f * lambert * blocked;
     }
     if (relight.fire_pos.w > 0.0) {
@@ -1034,6 +1078,8 @@ void draw(const wgpu::CommandEncoder& encoder, Kind kind, const wgpu::TextureVie
   }
   if (kind == Kind::Relight || kind == Kind::RelightView) {  // the flame doesn't read the moon's shadow map
     entries.push_back(wgpu::BindGroupEntry{.binding = 4, .textureView = g_shadowTargets.depth});
+    for (uint32_t k = 0; k < kMaxLampShadows; ++k)
+      entries.push_back(wgpu::BindGroupEntry{.binding = 5 + k, .textureView = g_lampShadowTargets.depth[k]});
   }
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .layout = pipeline.GetBindGroupLayout(0),
@@ -1393,17 +1439,35 @@ void begin_frame() noexcept {
   g_solidSurfaces.clear();
   g_voteCount = 0;
   g_shadowOffsets.clear();
+  for (auto& o : g_lampShadowOffsets) o.clear();
 }
 
 void note_shadow_uniform(size_t offset) noexcept { g_shadowOffsets.push_back(offset); }
+
+uint32_t lamp_shadow_slots() noexcept {
+  if (!relighting()) return 0;
+  const auto& scene = relight_scene();
+  return scene.lamps.empty() ? 0 : std::min<uint32_t>(scene.lampShadowCount, scene.lamps.size());
+}
+
+void note_lamp_shadow_uniform(uint32_t slot, size_t offset) noexcept {
+  if (slot < kMaxLampShadows) g_lampShadowOffsets[slot].push_back(offset);
+}
 
 void write_shadow_uniforms(uint8_t* uniforms) noexcept {
   static constexpr std::array<float, 16> kNothing{};
   const auto& m = g_camera.hasShadow ? g_camera.shadow : kNothing;
   for (const size_t offset : g_shadowOffsets) std::memcpy(uniforms + offset, m.data(), sizeof(m));
+  for (uint32_t k = 0; k < kMaxLampShadows; ++k) {
+    const auto& l = k < g_camera.lampShadowCount ? g_camera.lampShadow[k] : kNothing;
+    for (const size_t offset : g_lampShadowOffsets[k]) std::memcpy(uniforms + offset, l.data(), sizeof(l));
+  }
 }
 
-void drop_shadow_uniforms() noexcept { g_shadowOffsets.clear(); }
+void drop_shadow_uniforms() noexcept {
+  g_shadowOffsets.clear();
+  for (auto& o : g_lampShadowOffsets) o.clear();
+}
 
 
 // ---- Reimagined campfire props: logs in a teepee and a ring of rocks round the light file's fire, real geometry drawn
@@ -1829,7 +1893,7 @@ struct PropShadow {
 fn vs_prop_shadow(@location(0) p: vec3f) -> @builtin(position) vec4f {
     let w = vec4f(p, 1.0);
     let mv = vec4f(dot(ps.view0, w), dot(ps.view1, w), dot(ps.view2, w), 1.0);
-    return vec4f(dot(ps.shadow[0], mv), dot(ps.shadow[1], mv), dot(ps.shadow[2], mv), 1.0);
+    return vec4f(dot(ps.shadow[0], mv), dot(ps.shadow[1], mv), dot(ps.shadow[2], mv), dot(ps.shadow[3], mv));
 }
 )WGSL";
 
@@ -1843,18 +1907,22 @@ struct PropShadowState {
   uint32_t samples = 0;
   wgpu::Buffer vertices;  // positions only
   uint32_t vertexCount = 0;
-  wgpu::Buffer params;
+  std::vector<std::pair<uint32_t, uint32_t>> lampRanges;  // each lamp's vertices (first, count), in lamp order
+  std::array<wgpu::Buffer, 1 + kMaxLampShadows> params;  // the moon's, then each lamp map's
   const RelightScene* scene = nullptr;
 };
 PropShadowState g_propShadow;
 
 void encode_props_shadow(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& depth, const Camera& camera,
-                         uint32_t samples) {
+                         uint32_t samples, int lampSlot) {
   const auto& scene = relight_scene();
-  if (!relighting() || (!scene.hasFire && scene.lamps.empty()) || !camera.hasView || !camera.hasShadow) return;
+  if (!relighting() || (!scene.hasFire && scene.lamps.empty()) || !camera.hasView) return;
+  if (lampSlot < 0 ? !camera.hasShadow : static_cast<uint32_t>(lampSlot) >= camera.lampShadowCount) return;
   if (g_propShadow.scene != &scene) {
     auto mesh = scene.hasFire ? campfire_mesh(scene) : std::vector<PropVertex>{};
+    g_propShadow.lampRanges.clear();
     for (const auto& l : scene.lamps) {
+      const auto first = static_cast<uint32_t>(mesh.size());
       const V3 g{l[0], l[1], l[2]};
       push_lamp_metal(mesh, g);
       std::vector<std::array<float, 2>> globe;
@@ -1863,6 +1931,7 @@ void encode_props_shadow(const wgpu::CommandEncoder& encoder, const wgpu::Textur
         globe.push_back({kLampGlobeBottom + t * (kLampGlobeTop - kLampGlobeBottom), lamp_globe_radius(t)});
       }
       push_lathe(mesh, g, globe, 12, V3{});
+      g_propShadow.lampRanges.emplace_back(first, static_cast<uint32_t>(mesh.size()) - first);
     }
     std::vector<float> positions;
     positions.reserve(mesh.size() * 3);
@@ -1900,21 +1969,23 @@ void encode_props_shadow(const wgpu::CommandEncoder& encoder, const wgpu::Textur
     g_propShadow.pipeline = g_device.CreateRenderPipeline(&descriptor);
     g_propShadow.samples = samples;
   }
-  if (!g_propShadow.params) {
+  auto& buffer = g_propShadow.params[lampSlot + 1];
+  if (!buffer) {
     const wgpu::BufferDescriptor descriptor{
         .label = "Reimagined prop shadows",
         .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
         .size = sizeof(PropShadowParams),
     };
-    g_propShadow.params = g_device.CreateBuffer(&descriptor);
+    buffer = g_device.CreateBuffer(&descriptor);
   }
   PropShadowParams params{};
   for (int r = 0; r < 3; ++r)
     for (int c = 0; c < 4; ++c) params.view[r][c] = camera.view[r * 4 + c];
+  const auto& matrix = lampSlot < 0 ? camera.shadow : camera.lampShadow[lampSlot];
   for (int r = 0; r < 4; ++r)
-    for (int c = 0; c < 4; ++c) params.shadow[r][c] = camera.shadow[r * 4 + c];
-  g_queue.WriteBuffer(g_propShadow.params, 0, &params, sizeof(params));
-  const wgpu::BindGroupEntry entry{.binding = 0, .buffer = g_propShadow.params, .size = sizeof(PropShadowParams)};
+    for (int c = 0; c < 4; ++c) params.shadow[r][c] = matrix[r * 4 + c];
+  g_queue.WriteBuffer(buffer, 0, &params, sizeof(params));
+  const wgpu::BindGroupEntry entry{.binding = 0, .buffer = buffer, .size = sizeof(PropShadowParams)};
   const wgpu::BindGroupDescriptor bindGroupDescriptor{
       .layout = g_propShadow.pipeline.GetBindGroupLayout(0), .entryCount = 1, .entries = &entry};
   const auto bindGroup = g_device.CreateBindGroup(&bindGroupDescriptor);
@@ -1926,7 +1997,17 @@ void encode_props_shadow(const wgpu::CommandEncoder& encoder, const wgpu::Textur
   pass.SetPipeline(g_propShadow.pipeline);
   pass.SetBindGroup(0, bindGroup);
   pass.SetVertexBuffer(0, g_propShadow.vertices);
-  pass.Draw(g_propShadow.vertexCount);
+  // A lamp's own post and globe stay out of its map (its light comes from the whole globe, round its fitter).
+  std::pair<uint32_t, uint32_t> own{g_propShadow.vertexCount, 0};
+  if (lampSlot >= 0) {
+    const auto& light = scene.lights[camera.lampShadowLight[lampSlot]];
+    for (size_t i = 0; i < scene.lamps.size() && i < g_propShadow.lampRanges.size(); ++i) {
+      if (scene.lamps[i][0] == light.pos[0] && scene.lamps[i][2] == light.pos[2]) own = g_propShadow.lampRanges[i];
+    }
+  }
+  if (own.first > 0) pass.Draw(own.first);
+  const uint32_t after = own.first + own.second;
+  if (after < g_propShadow.vertexCount) pass.Draw(g_propShadow.vertexCount - after, 1, after);
   pass.End();
 }
 
@@ -2161,6 +2242,38 @@ const ShadowTargets& shadow_targets(uint32_t samples, bool motion) {
   }
   return g_shadowTargets;
 }
+const LampShadowTargets& lamp_shadow_targets(uint32_t samples, bool motion) {
+  const uint32_t size = relight_scene().lampShadowSize;
+  if (g_lampShadowSamples != samples || g_lampShadowTargets.size != size) {
+    g_lampShadowTextures = {};
+    g_lampShadowTargets = {};
+    g_lampShadowSamples = samples;
+    g_lampShadowTargets.size = size;
+  }
+  const auto make = [&](size_t i, wgpu::TextureView& view, wgpu::TextureFormat format, bool sampled) {
+    if (g_lampShadowTextures[i]) return;
+    const wgpu::TextureDescriptor descriptor{
+        .label = "Lamp shadow map",
+        .usage = wgpu::TextureUsage::RenderAttachment |
+                 (sampled ? wgpu::TextureUsage::TextureBinding : wgpu::TextureUsage::None),
+        .size = {size, size, 1},
+        .format = format,
+        .sampleCount = samples,
+    };
+    g_lampShadowTextures[i] = g_device.CreateTexture(&descriptor);
+    view = g_lampShadowTextures[i].CreateView();
+  };
+  for (uint32_t k = 0; k < kMaxLampShadows; ++k)
+    make(k, g_lampShadowTargets.depth[k], webgpu::g_graphicsConfig.depthFormat, true);
+  make(kMaxLampShadows, g_lampShadowTargets.color, webgpu::g_graphicsConfig.surfaceConfiguration.format, false);
+  if (motion) {
+    make(kMaxLampShadows + 1, g_lampShadowTargets.motion, wgpu::TextureFormat::RG16Float, false);
+    make(kMaxLampShadows + 2, g_lampShadowTargets.motionDepth, wgpu::TextureFormat::R32Float, false);
+    make(kMaxLampShadows + 3, g_lampShadowTargets.mark, wgpu::TextureFormat::R8Unorm, false);
+  }
+  return g_lampShadowTargets;
+}
+
 void note_solid_surface(HashType surface) noexcept { g_solidSurfaces.insert(surface); }
 bool is_solid_surface(HashType surface) noexcept { return g_solidSurfaces.contains(surface); }
 
@@ -2187,6 +2300,28 @@ const Camera& camera() noexcept {
   g_camera.hasShadow = g_camera.hasView && scene.hasMoon && scene.shadowRadius > 0.f;
   if (g_camera.hasShadow)
     g_camera.shadow = shadow_matrix(g_camera.view, scene.moonDir, scene.shadowRadius, scene.shadowSize);
+  // The lamps nearest the view get shadow maps (lights flagged as shadowing, within the moon's shadow radius or 40).
+  g_camera.lampShadowCount = 0;
+  if (g_camera.hasView && relighting()) {
+    const auto& v = g_camera.view;
+    float eye[3];
+    for (int i = 0; i < 3; ++i) eye[i] = -(v[0 + i] * v[3] + v[4 + i] * v[7] + v[8 + i] * v[11]);
+    const float reach = scene.shadowRadius > 0.f ? scene.shadowRadius : 40.f;
+    std::vector<std::pair<float, uint32_t>> nearby;
+    for (uint32_t i = 0; i < scene.lights.size(); ++i) {
+      if (!scene.lights[i].shadow) continue;
+      const float dx = scene.lights[i].pos[0] - eye[0], dz = scene.lights[i].pos[2] - eye[2];
+      const float d2 = dx * dx + dz * dz;
+      if (d2 <= reach * reach) nearby.emplace_back(d2, i);
+    }
+    std::sort(nearby.begin(), nearby.end());
+    const uint32_t count = std::min<uint32_t>(lamp_shadow_slots(), nearby.size());
+    for (uint32_t k = 0; k < count; ++k) {
+      g_camera.lampShadowLight[k] = nearby[k].second;
+      g_camera.lampShadow[k] = lamp_shadow_matrix(v, scene.lights[nearby[k].second].pos);
+    }
+    g_camera.lampShadowCount = count;
+  }
   // The moon's picture, looked up once per name (and again after a reload).
   static std::string s_moonName;
   static const RelightScene* s_moonScene = nullptr;
@@ -2274,8 +2409,13 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
     rp.info[1] = scene.fadeNear;
     rp.info[2] = scene.fadeFar;
     rp.info[3] = mode == 6 ? 1.f : 0.f;
-    rp.extra = {scene.moonShadowStrength, static_cast<float>(scene.lampShadowSteps), scene.lampShadowThickness,
-                scene.lampShadowSkip};
+    rp.extra = {scene.moonShadowStrength, 0.f, 0.f, 0.f};
+    lamp_shadow_targets(samples, false);  // bound even when the frame has none
+    for (uint32_t k = 0; k < camera.lampShadowCount; ++k)
+      for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c) rp.lampShadow[k * 4 + r][c] = camera.lampShadow[k][r * 4 + c];
+    rp.lampInfo = {static_cast<float>(scene.lampShadowSize), kLampShadowNear, scene.lampShadowBias,
+                   kLampShadowTanHalf};
     shadow_targets(samples, false);  // the depth map is bound even when the frame has no shadows
     if (camera.hasShadow) {
       for (int r = 0; r < 4; ++r)
@@ -2288,7 +2428,9 @@ void encode(const wgpu::CommandEncoder& encoder, const wgpu::TextureView& color,
       toView(l.pos, 1.f, rp.lights[i * 2].data());
       rp.lights[i * 2][3] = l.radius * scene.radiusScale;
       for (int c = 0; c < 3; ++c) rp.lights[i * 2 + 1][c] = l.color[c] * scene.pointIntensity;
-      rp.lights[i * 2 + 1][3] = l.shadow ? 1.f : 0.f;
+      rp.lights[i * 2 + 1][3] = 0.f;
+      for (uint32_t k = 0; k < camera.lampShadowCount; ++k)
+        if (camera.lampShadowLight[k] == i) rp.lights[i * 2 + 1][3] = static_cast<float>(k + 1);
     }
     if (scene.hasFire) {
       static const auto start = std::chrono::steady_clock::now();
@@ -2394,6 +2536,9 @@ void shutdown() noexcept {
   g_shadowTextures = {};
   g_shadowTargets = {};
   g_shadowSamples = 0;
+  g_lampShadowTextures = {};
+  g_lampShadowTargets = {};
+  g_lampShadowSamples = 0;
   g_aoTargets = {};
 }
 } // namespace aurora::gfx::scene_stage

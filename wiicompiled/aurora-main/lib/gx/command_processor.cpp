@@ -3525,6 +3525,7 @@ static void handle_draw_unmerged(GXPrimitive prim, GXVtxFmt fmt, u16 vtxCount,
       .dstAlpha = pipelineState.dstAlpha,
       .emitsLight = samples_light_texture(info),
       .shadowUniformRange = uniformRanges.shadow,
+      .lampShadowUniformRanges = uniformRanges.lampShadow,
       .clearQuad = g_gxState.projType == GX_ORTHOGRAPHIC && g_gxState.depthUpdate && vtxCount == 4 &&
                    info.sampledTextures.none() && gfx::scene_stage::relighting(),
   };

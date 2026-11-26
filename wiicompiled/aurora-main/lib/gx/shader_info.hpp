@@ -9,6 +9,7 @@ struct UniformRanges {
   gfx::Range current;
   std::array<gfx::Range, MaxInterpolatedFrames> interpolated;
   gfx::Range shadow{};  // relighting experiment: the copy drawn into the moon's shadow map (scene_stage.hpp)
+  std::array<gfx::Range, 4> lampShadow{};  // Reimagined: the copies for the lamps' shadow maps (kMaxLampShadows)
 };
 
 ShaderInfo build_shader_info(const ShaderConfig& config) noexcept;
