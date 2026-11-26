@@ -4,6 +4,7 @@
 #include "no100f_recorder.h"
 #include "runtime_config.h"
 #include "display_settings.h"
+#include "runtime_log.h"
 
 #include <aurora/aurora.h>
 #include <aurora/event.h>
@@ -65,12 +66,17 @@ inline void Flush(bool force = false) {
     no100f_recorder::FinishForExit();  // a running F3 video: finish the file first
     settings_overlay::ReleaseControllers();
     WindowPlacementPersistence::Flush(true);
+    EndProcessTranscriptForExit("quit (window closed)");
 #if defined(_WIN32)
     ::ExitProcess(0);
 #else
     std::_Exit(EXIT_SUCCESS);
 #endif
 }
+
+// The game is stopped on purpose: the window is hidden or minimized, or out of focus with pause-on-focus-lost. The
+// hang watchdog (vi.cpp) doesn't count that time.
+inline std::atomic_bool g_auroraWindowPaused{false};
 
 // Update cached Aurora window/framebuffer dimensions based on pending events.
 inline void ProcessAuroraEvents(const AuroraEvent* events) {
@@ -103,6 +109,10 @@ inline void ProcessAuroraEvents(const AuroraEvent* events) {
             break;
         case AURORA_DISPLAY_SCALE_CHANGED:
             surfaceChanged = true;
+            break;
+        case AURORA_PAUSED:
+        case AURORA_UNPAUSED:
+            g_auroraWindowPaused.store(event->type == AURORA_PAUSED, std::memory_order_relaxed);
             break;
         case AURORA_EXIT:
             ExitForAuroraWindowClose();

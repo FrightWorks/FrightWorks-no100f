@@ -24,6 +24,11 @@
 #define RT_TAG_NAND "nand"
 #define RT_TAG_RIIVOLUTION "riivolution"
 #define RT_TAG_VI "vi"
+#define RT_TAG_SYSTEM "system"
+
+// Ends console.log for a normal exit that doesn't return from main (_Exit, ExitProcess, std::exit): drains what is
+// still in the pipe and writes the last line, "process transcript ended: <how>". Defined in main.cpp.
+void EndProcessTranscriptForExit(const char* how);
 
 // Stream form:  RT_LOG(RT_TAG_OS) << "OSCreateThread failed" << std::endl;
 #define RT_LOG(tag) (std::cerr << "[" tag "] ")

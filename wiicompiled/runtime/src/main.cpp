@@ -56,6 +56,12 @@
 #endif
 #endif
 #include <unistd.h>
+#if !defined(__ANDROID__)
+#include <cxxabi.h>
+#include <dlfcn.h>
+#include <execinfo.h>
+#define RECOMP_HAS_POSIX_BACKTRACE 1
+#endif
 #endif
 #if defined(__ANDROID__)
 #include <sys/system_properties.h>
@@ -87,6 +93,8 @@
 #include "overlay_theme.h"
 #include "runtime_product.h"
 #include "recomp_mod_loader.h"
+#include "system_report.h"
+#include "log_privacy.h"
 #include <aurora/aurora.h>
 #include <aurora/gfx.h>
 #include <dolphin/gx/GXAurora.h>
@@ -292,6 +300,9 @@ void WriteProcessTranscriptChunk(ProcessTranscriptState& state, const char* data
 
 void PumpTranscriptPipe(ProcessTranscriptState& state, int readFd, int mirrorFd) {
     std::array<char, 4096> buffer{};
+    // console.log gets whole lines with the home folder rewritten (log_privacy.h); a line is held until its end
+    // arrives, or until the pipe is drained (a prompt without a newline, the last words before a crash).
+    std::string pending;
     for (;;) {
 #if defined(_WIN32)
         const int bytesRead = _read(readFd, buffer.data(), static_cast<unsigned int>(buffer.size()));
@@ -321,7 +332,19 @@ void PumpTranscriptPipe(ProcessTranscriptState& state, int readFd, int mirrorFd)
             }
         }
 
-        WriteProcessTranscriptChunk(state, buffer.data(), static_cast<size_t>(bytesRead));
+        pending.append(buffer.data(), static_cast<size_t>(bytesRead));
+        const bool drained = static_cast<size_t>(bytesRead) < buffer.size();
+        const size_t end = drained ? pending.size() : pending.rfind('\n') + 1;  // npos + 1 == 0: no whole line yet
+        if (end != 0) {
+            std::string lines = pending.substr(0, end);
+            pending.erase(0, end);
+            LogPrivacy::Apply(lines, LogPrivacy::CurrentRules());
+            WriteProcessTranscriptChunk(state, lines.data(), lines.size());
+        }
+    }
+    if (!pending.empty()) {
+        LogPrivacy::Apply(pending, LogPrivacy::CurrentRules());
+        WriteProcessTranscriptChunk(state, pending.data(), pending.size());
     }
 }
 
@@ -477,14 +500,14 @@ void InitializeProcessTranscript(int argc, char** argv) {
                    << (setupVersion.empty() ? "version unknown" : setupVersion) << "\n";
         state.file << "[runtime] process transcript started\n";
         state.file << "[runtime] pid=" << pid << "\n";
-        state.file << "[runtime] argv=";
+        std::string args;
         for (int i = 0; i < argc; ++i) {
             if (i != 0) {
-                state.file << ' ';
+                args += ' ';
             }
-            state.file << argv[i];
+            args += argv[i];
         }
-        state.file << "\n";
+        state.file << "[runtime] argv=" << LogPrivacy::Sanitized(std::move(args)) << "\n";
         state.file.flush();
     }
 
@@ -543,9 +566,13 @@ void InitializeProcessTranscript(int argc, char** argv) {
     });
 }
 
-void ShutdownProcessTranscript() {
+// how: why the game is ending, for the transcript's last line. A log without that line ended some other way: killed,
+// out of memory, power lost, or a crash (those leave a crash_*.txt beside it).
+void ShutdownProcessTranscript(const char* how) {
     auto& state = GetProcessTranscriptState();
-    if (!state.enabled) {
+    // Once: a window close and a game reset can race to end the run.
+    static std::atomic_flag s_ending = ATOMIC_FLAG_INIT;
+    if (!state.enabled || s_ending.test_and_set()) {
         return;
     }
 
@@ -596,12 +623,20 @@ void ShutdownProcessTranscript() {
 
     {
         std::lock_guard<std::mutex> lock(state.fileMutex);
-        state.file << "\n[runtime] process transcript ended\n";
+        state.file << "\n[runtime] process transcript ended: " << how << "\n";
         state.file.flush();
     }
     state.file.close();
     state.enabled = false;
 }
+
+} // namespace
+
+void EndProcessTranscriptForExit(const char* how) {
+    ShutdownProcessTranscript(how);
+}
+
+namespace {
 
 // The one host stack walker. Every caller - the CRT report hook, the fatal log
 // and the stderr crash dump - goes through this, so the log and the console see
@@ -707,6 +742,62 @@ std::string FormatHostStackTrace(unsigned framesToSkip) {
         out << ")\n";
     }
     return out.str();
+#elif defined(RECOMP_HAS_POSIX_BACKTRACE)
+    // Release builds export few symbols, so most frames name only their module: "module+0x..." is the offset to look
+    // up in that same build, which keeps its symbol table (llvm-symbolizer --obj=<FrightWorks Game> 0x...). Module
+    // file names only, no folders (those hold the player's user name).
+    void* frames[64]{};
+    const int captured = ::backtrace(frames, static_cast<int>(std::size(frames)));
+    std::ostringstream out;
+    if (captured <= static_cast<int>(framesToSkip)) {
+        out << "[runtime] host stack trace unavailable (backtrace returned " << captured << ")\n";
+        return out.str();
+    }
+    out << "[runtime] host stack trace (most recent call first):\n";
+    for (int i = static_cast<int>(framesToSkip); i < captured; ++i) {
+        const auto addr = reinterpret_cast<uintptr_t>(frames[i]);
+        std::string module = "?";
+        std::string symbolName = "?";
+        uintptr_t moduleBase = 0;
+        uintptr_t symbolDisp = 0;
+        uint32_t ppcAddress = 0;
+        Dl_info info{};
+        if (dladdr(frames[i], &info) != 0) {
+            if (info.dli_fname != nullptr && *info.dli_fname != '\0') {
+                module = std::filesystem::path(info.dli_fname).filename().string();
+            }
+            moduleBase = reinterpret_cast<uintptr_t>(info.dli_fbase);
+            if (info.dli_sname != nullptr) {
+                int status = 0;
+                char* demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
+                symbolName = status == 0 && demangled != nullptr ? demangled : info.dli_sname;
+                std::free(demangled);
+                symbolDisp = addr - reinterpret_cast<uintptr_t>(info.dli_saddr);
+            }
+        }
+        if (symbolName == "?") {
+            // The registry gives the nearest translated function below the address: right for translated code, only a
+            // hint for the runtime's own (that is what "near" says). The module offset is the exact reference.
+            if (auto translated = TranslatedFunctionRegistry::FindByHostAddress(addr)) {
+                if (translated->name != nullptr && *translated->name != '\0') {
+                    symbolName = std::string("near ") + translated->name;
+                    symbolDisp = addr - reinterpret_cast<uintptr_t>(translated->entryPoint);
+                }
+                ppcAddress = translated->address;
+            }
+        }
+        out << "  [" << std::setw(2) << std::setfill('0') << i - static_cast<int>(framesToSkip) << std::setfill(' ')
+            << "] " << module << "!" << symbolName << " + 0x" << std::hex << std::uppercase << symbolDisp << " (0x"
+            << addr;
+        if (moduleBase != 0) {
+            out << ", module+0x" << (addr - moduleBase);
+        }
+        if (ppcAddress != 0) {
+            out << ", PPC:0x" << std::setw(8) << std::setfill('0') << ppcAddress << std::setfill(' ');
+        }
+        out << std::dec << std::nouppercase << ")\n";
+    }
+    return out.str();
 #else
     (void)framesToSkip;
     return {};
@@ -732,7 +823,7 @@ void WriteFatalLogImpl(std::string_view reason, std::string_view extraDetails = 
     out << "[runtime] timestamp(seconds): " << nowSecs << std::endl;
     out << "[runtime] entry: " << (g_lastEntryLabel.empty() ? "<unknown>" : g_lastEntryLabel) << std::endl;
     if (!extraDetails.empty()) {
-        out << "[runtime] details: " << extraDetails << std::endl;
+        out << "[runtime] details: " << LogPrivacy::Sanitized(std::string(extraDetails)) << std::endl;
     }
     if (missingGuestTarget) {
         out << "[runtime] guest jump target: 0x" << std::hex << std::uppercase
@@ -776,7 +867,7 @@ void SetRuntimeExitCodeImpl(int code) {
 namespace {
 
 void DumpHostStackTrace() {
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(RECOMP_HAS_POSIX_BACKTRACE)
     static std::atomic_flag s_inProgress = ATOMIC_FLAG_INIT;
     if (s_inProgress.test_and_set()) {
         return;
@@ -1182,7 +1273,14 @@ void ReportUnhandledSignalFault(int sig, void* faultAddress) {
 }
 
 void PosixMemoryFaultHandler(int sig, siginfo_t* info, void* ucontextVoid) {
-    void* faultAddress = info != nullptr ? info->si_addr : nullptr;
+    // si_addr means something only when the CPU raised the signal (si_code > 0); a signal another process or raise()
+    // sent (kill -SEGV, si_code <= 0) carries the sender's pid and uid there instead.
+    const bool sentByProcess = info != nullptr && info->si_code <= 0;
+    void* faultAddress = info != nullptr && !sentByProcess ? info->si_addr : nullptr;
+    if (sentByProcess) {
+        RT_LOGF(RT_TAG_RUNTIME, "Signal %d was sent by a process (pid %d), not raised by the CPU\n", sig,
+                static_cast<int>(info->si_pid));
+    }
     bool isWrite = false;
 #if defined(__x86_64__)
     // Standard glibc technique for a POSIX fastmem-style handler: bit 1 (0x2) of the hardware
@@ -1197,14 +1295,17 @@ void PosixMemoryFaultHandler(int sig, siginfo_t* info, void* ucontextVoid) {
     }
 #endif
 
+    // SIGILL and SIGFPE come here only to be reported: si_addr is then the instruction, not a data address.
+    const bool memoryFault = sig == SIGSEGV || sig == SIGBUS;
+
     // Guest-space faults are the flat memory interception mechanism (MMIO, deferred EFB reads,
     // the executable-write guard, unmapped pages). Resolving one here means resuming the
     // faulting instruction, which just returning from the handler does.
-    if (faultAddress != nullptr && GuestFlat::HandleAccessViolation(faultAddress, isWrite)) {
+    if (memoryFault && faultAddress != nullptr && GuestFlat::HandleAccessViolation(faultAddress, isWrite)) {
         return;
     }
 
-    if (g_suppressSehReporting && g_sehJumpTarget) {
+    if (memoryFault && g_suppressSehReporting && g_sehJumpTarget) {
         g_sehLastExceptionCode = static_cast<uint32_t>(sig);
         g_sehLastExceptionAddress = reinterpret_cast<uintptr_t>(faultAddress);
         g_sehLastAccessType = isWrite ? 1u : 0u;
@@ -1224,8 +1325,19 @@ void PosixMemoryFaultHandler(int sig, siginfo_t* info, void* ucontextVoid) {
     if (s_inCrashHandler.test_and_set()) {
         std::_Exit(EXIT_FAILURE);
     }
+    // The report below allocates and takes locks the crashed thread may hold. If it deadlocks, SIGALRM's default
+    // action ends the process, so a crash never turns into a hang (the logs written so far stay).
+    alarm(20);
 
     ReportUnhandledSignalFault(sig, faultAddress);
+    // Logs first, the popup last: the player may leave the popup open or kill the game from it.
+    DumpHostStackTrace();
+    const char* fatalName = sig == SIGBUS ? "sigbus" : sig == SIGILL ? "sigill" : sig == SIGFPE ? "sigfpe" : "sigsegv";
+    WriteFatalLogImpl(fatalName);
+    std::cerr.flush();
+    std::fflush(stderr);
+    alarm(0);
+
     std::ostringstream popupDetails;
     popupDetails << "A native signal (" << sig << ") occurred";
     if (!g_lastEntryLabel.empty()) {
@@ -1239,8 +1351,6 @@ void PosixMemoryFaultHandler(int sig, siginfo_t* info, void* ucontextVoid) {
     popupDetails << ".\n\nThe process transcript and crash log contain the full CPU and stack "
                     "diagnostics.";
     ShowRuntimeFatalPopup("a native crash occurred", popupDetails.str());
-    DumpHostStackTrace();
-    WriteFatalLogImpl(sig == SIGBUS ? "sigbus" : "sigsegv");
 
     std::cerr.flush();
     std::cout.flush();
@@ -1259,6 +1369,15 @@ void InstallPosixMemoryFaultHandler() {
     // SIGSEGV on Linux; region sizing should make this unreachable, but routing it to the same
     // handler costs nothing and avoids a silent gap if it ever isn't.
     sigaction(SIGBUS, &action, nullptr);
+    // An illegal instruction (a CPU without an instruction the build uses) or an integer divide by zero: report it
+    // like a memory fault instead of dying with no log line.
+    sigaction(SIGILL, &action, nullptr);
+    sigaction(SIGFPE, &action, nullptr);
+#if defined(RECOMP_HAS_POSIX_BACKTRACE)
+    // The first backtrace() loads the unwinder (libgcc_s), which allocates: do it now rather than inside a crash.
+    void* warmup[2];
+    ::backtrace(warmup, 2);
+#endif
 }
 #endif
 
@@ -1381,6 +1500,7 @@ int RuntimeMain(int argc, char** argv) {
     InstallPosixMemoryFaultHandler();
 #endif
     InitializeProcessTranscript(argc, argv);
+    SystemReport::LogHostSystem();
     std::signal(SIGABRT, AbortSignalHandler);
     // Install exit/terminate handlers to ensure we get crash info
     std::atexit(AtExitHandler);
@@ -1396,7 +1516,7 @@ int RuntimeMain(int argc, char** argv) {
         // The player's own extracted game (game_folder.h); on Windows it is asked for at first start.
         if (!GameFolder::EnsureConfigured()) {
             SetRuntimeExitCodeImpl(0);
-            ShutdownProcessTranscript();
+            ShutdownProcessTranscript("quit (no game folder chosen)");
             return 0;
         }
 #if defined(__ANDROID__)
@@ -1628,6 +1748,7 @@ int RuntimeMain(int argc, char** argv) {
         GraphicsInfo::Set(auroraInfo.gpuName != nullptr ? auroraInfo.gpuName : "", auroraInfo.gpuCompatActive);
         RT_LOG(RT_TAG_RUNTIME) << "graphics adapter: " << GraphicsInfo::Name() << ", compatibility fixes "
                   << (auroraInfo.gpuCompatActive ? "on" : "off") << std::endl;
+        SystemReport::LogVideoDriver();
         aurora_set_frame_worker_wait_callback(ServiceGuestTimingDuringAuroraFrameWait);
         GxGuestWrite::InstallAuroraHooks();
         DisplaySettings::OnFrameBoundary(auroraInfo.windowSize.native_fb_width,
@@ -1678,7 +1799,7 @@ int RuntimeMain(int argc, char** argv) {
         aurora_shutdown();
         DiscordPresence::Shutdown();
         SetRuntimeExitCodeImpl(0);
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("quit (the game loop returned)");
         return 0;
     } catch (const aurora::window_owner::CloseRequested&) {
         aurora::window_owner::begin_shutdown();
@@ -1690,7 +1811,7 @@ int RuntimeMain(int argc, char** argv) {
         aurora_shutdown();
         DiscordPresence::Shutdown();
         SetRuntimeExitCodeImpl(0);
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("quit (window closed)");
         return 0;
     } catch (const Memory::AccessViolation& ex) {
         if (aurora::window_owner::enabled()) aurora::window_owner::begin_shutdown();
@@ -1709,7 +1830,7 @@ int RuntimeMain(int argc, char** argv) {
         if (aurora::window_owner::enabled()) AudioBackend::Instance().Shutdown();
         aurora_shutdown();
         DiscordPresence::Shutdown();
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("stopped by a guest memory error (exit code 1)");
         return 1;
     } catch (const std::exception& ex) {
         if (aurora::window_owner::enabled()) aurora::window_owner::begin_shutdown();
@@ -1723,7 +1844,7 @@ int RuntimeMain(int argc, char** argv) {
         if (aurora::window_owner::enabled()) AudioBackend::Instance().Shutdown();
         aurora_shutdown();
         DiscordPresence::Shutdown();
-        ShutdownProcessTranscript();
+        ShutdownProcessTranscript("stopped by a runtime error (exit code 1)");
         return 1;
     }
 }

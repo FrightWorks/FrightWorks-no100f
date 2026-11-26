@@ -133,6 +133,7 @@ extern "C" uint32_t OSResetSystem()
     AxDspHle::ShutdownMixWorker();
     Memory::Reset();
     SetRuntimeExitCode(0);
+    EndProcessTranscriptForExit("quit (the game reset the console)");
     std::exit(EXIT_SUCCESS);
     return 0; // unreachable, but keeps the signature consistent with callers
 }

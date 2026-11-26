@@ -2,7 +2,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
+#include <string>
 #include <string_view>
+#include <utility>
 
 // Night of 100 Frights (GIHE78 rev 1): where the game keeps what it is doing, for overlays that depend on it.
 namespace no100f_game_state {
@@ -31,6 +34,18 @@ constexpr bool IsMainMenu(uint32_t mode, uint32_t state, uint32_t movie) { retur
 // The last Bink movie the game opened is a credits roll (Credits1.bik / Credits2.bik): set by the DVD read hook on
 // each movie's first read. With a movie open (kMovieAddress), the credits are on screen.
 inline std::atomic<bool> g_creditsMovie{false};
+
+// The file name of the last Bink movie the game opened (the DVD read hook), for the log's movie lines (vi.cpp).
+inline std::mutex g_lastMovieMutex;
+inline std::string g_lastMovieName;
+inline void SetLastMovieName(std::string name) {
+    std::lock_guard<std::mutex> lock(g_lastMovieMutex);
+    g_lastMovieName = std::move(name);
+}
+inline std::string LastMovieName() {
+    std::lock_guard<std::mutex> lock(g_lastMovieMutex);
+    return g_lastMovieName.empty() ? "?" : g_lastMovieName;
+}
 
 // File name -> is it one of the credits movies (any case).
 inline bool IsCreditsMovie(const std::string_view name) {

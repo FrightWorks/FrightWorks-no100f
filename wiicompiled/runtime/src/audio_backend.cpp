@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 #include <SDL3/SDL_init.h>
 
@@ -46,14 +47,28 @@ bool AudioBackend::EnsureInitializedLocked(uint32_t sampleRate, uint32_t channel
         return true;
     }
 
+    // The game asks for audio on every DMA block. With no working output (no sound server, no device), retrying SDL on
+    // each one cost time and wrote a log line per block (17,817 in 90 s seen on Linux): retry every few seconds, and
+    // log the reason once.
+    const auto now = std::chrono::steady_clock::now();
+    if (m_failedInits != 0 && now - m_lastFailedInit < std::chrono::seconds(5)) {
+        return false;
+    }
+    const auto failed = [this, now](const char* what) {
+        if (m_failedInits++ == 0) {
+            RT_LOGF(RT_TAG_AUDIO, "%s failed: %s (no sound; trying again every 5 s)\n", what, SDL_GetError());
+        }
+        m_lastFailedInit = now;
+        return false;
+    };
+
     if (m_stream) {
         SDL_DestroyAudioStream(m_stream);
         m_stream = nullptr;
     }
 
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
-        RT_LOG(RT_TAG_AUDIO) << "SDL_InitSubSystem(SDL_INIT_AUDIO) failed: " << SDL_GetError() << std::endl;
-        return false;
+        return failed("SDL_InitSubSystem(SDL_INIT_AUDIO)");
     }
 
     SDL_AudioSpec spec{};
@@ -62,22 +77,31 @@ bool AudioBackend::EnsureInitializedLocked(uint32_t sampleRate, uint32_t channel
     spec.freq = static_cast<int>(sampleRate);
 
     SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
-    if (!stream) {
-        RT_LOG(RT_TAG_AUDIO) << "SDL_OpenAudioDeviceStream failed: " << SDL_GetError() << std::endl;
+    const char* failedStep = !stream                                  ? "SDL_OpenAudioDeviceStream"
+                             : !SDL_ResumeAudioStreamDevice(stream)    ? "SDL_ResumeAudioStreamDevice"
+                             : !SDL_SetAudioStreamGain(stream, EffectiveGainLocked()) ? "SDL_SetAudioStreamGain"
+                                                                      : nullptr;
+    if (failedStep != nullptr) {
+        failed(failedStep);
+        if (stream) SDL_DestroyAudioStream(stream);
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);  // balance this attempt's SDL_InitSubSystem
         return false;
     }
 
-    if (!SDL_ResumeAudioStreamDevice(stream)) {
-        RT_LOG(RT_TAG_AUDIO) << "SDL_ResumeAudioStreamDevice failed: " << SDL_GetError() << std::endl;
-        SDL_DestroyAudioStream(stream);
-        return false;
+    // Which output the player got: the driver (pipewire, pulseaudio, alsa, wasapi, ...) and what the device runs at.
+    // No device name: those can be personal ("<name>'s headphones").
+    SDL_AudioSpec deviceSpec{};
+    int deviceFrames = 0;
+    // One fprintf per line: other threads log at the same time, and a C++ stream writes each << separately.
+    const char* driver = SDL_GetCurrentAudioDriver();
+    if (SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(stream), &deviceSpec, &deviceFrames)) {
+        RT_LOGF(RT_TAG_AUDIO, "output: SDL driver %s, device %d Hz, %d channel(s), %d frames per buffer; game stream %u Hz%s\n",
+                driver ? driver : "?", deviceSpec.freq, deviceSpec.channels, deviceFrames, sampleRate,
+                m_failedInits ? (" (after " + std::to_string(m_failedInits) + " failed tries)").c_str() : "");
+    } else {
+        RT_LOGF(RT_TAG_AUDIO, "output: SDL driver %s\n", driver ? driver : "?");
     }
-
-    if (!SDL_SetAudioStreamGain(stream, EffectiveGainLocked())) {
-        RT_LOG(RT_TAG_AUDIO) << "SDL_SetAudioStreamGain failed: " << SDL_GetError() << std::endl;
-        SDL_DestroyAudioStream(stream);
-        return false;
-    }
+    m_failedInits = 0;
 
     m_stream = stream;
     m_spec = spec;

@@ -57,6 +57,7 @@ constexpr const char* kSaveFile = "title/00010000/534d4e45/data/wiimj2d.sav";
     } else {
         RT_LOGF(RT_TAG_RUNTIME, "netplay: could not start the game again (error %lu)\n", GetLastError());
     }
+    EndProcessTranscriptForExit("restarting for netplay");
     TerminateProcess(GetCurrentProcess(), 0);
 #elif defined(__ANDROID__)
     AndroidBridge::RestartGame();
