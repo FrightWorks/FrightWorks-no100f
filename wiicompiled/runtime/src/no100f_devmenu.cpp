@@ -86,7 +86,7 @@ constexpr uint32_t kTakeDamage = 0x802459B4u;      // globals + 0x824: sd2.ini T
 // Cutscene manager pointer (globals + 0x860): set while a recorded cutscene plays (h001 intro), null in play.
 constexpr uint32_t kCutsceneMgr = 0x802459F0;
 // globals + 0x3B0: 1 while the player has control; 0 during a recorded cutscene or an in-world camera pan (i001 key).
-constexpr uint32_t kPlayerControl = 0x80245540;
+constexpr uint32_t kPlayerControl = no100f_game_state::kPlayerControlAddress;
 constexpr uint32_t kGodTint = 0x78FF78FFu;         // material colour RGBA while god mode is on
 constexpr uint8_t kNpcBaseType = 0x02;
 

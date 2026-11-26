@@ -4,6 +4,7 @@
 #include <cstdlib>
 extern "C" uint8_t* aurora_load_png_rgba(const char* path, uint32_t* width, uint32_t* height);
 #include "netplay_lobby.h"
+#include "netplay_session.h"
 #include "netplay_ui.h"
 #include "settings_overlay.h"
 #include "overlay_theme.h"
@@ -301,6 +302,53 @@ void SetTopBarVisible(bool visible) {
     } else {
         g_gameInputHeldBack = true;
     }
+}
+
+// F10 pauses the game with the game's own pause: Start, pressed for it (PressedButtons, ORed into pad 1 after the input
+// block), opens the pause menu (mode 7) and stops the world. Only in play with the player in control, so a cutscene or
+// camera pan plays to its end first and the game pauses as soon as control comes back. Closing F10 presses Start again
+// to resume, but only if F10 made the pause: a pause menu the player opened stays open. Not in LAN play, where the
+// other players' game would stop too.
+int g_pausePressReads = 0;          // PADReads that still see Start held
+Clock::time_point g_pauseLastPress{};
+bool g_pauseAttempted = false;      // Start pressed for this F10 opening
+bool g_pausedByF10 = false;         // ... and the game took it
+
+void PressStartForPause() {
+    g_pausePressReads = 3;  // a few reads, so the game sees one clean press and release
+    g_pauseLastPress = Clock::now();
+}
+
+void UpdateF10Pause() {
+    namespace gs = no100f_game_state;
+    uint32_t mode = 0, control = 0, movie = 0;
+    const bool read = Memory::TryRead32(gs::kModeAddress, mode) && Memory::TryRead32(gs::kPlayerControlAddress, control) &&
+                      Memory::TryRead32(gs::kMovieAddress, movie);
+    if (g_pauseAttempted && !g_pausedByF10 && read && mode == gs::kModePause) {
+        g_pausedByF10 = true;
+        RT_LOGF(RT_TAG_RUNTIME, "[f10] game paused\n");
+    }
+    if (g_pausePressReads > 0) return;
+    using std::chrono::milliseconds;
+    const auto sinceLastPress = Clock::now() - g_pauseLastPress;
+    if (g_topBarVisible && !NetplaySession::Active()) {
+        // Retried slowly while the game doesn't take it.
+        if (!g_pausedByF10 && sinceLastPress >= milliseconds(1500) && read && mode == gs::kModeInPlay && control == 1 &&
+            movie == 0) {
+            PressStartForPause();
+            g_pauseAttempted = true;
+            RT_LOGF(RT_TAG_RUNTIME, "[f10] pressing Start to pause\n");
+        }
+        return;
+    }
+    // Closed: the game may still be taking the pause press, and the resume press needs a release before it.
+    if (g_pauseAttempted && sinceLastPress < milliseconds(g_pausedByF10 ? 200 : 500)) return;
+    if (g_pausedByF10 && read && mode == gs::kModePause) {
+        PressStartForPause();
+        RT_LOGF(RT_TAG_RUNTIME, "[f10] resuming the game\n");
+    }
+    g_pausedByF10 = false;
+    g_pauseAttempted = false;
 }
 
 // The buttons only (a resting finger on a trigger or a drifting stick doesn't count).
@@ -2820,6 +2868,12 @@ void DrawCreditsPill() {
 
 } // namespace
 
+uint16_t PressedButtons() noexcept {
+    if (g_pausePressReads <= 0) return 0;
+    --g_pausePressReads;
+    return PAD_BUTTON_START;
+}
+
 void Draw() noexcept {
     // Wait for the frame worker's DONE phase: it has replayed the previous frame's ImGui draw lists
     // and started the next ImGui frame, so all overlay callers can now safely issue ImGui commands.
@@ -2849,6 +2903,7 @@ void Draw() noexcept {
     DrawExitPrompt();
     controller_mapping_wizard::Draw();
     ApplyInputBlockState();
+    UpdateF10Pause();
     aurora_set_hdr_calibration(&g_hdrCalibrationFrame);
 }
 } // namespace settings_overlay
