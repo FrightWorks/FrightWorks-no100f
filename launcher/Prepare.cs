@@ -4,15 +4,14 @@ namespace FrightWorks;
 
 // RecompLauncher's setup step (recomplauncher.json "prepare"; https://recomplauncher.com). It runs this exe with no window
 // after it has checked the player's disc image, and again whenever the player picks another copy:
-//   FrightWorks.exe --prepare --game=<image> [--texture-pack=<folder>]...
+//   FrightWorks.exe --prepare --game=<image>
 // It does what this launcher's first start and disc choice do, so the game can start straight away without it:
 // - copies the saves, settings and controls of an installed FrightWorks into a fresh portable copy (DataImport.Installed),
 // - extracts the disc into this game's disc folder (DataPaths.Disc) and points [paths] dvd_root at it,
-// - removes old shipped copies and fills the HDR keys from the display (Windows), as the launcher does at its start,
-// - downloads the texture packs the player ticked (TexturePacks.All, by folder name).
-// Prints "progress <0..1> <text>" lines, which RecompLauncher shows under the step. Exit codes: 0 done (a texture pack
-// that failed is reported but doesn't fail the setup: the game plays without it), 1 error, 2 the image is incomplete,
-// 3 not the right disc. Nothing is written to the old copy or the image.
+// - removes old shipped copies and fills the HDR keys from the display (Windows), as the launcher does at its start.
+// Texture packs stay this launcher's (Extras > Textures, maintainer 2026-11-25): the step never downloads one.
+// Prints "progress <0..1> <text>" lines, which RecompLauncher shows under the step. Exit codes: 0 done, 1 error, 2 the
+// image is incomplete, 3 not the right disc. Nothing is written to the old copy or the image.
 static class Prepare
 {
     public const string Flag = "--prepare";
@@ -20,20 +19,11 @@ static class Prepare
     public static int Run(string[] args)
     {
         string? image = null;
-        var packs = new List<TexturePacks.Pack>();
         for (int i = 1; i < args.Length; i++)
         {
             string a = args[i];
-            string? Value(string name) =>
-                a.StartsWith(name + "=", StringComparison.Ordinal) ? a[(name.Length + 1)..]
-                : a == name && i + 1 < args.Length ? args[++i] : null;
-            if (Value("--game") is { } g) image = g;
-            else if (Value("--texture-pack") is { } p)
-            {
-                var pack = TexturePacks.All.FirstOrDefault(k => k.Folder == p);
-                if (pack == null) return Fail(1, $"There is no texture pack called {p}.");
-                if (!packs.Contains(pack)) packs.Add(pack);
-            }
+            if (a.StartsWith("--game=", StringComparison.Ordinal)) image = a["--game=".Length..];
+            else if (a == "--game" && i + 1 < args.Length) image = args[++i];
             else return Fail(1, $"Unknown argument: {a}");
         }
         if (string.IsNullOrEmpty(image)) return Fail(1, "No disc image given (--game=<image>).");
@@ -43,9 +33,7 @@ static class Prepare
         if (paths.DevTree) return Fail(1, "This is a source checkout's Play folder: set the disc up with tools/ instead.");
         if (!File.Exists(Path.Combine(paths.Game, DataPaths.GameExe))) return Fail(1, $"The game files are missing: there is no {DataPaths.GameExe} in {paths.Game}.");
 
-        // The share of the bar each part takes: the disc is about 1.4 GB read and written, the packs are downloads.
-        long packBytes = packs.Sum(p => p.ApproxBytes);
-        double discShare = packBytes == 0 ? 0.9 : 0.9 * 1400.0 / (1400.0 + packBytes / (1 << 20));
+        const double discShare = 0.95;  // of the bar: the disc is nearly all the work
         try
         {
             using var disc = GcDisc.Open(image);
@@ -85,40 +73,7 @@ static class Prepare
         Progress(discShare, "Finishing the settings");
         paths.RemoveOldShippedCopies();
         if (OperatingSystem.IsWindows()) FillHdrDefaults(paths);
-
-        var failed = new List<string>();
-        double at = discShare;
-        foreach (var pack in packs)
-        {
-            double share = (0.99 - discShare) * pack.ApproxBytes / packBytes, start = at;
-            at += share;
-            if (TexturePacks.Installed(paths.UserData, pack))
-            {
-                TexturePacks.SetEnabled(paths.UserData, pack, true);  // ticked: the player wants it on
-                continue;
-            }
-            int lastPercent = -1;
-            var report = new SyncProgress<(long done, long total)>(p =>
-            {
-                long total = p.total > 0 ? p.total : pack.ApproxBytes;
-                int percent = (int)Math.Clamp(p.done * 100 / Math.Max(1, total), 0, 100);
-                if (percent == lastPercent) return;
-                lastPercent = percent;
-                Progress(start + share * 0.9 * percent / 100.0, $"Downloading texture pack {pack.Name}: {p.done >> 20} of {total >> 20} MB");
-            });
-            try
-            {
-                Progress(start, $"Downloading texture pack {pack.Name}");
-                TexturePacks.Download(paths.UserData, pack, report, CancellationToken.None).GetAwaiter().GetResult();
-            }
-            catch (Exception e)
-            {
-                failed.Add($"{pack.Name}: {e.Message}");
-                Console.Error.WriteLine($"Texture pack {pack.Name} wasn't installed: {e.Message}");
-            }
-        }
-        Progress(1, failed.Count == 0 ? "Ready to play"
-                    : "Ready to play, without texture pack " + string.Join("; ", failed) + " (the FrightWorks launcher's Extras > Textures can try again)");
+        Progress(1, "Ready to play");
         return 0;
     }
 
@@ -185,12 +140,5 @@ static class Prepare
         Console.Out.WriteLine(message);
         Console.Error.WriteLine(message);
         return code;
-    }
-
-    // Progress<T> posts to the thread pool, so its reports could arrive after the step has moved on; this one reports
-    // on the calling thread.
-    sealed class SyncProgress<T>(Action<T> report) : IProgress<T>
-    {
-        public void Report(T value) => report(value);
     }
 }

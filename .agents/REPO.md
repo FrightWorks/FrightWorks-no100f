@@ -411,7 +411,8 @@ To build old source there, set only the paths that differ with `git restore --so
 - RecompLauncher installs and updates the release zip (and the Linux `.tar.gz`) from GitHub, so a RecompLauncher install is a portable copy.
   It reads `recomplauncher.json` at the top of the zip, which `package-scooby.ps1` copies there from the repo root; the Linux tarball gets it from `package-linux.sh`.
   Check it against https://recomplauncher.com/schema/recomplauncher.json after changing it (the docs show fields the schema refuses, such as `prepare.timeout`).
-- Its setup step runs `FrightWorks.exe --prepare --game=<image> [--texture-pack=<folder>]...` with no window (`launcher/Prepare.cs`): it extracts the disc into `data/Disc/DATA` and sets `dvd_root`, copies an installed game's saves and settings into a fresh copy, fills the HDR keys, and downloads the texture packs the player ticked (off by default, like Extras > Textures).
+- Its setup step runs `FrightWorks.exe --prepare --game=<image>` with no window (`launcher/Prepare.cs`): it extracts the disc into `data/Disc/DATA` and sets `dvd_root`, copies an installed game's saves and settings into a fresh copy, and fills the HDR keys.
+  Texture packs are only ever downloaded from this launcher's Extras > Textures, never by the setup step (maintainer, 2026-11-25).
   It prints `progress <0..1> <text>` lines; exit 0 done, 1 error, 2 incomplete image, 3 wrong disc.
 - Play starts `data/FrightWorks Game` directly, not this launcher, so anything the launcher does before Play (patch mods are built when added, not only before Play) must also work without it.
 - The game reads `RECOMPLAUNCHER=1` and `RECOMPLAUNCHER_MODE` (`runtime_config.h`): under RecompLauncher it doesn't read pads in the background (its overlay uses them), and from its Big Picture mode a saved window opens borderless for that run only.

@@ -17,23 +17,7 @@
     "program": ["FrightWorks.exe", "FrightWorks"],
     "args": ["--prepare", "--game={input:game}"],
     "label": "Unpacking your disc and setting up the game",
-    "done": ["{install}/data/Disc/DATA/sys/main.dol"],
-    "options": [
-      {
-        "id": "scoobyhd",
-        "label": "Download the Scooby-HD texture pack (about 600 MB)",
-        "note": "Nearly every texture in the game redrawn at 6x with AI upscaling, by dogerki. HD textures switches it off.",
-        "args": ["--texture-pack=50-scoobyhd"],
-        "default": false
-      },
-      {
-        "id": "menupack",
-        "label": "Download the menu pack (about 50 MB)",
-        "note": "The menus and maps redrawn at 8x, and the HD Creeper window in the hub.",
-        "args": ["--texture-pack=40-menu"],
-        "default": false
-      }
-    ]
+    "done": ["{install}/data/Disc/DATA/sys/main.dol"]
   },
   "start": {
     "program": ["data/FrightWorks Game.exe", "data/FrightWorks Game"]
@@ -127,7 +111,7 @@
       "id": "hd_textures",
       "group": "Picture",
       "label": "HD textures",
-      "help": "Uses the texture packs ticked at setup or added in the FrightWorks launcher (Extras > Textures).",
+      "help": "Uses the texture packs you added in the FrightWorks launcher (Extras > Textures).",
       "choices": [
         { "label": "On", "set": { "video/texture_replacements": "true" } },
         { "label": "Off (original textures)", "set": { "video/texture_replacements": "false" } }
