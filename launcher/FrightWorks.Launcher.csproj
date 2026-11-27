@@ -37,6 +37,14 @@
     <EmbeddedResource Include="art\dog.png" LogicalName="FrightWorks.dog.png" />
     <EmbeddedResource Include="art\ghost.png" LogicalName="FrightWorks.ghost.png" />
     <EmbeddedResource Include="art\background.png" LogicalName="FrightWorks.background.png" />
+    <EmbeddedResource Include="art\cloud1.png" LogicalName="FrightWorks.cloud1.png" />
+    <EmbeddedResource Include="art\cloud2.png" LogicalName="FrightWorks.cloud2.png" />
+    <EmbeddedResource Include="art\cloud3.png" LogicalName="FrightWorks.cloud3.png" />
+    <EmbeddedResource Include="art\fog1.png" LogicalName="FrightWorks.fog1.png" />
+    <EmbeddedResource Include="art\fog2.png" LogicalName="FrightWorks.fog2.png" />
+    <EmbeddedResource Include="art\fog3.png" LogicalName="FrightWorks.fog3.png" />
+    <EmbeddedResource Include="art\beam.png" LogicalName="FrightWorks.beam.png" />
+    <EmbeddedResource Include="art\flare.png" LogicalName="FrightWorks.flare.png" />
     <EmbeddedResource Include="frightworks.ico" LogicalName="FrightWorks.frightworks.ico" />
     <AvaloniaResource Include="fonts\LuckiestGuy-Regular.ttf" />
   </ItemGroup>

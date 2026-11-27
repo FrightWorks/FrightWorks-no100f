@@ -14,11 +14,11 @@ using Avalonia.Threading;
 
 namespace FrightWorks;
 
-// The launcher's main screen: a painted night coast (background.png) with stars, a moon, clouds and lightning, the
-// mansion (launcher/art, made by tools/launcher-art/make_mansion_v2.py) whose windows light up, draw their curtains
-// and show the odd silhouette, and the five signs that are the menu. The windows are holes in mansion.png: their
-// insides are drawn first, then the house on top. The signs are drawn over the ones painted in the picture
-// (mansion.json holds both outlines).
+// The launcher's main screen: a painted night coast (background.png) with stars, a moon, drifting clouds and fog, a
+// turning lighthouse light and lightning; the mansion (launcher/art, made by tools/launcher-art/make_mansion_v2.py)
+// whose windows light up, draw their curtains and show the odd silhouette; and the five signs painted on it that are
+// the menu. The windows are holes in mansion.png: their insides are drawn first, then the house on top. The launcher
+// writes the signs' labels on the painted planks (mansion.json holds the window boxes and the plank outlines).
 sealed class MansionScene : Control
 {
     public event Action<string>? SignClicked;
@@ -79,13 +79,11 @@ sealed class MansionScene : Control
         public Point NormalAt, HoverAt;
         public Geometry? Hit;
     }
-    sealed class Cloud { public RenderTargetBitmap Art = null!; public double X, Y, Speed; }
 
     const int ArtW = 1447, ArtH = 1087;
     readonly List<Win> windows = new();
     readonly Dictionary<string, Group> groups = new();
     readonly List<Sign> signs = new();
-    readonly List<Cloud> clouds = new();
     static readonly HashSet<string> CurtainGroups = new() { "parlor", "parlor_side", "right_arch", "right_tower", "tower" };
 
     double s = 1;
@@ -224,11 +222,6 @@ sealed class MansionScene : Control
             bolt = MakeBolt(rnd);
             nextStrike = t + 9 + rnd.NextDouble() * 14;
         }
-        foreach (var c in clouds)
-        {
-            c.X += c.Speed * dt;
-            if (c.X > W) c.X = -c.Art.Size.Width;
-        }
         InvalidateVisual();
     }
 
@@ -346,7 +339,7 @@ sealed class MansionScene : Control
         house = Layer(hw, hh, g => { if (HouseArt != null) g.DrawImage(HouseArt, new Rect(0, 0, hw, hh)); });
 
         BuildSky();
-        BuildClouds();
+        BuildDrift();
         BuildTitle();
         BuildLanternGlows();
         foreach (var sg in signs) BuildSign(sg);
@@ -389,7 +382,8 @@ sealed class MansionScene : Control
         sky?.Dispose();
         double w = Math.Max(1, W), h = Math.Max(1, H);
         // The painted coast covers the window, anchored bottom left so the lighthouse stays at the left edge.
-        double k = Math.Max(w / BackW, h / BackH), backTop = h - BackH * k;
+        double k = backK = Math.Max(w / BackW, h / BackH);
+        double backTop = this.backTop = h - BackH * k;
         sky = Layer(w, h, g =>
         {
             var all = new Rect(0, 0, w, h);
@@ -431,28 +425,119 @@ sealed class MansionScene : Control
         });
     }
 
-    void BuildClouds()
+    // ----- Clouds, fog and the lighthouse light -----
+    // Painted sprites (launcher/art) that drift sideways and wrap round the window, slowly: clouds high in the sky, a
+    // fog bank on the sea behind the house and one over the ground in front of it. Width and start x are shares of the
+    // window width; y is a share of the height from the top, from the horizon or from the bottom; speed is in px/s at
+    // 1180 wide (negative: to the left) and scales with the width. Fog breathes a little (opacity +-0.1 over 10 s).
+    enum From { Top, Horizon, Bottom }
+    sealed record Drift(Bitmap? Art, double Width, double StartX, From YFrom, double Y, double Opacity, double Speed, bool Breathes);
+    sealed class DriftLayer { public Drift Spec = null!; public RenderTargetBitmap Art = null!; public double Y; }
+
+    static readonly Bitmap? Cloud1 = Skin.LoadBitmap("cloud1.png"), Cloud2 = Skin.LoadBitmap("cloud2.png"),
+        Cloud3 = Skin.LoadBitmap("cloud3.png"), Fog1 = Skin.LoadBitmap("fog1.png"), Fog2 = Skin.LoadBitmap("fog2.png"),
+        Fog3 = Skin.LoadBitmap("fog3.png"), BeamArt = Skin.LoadBitmap("beam.png"), FlareArt = Skin.LoadBitmap("flare.png");
+    static readonly Drift[] CloudSpecs =
     {
-        foreach (var c in clouds) c.Art.Dispose();
-        clouds.Clear();
-        var r = new Random(11);
-        for (int i = 0; i < 6; i++)
+        new(Cloud1, 0.55, 0.28, From.Top, 0.03, 0.85, -6, false),
+        new(Cloud2, 0.38, -0.05, From.Top, 0.19, 0.80, -8, false),
+        new(Cloud3, 0.28, 0.62, From.Top, 0.30, 0.75, -10, false),
+    };
+    static readonly Drift[] BackFogSpecs =
+    {
+        new(Fog2, 0.75, -0.20, From.Horizon, -0.07, 0.55, 5, true),
+        new(Fog3, 0.70, 0.45, From.Horizon, -0.04, 0.45, -4, true),
+    };
+    static readonly Drift[] FrontFogSpecs = { new(Fog1, 0.95, -0.10, From.Bottom, -0.17, 0.50, 7, true) };
+    // The horizon in background.png, as a share of its height; the lamp's centre in its pixels.
+    const double Horizon = 0.69;
+    static readonly Point Lamp = new(146, 423);
+    // The still moment drawn without animations (and in --shots): the light an eighth of a turn round, toward the
+    // house, and the clouds and fog where they start.
+    const double StillTime = 9.0 / 8;
+    const double BeamTurn = 9;  // seconds per turn of the light
+
+    readonly List<DriftLayer> clouds = new(), backFog = new(), frontFog = new();
+    double backK = 1, backTop;
+    RenderTargetBitmap? beam, flare;
+    Geometry? frontFogClip;
+
+    void BuildDrift()
+    {
+        double w = Math.Max(1, W), h = Math.Max(1, H), horizon = backTop + BackH * Horizon * backK;
+        void Build(List<DriftLayer> list, Drift[] specs)
         {
-            double w = (int)((240 + r.Next(220)) * s), h = (int)((60 + r.Next(50)) * s);
-            if (w < 8 || h < 8) continue;
-            var art = Layer(w, h, g =>
+            foreach (var l in list) l.Art.Dispose();
+            list.Clear();
+            foreach (var d in specs)
             {
-                for (int k = 0; k < 9; k++)
-                {
-                    double pw = w * (0.3 + r.NextDouble() * 0.35), ph = h * (0.5 + r.NextDouble() * 0.5);
-                    double px = r.NextDouble() * (w - pw), py = h - ph - r.NextDouble() * (h - ph) * 0.6;
-                    g.DrawEllipse(new RadialGradientBrush
-                    {
-                        GradientStops = { new GradientStop(Skin.Argb(120, 58, 46, 88), 0), new GradientStop(Skin.Argb(0, 58, 46, 88), 1) },
-                    }, null, new Rect(px, py, pw, ph));
-                }
-            });
-            clouds.Add(new Cloud { Art = art, X = r.NextDouble() * W, Y = H * (0.02 + r.NextDouble() * 0.38), Speed = (4 + r.NextDouble() * 9) * Math.Max(0.5, s) });
+                if (d.Art is not { } art) continue;
+                double sw = Math.Max(1, Math.Round(d.Width * w)), sh = Math.Max(1, Math.Round(sw * art.PixelSize.Height / art.PixelSize.Width));
+                double y = d.YFrom switch { From.Top => d.Y * h, From.Horizon => horizon + d.Y * h, _ => h + d.Y * h };
+                list.Add(new DriftLayer { Spec = d, Art = Layer(sw, sh, g => g.DrawImage(art, new Rect(0, 0, sw, sh))), Y = Math.Round(y) });
+            }
+        }
+        Build(clouds, CloudSpecs);
+        Build(backFog, BackFogSpecs);
+        Build(frontFog, FrontFogSpecs);
+
+        // The light at its longest (0.8 of the width) and the flare at its biggest, scaled down as they turn.
+        beam?.Dispose();
+        flare?.Dispose();
+        beam = flare = null;
+        double bl = Math.Round(0.8 * w), bh = Math.Max(1, Math.Round(bl * 220 / 1400));
+        if (BeamArt is { } beamArt) beam = Layer(bl, bh, g => g.DrawImage(beamArt, new Rect(0, 0, bl, bh)));
+        double fs = Math.Max(1, Math.Ceiling(FlareSize(1, 1.06)));
+        if (FlareArt is { } flareArt) flare = Layer(fs, fs, g => g.DrawImage(flareArt, new Rect(0, 0, fs, fs)));
+
+        // The front fog never covers the signs (the painted planks): it is clipped out of their outlines.
+        var signShapes = new GeometryGroup();
+        foreach (var sg in signs) signShapes.Children.Add(Skin.Polygon(SignPoints(sg, 1)));
+        frontFogClip = new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(new Rect(0, 0, w, h)), signShapes);
+    }
+
+    // The flare's size for how much the light faces the viewer (0..1) and its flicker.
+    double FlareSize(double facing, double flicker) => (34 + 70 * Math.Pow(facing, 6)) * 1.6 * backK * flicker;
+
+    void DrawDrift(DrawingContext g, List<DriftLayer> list, double t)
+    {
+        double w = Math.Max(1, W);
+        for (int i = 0; i < list.Count; i++)
+        {
+            var l = list[i];
+            double sw = l.Art.Size.Width, period = w + sw;
+            double x = l.Spec.StartX * w + l.Spec.Speed * (w / 1180) * t;
+            x = ((x + sw) % period + period) % period - sw;
+            double opacity = l.Spec.Opacity + (l.Spec.Breathes ? 0.1 * Math.Sin(t * Math.Tau / 10 + i * 2.1) : 0);
+            using (g.PushOpacity(Math.Clamp(opacity, 0, 1)))
+                DrawLayer(g, l.Art, new Point(Math.Round(x), l.Y));
+        }
+    }
+
+    // The lighthouse's turning light: a cone from the lamp, its length cos(angle) of the longest (mirrored to the left
+    // when it points away from the house), dimmer on the far side where the tower hides part of it; and a flare on the
+    // lamp that grows when the light faces the viewer. Both are behind the house and the front fog.
+    void DrawLighthouse(DrawingContext g, double t)
+    {
+        double angle = t / BeamTurn * Math.Tau, c = Math.Cos(angle), sn = Math.Sin(angle);
+        var lamp = new Point(Lamp.X * backK, backTop + Lamp.Y * backK);
+        if (beam != null && Math.Abs(c) * beam.Size.Width >= 6)
+        {
+            double len = Math.Abs(c) * beam.Size.Width, bh = beam.Size.Height;
+            var src = new Rect(0, 0, beam.PixelSize.Width, beam.PixelSize.Height);
+            var dest = new Rect(lamp.X, lamp.Y - bh / 2, len, bh);
+            var mirror = c < 0 ? new Matrix(-1, 0, 0, 1, 2 * lamp.X, 0) : Matrix.Identity;
+            using (g.PushOpacity(sn >= 0 ? 0.75 : 0.45))
+            using (g.PushTransform(mirror))
+                g.DrawImage(beam, src, dest);
+        }
+        if (flare != null)
+        {
+            double facing = Math.Max(0, sn), flicker = 1 + 0.06 * Math.Sin(t * 13.1) * Math.Sin(t * 7.3);
+            double size = FlareSize(facing, flicker);
+            using (g.PushOpacity(0.7 + 0.3 * facing))
+                g.DrawImage(flare, new Rect(0, 0, flare.PixelSize.Width, flare.PixelSize.Height),
+                            new Rect(lamp.X - size / 2, lamp.Y - size / 2, size, size));
         }
     }
 
@@ -571,7 +656,10 @@ sealed class MansionScene : Control
         var all = new Rect(Bounds.Size);
 
         DrawLayer(g, sky!, default);
-        foreach (var c in clouds) DrawLayer(g, c.Art, new Point((int)c.X, (int)c.Y));
+        double still = animate ? t : StillTime;  // the drift and the lighthouse stand still without animations
+        DrawDrift(g, clouds, still);
+        DrawDrift(g, backFog, still);
+        DrawLighthouse(g, still);
         if (flash > 0)
         {
             g.FillRectangle(Skin.Brush(Skin.Argb((int)(120 * flash), 196, 186, 255)), all);
@@ -605,6 +693,9 @@ sealed class MansionScene : Control
             using (g.PushOpacityMask(new ImageBrush(house) { Stretch = Stretch.Fill }, houseRect))
                 g.FillRectangle(Skin.Brush(Skin.Argb((int)(255 * 0.3 * flash), 217, 217, 255)), houseRect);
         }
+        if (frontFogClip != null)
+            using (g.PushGeometryClip(frontFogClip))
+                DrawDrift(g, frontFog, still);
 
         foreach (var sg in signs)
         {
