@@ -125,7 +125,8 @@ bool ReadProgress(Read read, Progress& out) {
     return true;
 }
 
-// Game thread, every retrace: reads the progress about four times a second.
+// Game thread, every retrace: reads the progress about four times a second. A reading is kept only while the player
+// has control (a load fills the values in over several frames); the menus clear it.
 void Update();
 
 // The newest reading (valid = false before the first, or outside a known layout).
