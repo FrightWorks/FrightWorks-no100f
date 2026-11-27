@@ -187,6 +187,24 @@ the debug kit puts the player's setup back (`tools/debug/manual-session.ps1 stop
   Linux build with the light files.
 - Later, as discussed: the treeline; the moon placed relative to the gate.
 
+### Related: level geometry and texture research (2026-11-11 to 11-18, not ported)
+
+Earlier research, on the since-deleted branch `research/level-textures`, looked at changing a level's own data so its
+textures work differently: changing some of a level's geometry, and replacing textures inside the level file instead of
+through a texture pack. It fits Reimagined's aim, but it can't be ported over as is: it edits level data, while
+Reimagined is drawn on top of the original renderer and leaves the level files alone. Bringing it in means working out how the two
+would combine first.
+
+- What it found: a level is one `.HIP` holding three RenderWare world (BSP) assets (visible, visual-only, collision-only),
+  64x64 tiles repeated across surfaces, baked vertex colours and no lightmaps; materials find textures by name hash,
+  while texture packs key by the picture's bytes. Replacing a texture in place looked plausible (an h001 checkerboard
+  test was written); replacing a level's geometry was untested, and h001's main BSP alone (2 MB) is over the 1 MiB patch
+  budget.
+- The only committed piece was `Hip.replace` in `tools/debug/game/hipedit.py` (swap an existing asset's bytes, keeping
+  later offsets aligned); the maintainer keeps it as a patch with the research.
+- The full report, the level exporter for Blender and the test scripts are the maintainer's local research (game data
+  stays out of the repo). Ask for them before picking this up.
+
 ## Adding a level
 
 1. Boot it with a new empty `reimagined/<level>.txt` (or `NO100F_REIMAGINED`) and find its keys (`textures all`,
