@@ -1,6 +1,8 @@
 """v2 launcher art: mansion.png (glass cut out), mansion.json (window rects + sign outlines), background.png.
 
     python tools/launcher-art/make_mansion_v2.py <mansion concept.png> <background concept.png> <out_dir>
+
+Run tools/launcher-art/draw_bars.py on the house concept first: it redraws the window bars as straight lines.
 """
 import json
 import os
@@ -20,10 +22,30 @@ WINDOWS = [
     ("parlor", "parlor", (143, 664, 265, 922), "navy"),
     ("parlor_side", "parlor_side", (275, 672, 328, 922), "navy"),
     ("fanlight", "entrance", (444, 632, 610, 722), "navy"),
-    ("lantern_left", "entrance", (384, 770, 430, 818), "lit"),
-    ("lantern_right", "entrance", (617, 770, 663, 818), "lit"),
+    ("lantern_left", "entrance", (384, 770, 432, 820), "navy"),
+    ("lantern_right", "entrance", (615, 770, 665, 820), "navy"),
     ("right_arch", "right_arch", (1222, 724, 1293, 903), "navy"),
 ]
+
+# The front pane and the two narrow side panes of each porch lantern (art px); the thin bars between them stay painted.
+LANTERN_PANES = {
+    "lantern_left": [
+        [(397, 776), (421, 776), (418, 815), (400, 815)],
+        [(390, 778), (394, 778), (398, 813), (395.5, 813)],
+        [(423, 777), (426, 777), (422.5, 813), (420.5, 813)],
+    ],
+    "lantern_right": [
+        [(627.5, 776), (652, 776), (649, 815), (631, 815)],
+        [(622, 778), (626, 778), (630, 813), (627, 813)],
+        [(654, 778), (657, 778), (653.5, 813), (651.5, 813)],
+    ],
+}
+
+# The bars between the panes, kept opaque over the glass: (x0, y0, x1, y1) in art px.
+LANTERN_BARS = {
+    "lantern_left": [(394.6, 777, 399.4, 815.5), (422.2, 776, 418.8, 815.5)],
+    "lantern_right": [(626.6, 777, 630.8, 815.5), (652.8, 776, 650.3, 815.5)],
+}
 
 SIGNS = [
     ("play", (712, 466, 1170, 614)),
@@ -106,24 +128,56 @@ def main():
     # The concept's solid areas come out at alpha ~253; make the inside fully opaque, keep the soft outer edge.
     alpha = np.where(alpha >= 240, 255, alpha)
 
-    navy = (r < 34) & (g < 44) & (b > 28) & (b < 85) & (b > r + 18)
-    lit = (r > 115) & (g > 135) & (b < 175) & (g > b + 15)
+    navy = (b > 18) & (b < 140) & (g < 0.5 * b) & (r < 0.5 * b + 4)  # glass is far bluer than the teal wall
+    lit = (r > 150) & (g > 110)  # warm or white-hot lantern glass
     hole = np.zeros((H, W), np.float32)
     windows_json = []
     for wid, group, (x0, y0, x1, y1), kind in WINDOWS:
         m = np.zeros((H, W), bool)
         m[y0:y1, x0:x1] = (navy if kind == "navy" else lit)[y0:y1, x0:x1]
-        m = filt(filt(m, ImageFilter.MaxFilter(3)), ImageFilter.MinFilter(3)) & np.pad(
+        if not wid.startswith("lantern"):  # lanterns keep their thin bars
+            m = filt(filt(m, ImageFilter.MaxFilter(3)), ImageFilter.MinFilter(3))
+        m = m & np.pad(
             np.ones((y1 - y0, x1 - x0), bool), ((y0, H - y1), (x0, W - x1)))
         sub = m[y0:y1, x0:x1]
         lab, sizes = components(sub)
         biggest = max(sizes[1:])
         keep = [i for i, s in enumerate(sizes) if i and s >= (max(300, 0.12 * biggest) if kind == "navy" else 25)]
         sub = np.isin(lab, keep)
+        # Grow into the near-black shadow pixels at the glass edges and in the corners (they show as specks when lit).
+        dark = (rgb[y0:y1, x0:x1].max(axis=2) < 34)
+        for _ in range(0 if wid.startswith("lantern") else 4):  # lantern frames are near-black: no growth there
+            grown = np.asarray(Image.fromarray(sub.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(3))) > 127
+            sub = sub | (grown & dark)
+        # Fill small islands left inside the glass (not touching the box edge, so mullions and the frame stay).
+        ilab, isizes = components(~sub)
+        border = set(np.unique(np.concatenate([ilab[0], ilab[-1], ilab[:, 0], ilab[:, -1]]))) - {0}
+        small = [i for i, sz in enumerate(isizes) if i and sz < 120 and i not in border]
+        sub = sub | np.isin(ilab, small)
+        if wid == "fanlight":
+            # A clean half-circle up to the frame's inner edge (measured), minus the light spokes and hub, so the
+            # uneven dark shadow band under the arch is cut evenly.
+            fcx, fcy, fr, sill = 527.0, 709.0, 74.0, 716.5
+            yy_, xx_ = np.mgrid[y0:y1, x0:x1]
+            inside = ((xx_ - fcx) ** 2 + (yy_ - fcy) ** 2 <= fr * fr) & (yy_ <= sill)
+            spokes = (rgb[y0:y1, x0:x1].max(axis=2) > 62) & ~((b[y0:y1, x0:x1] > 18) & (g[y0:y1, x0:x1] < 0.5 * b[y0:y1, x0:x1]))
+            sub = inside & ~spokes
+            lab_, sizes_ = components(sub)
+            sub = np.isin(lab_, [i for i, sz in enumerate(sizes_) if i and sz >= 40])
+        if wid in LANTERN_PANES:
+            # Lantern glass is too small and dark to find by colour, so its panes are measured by hand.
+            img = Image.new("L", ((x1 - x0) * 4, (y1 - y0) * 4), 0)
+            dr = ImageDraw.Draw(img)
+            for poly in LANTERN_PANES[wid]:
+                dr.polygon([((px - x0) * 4, (py - y0) * 4) for px, py in poly], fill=255)
+            for bx0, by0, bx1, by1 in LANTERN_BARS[wid]:
+                dr.line([((bx0 - x0) * 4, (by0 - y0) * 4), ((bx1 - x0) * 4, (by1 - y0) * 4)], fill=0, width=7)
+            sub = np.asarray(img.resize((x1 - x0, y1 - y0), Image.BOX)) > 127
         m[:] = False
         m[y0:y1, x0:x1] = sub
-        # Grow 1 px over the antialiased glass edge, then soften.
-        m = filt(m, ImageFilter.MaxFilter(3))
+        # Grow 1 px over the antialiased glass edge (not on the lanterns: their bars are 1-2 px), then soften.
+        if wid not in LANTERN_PANES:  # only into dark edge pixels, so the light bars keep their width and length
+            m = m | (filt(m, ImageFilter.MaxFilter(3)) & (rgb.max(axis=2) < 70))
         soft = np.asarray(Image.fromarray(m.astype(np.uint8) * 255).filter(ImageFilter.GaussianBlur(0.6))).astype(np.float32) / 255
         soft = np.maximum(soft, m * 0.0)
         hole = np.maximum(hole, np.where(m, 1.0, soft))
@@ -136,12 +190,13 @@ def main():
     out_img = np.dstack([rgb, alpha]).clip(0, 255).astype(np.uint8)
     Image.fromarray(out_img, "RGBA").save(os.path.join(out, "mansion.png"), optimize=True)
 
-    wood = (r > 85) & (g > 100) & (b < 150) & (r > b + 5) & (g > b + 10) & (alpha > 200)
+    wood = (r > 100) & (g > 0.66 * r) & (b < 170) & (r > b + 12) & (alpha > 200)  # tan planks, not the redder ropes
     signs_json = []
     for sid, (x0, y0, x1, y1) in SIGNS:
         m = np.zeros((H, W), bool)
         m[y0:y1, x0:x1] = wood[y0:y1, x0:x1]
         m = filt(filt(m, ImageFilter.MaxFilter(5)), ImageFilter.MinFilter(5))
+        m = filt(filt(m, ImageFilter.MinFilter(7)), ImageFilter.MaxFilter(7))  # drop thin rope remnants
         sub = m[y0:y1, x0:x1]
         lab, sizes = components(sub)
         big = int(np.argmax(sizes))

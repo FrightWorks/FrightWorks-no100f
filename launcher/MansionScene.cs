@@ -34,7 +34,7 @@ sealed class MansionScene : Control
     const int BackW = 1671, BackH = 941;
     // Open sky in background.png: stars only above this share of its height, and never on the lighthouse.
     const double StarSky = 0.55;
-    static readonly Rect Lighthouse = new(95, 370, 100, 275);
+    static readonly Rect Lighthouse = new(80, 355, 130, 290);  // the tower and its lamp's halo
 
     // For each column of mansion.png, the first row that isn't transparent (ArtH where there is none): the roofline
     // the title is fitted above.
@@ -348,7 +348,40 @@ sealed class MansionScene : Control
         BuildSky();
         BuildClouds();
         BuildTitle();
+        BuildLanternGlows();
         foreach (var sg in signs) BuildSign(sg);
+    }
+
+    // The porch lanterns' light on the house: a warm halo around each lantern, added over the house (inside its outline)
+    // while the entrance is lit. The profile is three stacked ellipses (radii 80, 48 and 26 art px, opacity 45, 75 and
+    // 105 of 255) blurred by 18 px, as tuned on the art; it fades out by 120 px, before it reaches the door.
+    const double GlowReach = 120;
+    static readonly Color GlowColor = Color.FromRgb(255, 170, 70);
+    static readonly double[] GlowProfile = { 0.561, 0.545, 0.498, 0.427, 0.349, 0.271, 0.2, 0.137, 0.086, 0.047, 0.02, 0.008, 0 };
+    readonly List<(Win Window, RenderTargetBitmap Art, Point At)> lanternGlows = new();
+
+    void BuildLanternGlows()
+    {
+        foreach (var lg in lanternGlows) lg.Art.Dispose();
+        lanternGlows.Clear();
+        var brush = new RadialGradientBrush();
+        for (int i = 0; i < GlowProfile.Length; i++)
+            brush.GradientStops.Add(new GradientStop(Skin.WithAlpha(GlowColor, (int)Math.Round(255 * GlowProfile[i])), i / (GlowProfile.Length - 1.0)));
+        foreach (var w in windows.Where(w => w.Id.StartsWith("lantern", StringComparison.Ordinal)))
+        {
+            var c = w.Box.Center;
+            var r = Map(new Rect(c.X - GlowReach, c.Y - GlowReach * 1.1, GlowReach * 2, GlowReach * 2.2));
+            var at = new Point(Math.Floor(r.X), Math.Floor(r.Y));
+            var ellipse = new Rect(r.X - at.X, r.Y - at.Y, r.Width, r.Height);
+            var houseHere = new Rect(o.X - at.X, o.Y - at.Y, ArtW * s, ArtH * s);
+            var art = Layer(Math.Ceiling(r.Width) + 1, Math.Ceiling(r.Height) + 1, g =>
+            {
+                if (HouseArt == null) { g.DrawEllipse(brush, null, ellipse); return; }
+                using (g.PushOpacityMask(new ImageBrush(HouseArt) { Stretch = Stretch.Fill }, houseHere))
+                    g.DrawEllipse(brush, null, ellipse);
+            });
+            lanternGlows.Add((w, art, at));
+        }
     }
 
     void BuildSky()
@@ -423,42 +456,51 @@ sealed class MansionScene : Control
         }
     }
 
-    // The title, top left in the sky: as big as fits (46 at most) left of where the roofline comes down past it.
-    const double TitleX = 18, TitleY = 12;
+    // The title, top left in the sky: a small lilac FRIGHTWORKS over a big lime NIGHT OF / 100 FRIGHTS, the three lines
+    // centred on one axis. em is the big lines' size: 40 at most (the small line is 0.6 of it, the big lines 1.05 apart),
+    // smaller when the roofline comes down past the block.
+    const double TitleX = 18, TitleY = 12, TitleMax = 40;
+    static readonly Color TitleLilac = Color.Parse("#C9B8FF"), TitleLime = Color.Parse("#D8F25A"), TitleInk = Color.Parse("#1A0F2A");
+    static readonly string[] TitleLines = { "FRIGHTWORKS", "NIGHT OF", "100 FRIGHTS" };
+    static double TitleSize(int line, double em) => line == 0 ? em * 0.6 : em;
+    static double TitleTop(int line, double em) => line == 0 ? 0 : em * 0.7 + (line - 1) * em * 1.05;
+    static double TitleHeight(double em) => em * (0.7 + 1.05 + 1.15);
+    static double TitleOutline(double em) => Math.Max(2, em * 0.1);  // half of it shows: about 2 px at full size
+    static double TitleWidth(double em) =>
+        Enumerable.Range(0, TitleLines.Length).Max(i => Skin.TextWidth(TitleLines[i], TitleSize(i, em))) + TitleOutline(em) + 8;
 
     void BuildTitle()
     {
         title?.Dispose();
-        double TextWidth(double size) =>
-            Skin.TextGeometry("FRIGHTWORKS", size, new Rect(0, 0, 4000, 400), Skin.Align.Near).Bounds.Width + 8;
-        double em = 46, room = TitleRoom(em);
-        if (TextWidth(em) > room)
+        double em = TitleMax;
+        if (TitleWidth(em) > TitleRoom(em))
         {
             // Smaller text is shorter, so the roofline lets it run further right: the largest size that fits.
-            double lo = 14, hi = em;
+            double lo = 16, hi = em;
             for (int i = 0; i < 12; i++)
             {
                 double mid = (lo + hi) / 2;
-                if (TextWidth(mid) <= TitleRoom(mid)) lo = mid; else hi = mid;
+                if (TitleWidth(mid) <= TitleRoom(mid)) lo = mid; else hi = mid;
             }
             em = lo;
-            room = TitleRoom(em);
         }
-        double sub = Skin.TextGeometry("Night of 100 Frights", em * 0.52, new Rect(0, 0, 4000, 400), Skin.Align.Near).Bounds.Width;
-        double width = (int)Math.Max(sub, TextWidth(em)) + 30, height = (int)(em * 2.3) + 10;
+        double block = Math.Ceiling(TitleWidth(em)), width = block + 12, height = Math.Ceiling(TitleHeight(em)) + 10;
         title = Layer(width, height, g =>
         {
-            // Layout boxes far wider than the text, as the old GDI+ drawing used.
-            Skin.Text(g, "FRIGHTWORKS", em, new Rect(6, 0, 4000, em * 1.25), Skin.Lime, Skin.Ink, Math.Max(3, em * 0.16), Skin.Align.Near);
-            Skin.Text(g, "Night of 100 Frights", em * 0.52, new Rect(8, em * 1.12, 4000, em * 0.8), Skin.Cream, Skin.Ink, Math.Max(2, em * 0.11), Skin.Align.Near);
+            for (int i = 0; i < TitleLines.Length; i++)
+            {
+                var box = new Rect(6, TitleTop(i, em), block, (i == 0 ? 0.7 : 1.05) * em);
+                if (i == 0) Skin.Text(g, TitleLines[i], TitleSize(i, em), box, TitleLilac, default, 0);
+                else Skin.Text(g, TitleLines[i], TitleSize(i, em), box, TitleLime, TitleInk, TitleOutline(em));
+            }
         });
     }
 
     // How wide the title can be at a size: from its left edge to the first column where the house rises to within a
-    // few pixels of the title's bottom (the subtitle ends at about twice the size below the top).
+    // few pixels of the block's bottom.
     double TitleRoom(double em)
     {
-        double bottom = TitleY + em * 2 + 6;
+        double bottom = TitleY + TitleHeight(em) + 6;
         for (double x = TitleX; x < W; x++)
         {
             int ax = (int)((x - o.X) / s);
@@ -548,6 +590,15 @@ sealed class MansionScene : Control
 
         var houseRect = new Rect(new Point((int)o.X, (int)o.Y), house!.Size);
         DrawLayer(g, house, houseRect.Position);
+        // Additive, so the lanterns brighten the paint under them instead of tinting it orange.
+        using (g.PushRenderOptions(new RenderOptions { BitmapBlendingMode = BitmapBlendingMode.Plus }))
+            foreach (var (win, art, at) in lanternGlows)
+            {
+                double light = GroupLight(win.Group, t);
+                if (light <= 0.01) continue;
+                using (g.PushOpacity(light))
+                    DrawLayer(g, art, at);
+            }
         if (flash > 0.02)
         {
             // The lightning lights the house: a pale silhouette of it over it.
@@ -580,12 +631,15 @@ sealed class MansionScene : Control
 
     static readonly Color Dark = Color.Parse("#0D0E1E"), WarmTop = Color.Parse("#FFE27C"), WarmBottom = Color.Parse("#F39A2B");
 
+    // A group's light now, with its slight flicker (0..1).
+    static double GroupLight(Group gr, double t) =>
+        Math.Clamp(gr.Light * (0.95 + 0.05 * Math.Sin(t * 11 + gr.Seed) * Math.Sin(t * 6.7 + gr.Seed * 2)), 0, 1);
+
     void DrawWindow(DrawingContext g, Win w, double t)
     {
         var b = Map(w.Box).Inflate(1);
         var gr = w.Group;
-        double light = gr.Light * (0.95 + 0.05 * Math.Sin(t * 11 + gr.Seed) * Math.Sin(t * 6.7 + gr.Seed * 2));
-        light = Math.Clamp(light, 0, 1);
+        double light = GroupLight(gr, t);
         g.FillRectangle(Skin.Brush(Dark), b);
         if (light > 0.01)
             g.FillRectangle(Skin.Vertical(Skin.WithAlpha(WarmTop, (int)(255 * light)), Skin.WithAlpha(WarmBottom, (int)(255 * light))), b);
