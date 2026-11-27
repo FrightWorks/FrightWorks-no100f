@@ -33,8 +33,11 @@ void Update() {
     if (progress.valid && progress.percent != s_logged) {
         s_logged = progress.percent;
         const auto& in = progress.inputs;
-        RT_LOGF(RT_TAG_RUNTIME, "[progress] completion %u%%: flags %u, saved states %u, snacks collected %u, tokens %u%s\n",
-                progress.percent, in.progressFlags, in.savedStates, in.snacksCollected, in.tokens,
+        uint32_t mode = 0;
+        Memory::TryRead32(no100f_game_state::kModeAddress, mode);
+        RT_LOGF(RT_TAG_RUNTIME,
+                "[progress] completion %u%% (mode %u): flags %u, saved states %u, snacks collected %u, tokens %u%s\n",
+                progress.percent, mode, in.progressFlags, in.savedStates, in.snacksCollected, in.tokens,
                 in.finished ? ", finished" : "");
     }
     std::lock_guard<std::mutex> lock(g_mutex);
