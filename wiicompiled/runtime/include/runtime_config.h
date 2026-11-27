@@ -430,11 +430,11 @@ inline void EnsureConfigFile() {
               "[network]\n"
               "enabled = true\n\n"
               "[discord]\n"
-              "# Rich Presence talks only to a locally-running Discord client.\n"
-              "# Off until client_id names a Discord application: FrightWorks has none\n"
-              "# of its own yet.\n"
+              "# Shows what you're playing in your Discord status (level, area, Scooby\n"
+              "# Snacks). Talks only to the Discord app running on this PC; Discord's own\n"
+              "# Activity Privacy settings still apply. false turns it off.\n"
               "enabled = true\n"
-              "# client_id = \"123456789012345678\"\n\n"
+              "# client_id = \"1575956576467165184\"\n\n"
               "[paths]\n"
               "# dvd_root = \"D:\\\\Games\\\\ScoobyDoo\\\\DATA\"\n"
               "# nand_root = \"D:\\\\WiiNand\"\n"
@@ -1562,9 +1562,10 @@ inline bool DiscordPresenceEnabled(bool fallback = true) {
     return Get().discordPresenceEnabled.value_or(fallback);
 }
 
-// No default application: FrightWorks has no Discord app of its own yet, so base-game presence only starts when
-// [discord] client_id is set (WiiCompiled's app ID was 1543984562369990706).
-inline std::string DiscordClientId(std::string fallback = "") {
+// The "FrightWorks - No100F" Discord application (Developer Portal; its art asset names: no100f_discord_status.h).
+// [discord] client_id overrides it (WiiCompiled's app ID was 1543984562369990706).
+inline constexpr const char* kDefaultDiscordClientId = "1575956576467165184";
+inline std::string DiscordClientId(std::string fallback = kDefaultDiscordClientId) {
     return Get().discordClientId.value_or(std::move(fallback));
 }
 

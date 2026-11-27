@@ -77,6 +77,12 @@ name with the mouse. The textures from your own Xbox disc are a pack here too ([
 X removes a downloaded pack; the launcher never deletes a folder you added. To keep the order it
 numbers the folders (`10-`, `20-`, ...). Your own `texture_replacements` folder and mods still win over every pack.
 
+**Discord.** With the Discord desktop app running, your Discord status shows the launcher, or in the game the level and
+area you're in, your Scooby Snacks, the main menu, paused or the credits, and how long you've played. Friends also see
+two buttons to get the game. The launcher and the game only talk to the Discord app on your PC. Discord's **User
+Settings > Activity Privacy** decides who sees it; **Settings > Game > Show in my Discord status** in the launcher
+switches it off (`[discord] enabled = false` in `UserData\Config.toml`).
+
 ## Controllers and keyboard
 
 Gamepads work right away. Remap them in the launcher (**Settings > Controls**) or in game (**F10** > Controller, or Keyboard). Button
