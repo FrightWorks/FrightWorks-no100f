@@ -1,7 +1,11 @@
 """Builds the launcher's mansion art from the concept picture.
 
     python tools/launcher-art/make_launcher_art.py <concept.png> [out_dir]
-    python tools/launcher-art/make_launcher_art.py --icon <file.ico> [...]   (the app icon, no input)
+    python tools/launcher-art/make_launcher_art.py --icon <icon.png> <file.ico> [...]   (the app icon)
+
+The app icon's source is the FrightWorks organisation's square picture for this game (not in git). --icon
+writes it as an .ico with every size Windows asks for; the repo keeps two copies, launcher/frightworks.ico (the
+launcher, the installer and the Linux package) and wiicompiled/runtime/assets/icon/frightworks.ico (the game).
 
 The concept is a 1447x1087 picture of a haunted mansion on black with lit windows and five menu signs
 (not in git). Output, by default in launcher/art:
@@ -145,29 +149,23 @@ def draw_coverage(size, draw_fn):
     return np.asarray(big.resize((w, h), Image.BOX)).astype(np.float32) / 255
 
 
-def make_icon(path):
-    """The app icon: a lime paw print on a dark purple disc, as on the Play sign. All sizes Windows asks for."""
-    n = 1024
-    im = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    d.ellipse((24, 24, n - 24, n - 24), fill=(18, 10, 30, 255))
-    d.ellipse((56, 56, n - 56, n - 56), fill=(200, 230, 74, 255))
-    d.ellipse((96, 96, n - 96, n - 96), fill=(58, 30, 96, 255))
-    lime, ink = (214, 240, 90, 255), (18, 10, 30, 255)
-    pads = [(512, 668, 196, 150)]  # main pad: centre x, y, half width, half height
-    toes = [(292, 438, 70, 90), (420, 296, 74, 96), (604, 296, 74, 96), (732, 438, 70, 90)]
-    for cx, cy, rx, ry in pads + toes:
-        d.ellipse((cx - rx - 22, cy - ry - 22, cx + rx + 22, cy + ry + 22), fill=ink)
-    for cx, cy, rx, ry in pads + toes:
-        d.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=lime)
+def make_icon(src, path):
+    """The app icon from its square source picture (cropped to the middle square if it isn't one), as an .ico
+    with all the sizes Windows asks for."""
+    im = Image.open(src).convert("RGBA")
+    side = min(im.size)
+    left, top = (im.width - side) // 2, (im.height - side) // 2
+    im = im.crop((left, top, left + side, top + side))
     sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
     im.resize((256, 256), Image.LANCZOS).save(path, sizes=[(s, s) for s in sizes])
 
 
 def main():
     if sys.argv[1:2] == ["--icon"]:
-        for p in sys.argv[2:]:
-            make_icon(p)
+        if len(sys.argv) < 4:
+            sys.exit("usage: make_launcher_art.py --icon <icon.png> <file.ico> [...]")
+        for p in sys.argv[3:]:
+            make_icon(sys.argv[2], p)
         return
     src = sys.argv[1]
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "..", "..", "launcher", "art")
