@@ -275,6 +275,7 @@ sealed class PlankButton : Control
         Primary = primary;
         seed = Skin.Seed(text);
         Focusable = true;
+        FocusAdorner = null;  // Render draws the focus around the plank's own shape; the default box sat around the bounds
         Cursor = new Cursor(StandardCursorType.Hand);
         Margin = new Thickness(0, 6, 10, 6);
         HorizontalAlignment = HorizontalAlignment.Left;
@@ -373,6 +374,10 @@ sealed class PlankButton : Control
         if (IsPointerOver && enabled) { top = Skin.Light(top, 0.25f); bottom = Skin.Light(bottom, 0.25f); }
         if (!enabled) { top = Color.FromRgb(70, 62, 86); bottom = Color.FromRgb(52, 46, 66); }
         var plank = Skin.Plank(r, seed);
+        // Selected with the pad or keys: a lime rim around the plank, as the menus' selection (drawn under the fill and
+        // the ink outline, so only the part outside them shows).
+        if (IsFocused && PseudoClasses.Contains(":focus-visible") && enabled)
+            g.DrawGeometry(null, new Pen(Skin.Brush(Skin.Lime), 4, lineJoin: PenLineJoin.Round), plank);
         g.DrawGeometry(Skin.Vertical(top, bottom), null, plank);
         var grain = new Pen(Skin.Brush(Skin.Argb(45, 0, 0, 0)), 1);
         for (int i = 1; i < 3; i++)
@@ -380,8 +385,6 @@ sealed class PlankButton : Control
         g.DrawGeometry(null, new Pen(Skin.Brush(Skin.Ink), 2, lineJoin: PenLineJoin.Round), plank);
         Color color = !enabled ? Color.FromRgb(150, 140, 160) : lime ? Skin.Ink : Skin.Cream;
         Skin.Text(g, text, EmPx, r, color, Skin.Ink, lime || !enabled ? 0 : 3);
-        if (IsFocused && PseudoClasses.Contains(":focus-visible"))
-            g.DrawRectangle(null, new Pen(Skin.Brush(color), 1, new DashStyle(new double[] { 1, 2 }, 0)), new Rect(Bounds.Size).Deflate(6));
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new Peer(this);
