@@ -53,6 +53,15 @@ static class LauncherControllerTests
         top.Y >= -1 && top.Y + c.Bounds.Height <= menu.Scroller.Bounds.Height + 1;
     static void Wait(Func<bool> done) { for (int i = 0; i < 200 && !done(); i++) { Pump(); Thread.Sleep(10); } Pump(); }
     static PlankButton Button(Window w, string name) => w.GetVisualDescendants().OfType<PlankButton>().First(b => b.Text == name);
+    // The file browser: its menu, its folder and file rows (they carry their path), and picking a row with the pad.
+    static MenuScreen Screen(Window w) => w.GetVisualDescendants().OfType<MenuScreen>().First();
+    static List<MenuRow> Entries(Window w) => Screen(w).Rows.Where(r => r.Tag is string).ToList();
+    static void Choose(MainWindow owner, Window window, string label)
+    {
+        var screen = Screen(window);
+        screen.Select(screen.Rows.First(r => r.Label == label)); Pump();
+        Press(owner, LauncherButtons.Confirm);
+    }
     static void Click(MainWindow owner, Window window, string name)
     {
         Button(window, name).Focus(NavigationMethod.Directional);
@@ -413,12 +422,12 @@ static class LauncherControllerTests
         File.WriteAllText(Path.Combine(zips, "a.zip"), "x"); File.WriteAllText(Path.Combine(zips, "b.ISO"), "x"); File.WriteAllText(Path.Combine(zips, "c.txt"), "x");
         var zipPick = ControllerDialogs.PickPath(w, "Synthetic zip browser", zips, false, viaController: true, extensions: new[] { ".zip" }, typeName: "Mod zip");
         Pump(); var zipModal = w.navigation.Modal!;
-        Check(Find<ControllerList>(zipModal).ItemCount == 2, "Zip browser did not list only .zip files and folders.");
+        Check(Entries(zipModal).Count == 2, "Zip browser did not list only .zip files and folders.");
         Press(w, LauncherButtons.Back); Finish(zipPick);
         // The real row: pressed by the pad it opens the themed browser, not the OS picker.
         modsBoard.Select(modsBoard.Rows.OfType<ActionRow>().Single(r => r.Label == "Add a mod (zip)")); Pump();
         Press(w, LauncherButtons.Confirm);
-        Check(w.navigation.Modal is { } zipDialog && zipDialog.GetVisualDescendants().OfType<ControllerList>().Any(), "Add a mod (zip) with the pad did not open the themed browser.");
+        Check(w.navigation.Modal is { } zipDialog && zipDialog.GetVisualDescendants().OfType<MenuScreen>().Any(), "Add a mod (zip) with the pad did not open the themed browser.");
         Press(w, LauncherButtons.Back); Pump();
         Check(w.navigation.Modal == null && modsBoard.IsVisible, "Backing out of the mod browser left a dialog open or closed Mods.");
         Press(w, LauncherButtons.Back);
@@ -610,37 +619,57 @@ static class LauncherControllerTests
         Directory.CreateDirectory(Path.Combine(browser, "Child"));
         File.WriteAllText(Path.Combine(browser, "disc.ISO"), "synthetic non-game bytes");
         File.WriteAllText(Path.Combine(browser, "notes.txt"), "synthetic");
+        // The browser is a full-window menu: a row per folder and file, A opens or chooses, X goes up a folder, B cancels.
         var file = ControllerDialogs.PickPath(w, "Synthetic file browser", browser, false, viaController: true);
         modal = w.navigation.Modal!; Pump();
-        var list = Find<ControllerList>(modal);
-        Check(list.ItemCount == 2, "Disc filter did not include folders/uppercase ISO and exclude other files.");
+        Check(string.Join(",", Entries(modal).Select(r => r.Label)) == "Child,disc.ISO", "Disc filter did not include folders/uppercase ISO and exclude other files.");
+        Check(Screen(modal).Selected?.Label == "Child", "The browser did not open on the first folder.");
+        Check(Math.Abs(modal.Bounds.Width - w.Bounds.Width) < 1 && Math.Abs(modal.Bounds.Height - w.Bounds.Height) < 1, "The browser does not fill the launcher's window.");
         Shot(modal, "File-browser");
-        // No tabs in a dialog: the bumpers still move to the next control (how its toolbar is reached).
-        Press(w, LauncherButtons.Next);
-        Check(modal.FocusManager?.GetFocusedElement() is PlankButton, "RB in a dialog without tabs did not move to the next control.");
-        list.Focus(NavigationMethod.Directional); Pump();
-        Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Confirm); Finish(file);
+        Press(w, LauncherButtons.Extra);
+        Check(Screen(modal).Selected?.Label == "browser" && Entries(modal).Any(r => r.Label == "browser"), "X did not go up a folder onto the one it came from.");
+        Press(w, LauncherButtons.Confirm);
+        Check(Screen(modal).Selected?.Label == "Child", "A on a folder did not open it.");
+        Choose(w, modal, "Show all files");
+        Check(string.Join(",", Entries(modal).Select(r => r.Label)) == "Child,disc.ISO,notes.txt" && Screen(modal).Selected?.Label == "Show all files",
+              "Show all files did not list every file (or lost the selection).");
+        Press(w, LauncherButtons.Left);
+        Check(Entries(modal).Count == 2, "Switching Show all files off did not filter again.");
+        Choose(w, modal, "Drives and folders");
+        Check(Entries(modal).Any(r => r.Label == "Home") && Entries(modal).Any(r => Path.GetPathRoot((string)r.Tag!) == (string)r.Tag!),
+              "Drives and folders did not list the home folder and a drive.");
+        Shot(modal, "File-browser-places");
+        Press(w, LauncherButtons.Extra);
+        Check(w.navigation.Modal == modal && Screen(modal).Selected?.Label == "Home", "X on the drives list did something.");
+        Choose(w, modal, "Type a path");
+        var typing = w.navigation.Modal!;
+        Check(typing != modal, "Type a path did not open the keyboard.");
+        typing.GetVisualDescendants().OfType<ControllerTextBox>().First().Text = browser;
+        Click(w, typing, "Apply");
+        Wait(() => w.navigation.Modal == modal);
+        Check(Screen(modal).Selected?.Label == "Child", "A typed path did not open that folder.");
+        Choose(w, modal, "disc.ISO"); Finish(file);
         Check(file.Result == Path.Combine(browser, "disc.ISO"), "Managed file browser returned wrong path.");
         var folder = ControllerDialogs.PickPath(w, "Synthetic folder browser", browser, true, viaController: true);
         modal = w.navigation.Modal!; Pump();
         Press(w, LauncherButtons.Confirm);
-        Click(w, modal, "Use this folder"); Finish(folder);
+        Choose(w, modal, "Use this folder"); Finish(folder);
         Check(folder.Result == Path.Combine(browser, "Child"), "Managed folder browser did not descend/select.");
         file = ControllerDialogs.PickPath(w, "Synthetic cancelled browser", browser, false, viaController: true);
         Pump(); Press(w, LauncherButtons.Back); Finish(file);
         Check(file.Result == null && File.ReadAllText(config).Contains("unknown = 42"), "Cancelled browser changed settings.");
         folder = ControllerDialogs.PickPath(w, "Synthetic folder creation", browser, true, viaController: true); Pump();
         modal = w.navigation.Modal!;
-        Click(w, modal, "New folder");
+        Choose(w, modal, "New folder");
         var keyboard = w.navigation.Modal!;
         Click(w, keyboard, "1"); Click(w, keyboard, "Apply");
-        Check(Directory.Exists(Path.Combine(browser, "1")), "Controller folder creation failed.");
+        Wait(() => w.navigation.Modal == modal && Screen(modal).Selected?.Label == "1");
+        Check(Directory.Exists(Path.Combine(browser, "1")) && Screen(modal).Selected?.Label == "1", "Controller folder creation failed (or didn't select it).");
         Press(w, LauncherButtons.Back); Finish(folder);
         Check(folder.Result == null, "Cancelling the folder picker applied its path.");
         file = ControllerDialogs.PickPath(w, "Synthetic unreadable file", browser, false, viaController: true); Pump();
         modal = w.navigation.Modal!;
-        list = Find<ControllerList>(modal);
-        list.SelectedIndex = list.ItemCount - 1;
+        Screen(modal).Select(Entries(modal).Last()); Pump();
         File.Delete(Path.Combine(browser, "disc.ISO"));
         Press(w, LauncherButtons.Confirm);
         Check(w.navigation.Modal != modal && w.navigation.Modal != null, "Deleted selected file was not reported explicitly.");

@@ -803,8 +803,19 @@ sealed class MenuScreen : Panel
         Children.Add(prompts);
         // The menu owns these keys (as F10 does); a tunnel handler, so the scroll viewer doesn't scroll with the arrows.
         AddHandler(KeyDownEvent, OnMenuKey, RoutingStrategies.Tunnel);
-        Prompts.Changed += () => { header.InvalidateVisual(); prompts.InvalidateVisual(); };
     }
+
+    // The pad / keyboard prompts follow the last device used. Subscribed only while shown in a window, so a menu that is
+    // thrown away (a file browser) isn't kept alive by the static event.
+    void PromptsChanged() { header.InvalidateVisual(); prompts.InvalidateVisual(); }
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e) { base.OnAttachedToVisualTree(e); Prompts.Changed += PromptsChanged; }
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e) { base.OnDetachedFromVisualTree(e); Prompts.Changed -= PromptsChanged; }
+
+    // X when the selected row has no second action of its own (a file browser's Up a folder), and what the prompt bar
+    // calls B.
+    public (string Label, Action Run)? ScreenExtra { get => screenExtra; set { screenExtra = value; Refresh(); } }
+    (string Label, Action Run)? screenExtra;
+    public string BackLabel { get; init; } = "Back";
 
     internal static MenuScreen? Of(Control row) => row.FindAncestorOfType<MenuScreen>();
 
@@ -917,7 +928,8 @@ sealed class MenuScreen : Panel
         if (selected is { Changes: true, IsEffectivelyEnabled: true }) items.Add(new(new[] { Prompts.Button.Change }, "Change", null));
         if (selected?.ConfirmLabel is { } confirm) items.Add(new(new[] { Prompts.Button.Confirm }, confirm, () => selected?.Activate()));
         if (selected is { ExtraLabel: { } extra, IsEffectivelyEnabled: true }) items.Add(new(new[] { Prompts.Button.Extra }, extra, () => selected?.Extra()));
-        items.Add(new(new[] { Prompts.Button.Back }, "Back", onClose));
+        else if (screenExtra is { } screen) items.Add(new(new[] { Prompts.Button.Extra }, screen.Label, screen.Run));
+        items.Add(new(new[] { Prompts.Button.Back }, BackLabel, onClose));
         if (pages.Count > 1) items.Add(new(new[] { Prompts.Button.Previous, Prompts.Button.Next }, "Page", null));
         prompts.Items = items;
     }
@@ -928,7 +940,10 @@ sealed class MenuScreen : Panel
         if (selected != null && selected.Handle(action)) return;
         switch (action)
         {
-            case LauncherButtons.Extra: if (selected is { ExtraLabel: not null, IsEffectivelyEnabled: true }) selected.Extra(); return;
+            case LauncherButtons.Extra:
+                if (selected is { ExtraLabel: not null, IsEffectivelyEnabled: true }) selected.Extra();
+                else screenExtra?.Run();
+                return;
             case LauncherButtons.Back: onClose(); return;
             case LauncherButtons.Previous: Step(-1); return;
             case LauncherButtons.Next: Step(1); return;
@@ -1137,7 +1152,9 @@ sealed class PromptBar : Control
     public bool Centred { get; init; }
     const double IconHeight = 28;
 
-    public PromptBar() => Prompts.Changed += () => { InvalidateMeasure(); InvalidateVisual(); };
+    void PromptsChanged() { InvalidateMeasure(); InvalidateVisual(); }
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e) { base.OnAttachedToVisualTree(e); Prompts.Changed += PromptsChanged; }
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e) { base.OnDetachedFromVisualTree(e); Prompts.Changed -= PromptsChanged; }
 
     public IReadOnlyList<Item> Items { get => items; set { items = value; InvalidateMeasure(); InvalidateVisual(); } }
 

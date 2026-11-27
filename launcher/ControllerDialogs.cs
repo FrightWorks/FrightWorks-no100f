@@ -119,7 +119,7 @@ static class ControllerDialogs
         // Disc images unless the caller names its own file type (e.g. ".zip"); extensions are lower case with the dot.
         extensions ??= DiscExtensions;
         typeName ??= "GameCube disc images (*.iso, *.gcm, *.ciso)";
-        if (viaController ?? ControllerNavigation.For(owner)?.Activating == true) return await Browse(owner, title, start, folder, extensions);
+        if (viaController ?? ControllerNavigation.For(owner)?.Activating == true) return await Browse(owner, title, start, folder, extensions, typeName);
         if (folder)
         {
             var picked = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
@@ -145,113 +145,216 @@ static class ControllerDialogs
 
     static readonly string[] DiscExtensions = { ".iso", ".gcm", ".ciso" };
 
-    sealed record Entry(string Path, bool Directory)
-    {
-        public override string ToString() => (Directory ? "[Folder] " : "") + System.IO.Path.GetFileName(Path);
-    }
-
-    internal static async Task<string?> Browse(Window owner, string title, string? start, bool folder, string[]? extensions = null)
+    // The pad's file browser: a full-window menu like the launcher's others, in a borderless window over the launcher. A row
+    // per folder and file: A opens a folder or chooses the file, X goes up a folder, B cancels. The drives and the usual
+    // folders, a typed path and Show all files (or New folder) are rows at the end. Hidden and system folders are left out.
+    internal static async Task<string?> Browse(Window owner, string title, string? start, bool folder, string[]? extensions = null, string? typeName = null)
     {
         extensions ??= DiscExtensions;
+        typeName ??= "GameCube disc images (*.iso, *.gcm, *.ciso)";
         var dialog = Dialogs.Make(title, owner);
+        dialog.WindowDecorations = WindowDecorations.None;
         dialog.SizeToContent = SizeToContent.Manual;
-        dialog.Width = Math.Min(720, owner.Bounds.Width - 30);
-        dialog.Height = Math.Min(560, owner.Bounds.Height - 30);
-        var current = Path.GetFullPath(start ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        dialog.Width = Math.Max(480, owner.Bounds.Width);
+        dialog.Height = Math.Max(400, owner.Bounds.Height);
+        if (owner.IsVisible)
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.Manual;
+            dialog.Position = owner.PointToScreen(default);
+        }
+        string heading = folder ? "Choose a folder" : extensions.SequenceEqual(DiscExtensions) ? "Choose a disc" : "Choose a file";
+        var screen = new MenuScreen(heading, () => dialog.Close()) { IsVisible = true, BackLabel = "Cancel" };
+        var page = screen.Body;
+        string instruction = title.TrimEnd('.') + ".";
+        string? current = Path.GetFullPath(start ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
         while (!Directory.Exists(current) && Directory.GetParent(current) is { } parent) current = parent.FullName;
-        var pathLabel = Skin.Note(current);
-        var list = new ControllerList { MinHeight = 120, Background = Skin.Brush(Skin.Field),
-                                       Foreground = Skin.Brush(Skin.Cream), BorderBrush = Skin.Brush(Skin.Purple) };
-        bool all = folder;
+        if (!Directory.Exists(current)) current = null;  // the drives and folders
+        bool all = false;
         string? answer = null;
-        var grid = new Grid { Margin = new Thickness(18), RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto") };
-        grid.Children.Add(pathLabel);
-        var tools = new WrapPanel();
-        tools.Children.Add(new PlankButton("Up a folder", (_, _) =>
+        dialog.Content = screen;
+        if (!Show(current, null)) Show(null, null);
+        dialog.Opened += (_, _) => Reselect(null);
+        await Dialogs.ShowModal(dialog, owner);
+        return answer;
+
+        // A folder's rows, or (path null) the drives and the usual folders. False: the folder couldn't be read (said).
+        bool Show(string? path, string? select)
         {
-            if (Directory.GetParent(current) is { } parent) Load(parent.FullName).Watch();
-        }));
-        tools.Children.Add(new PlankButton("Locations", async (_, _) =>
+            List<string> dirs = new(), files = new();
+            if (path != null)
+            {
+                try
+                {
+                    path = Path.GetFullPath(path);
+                    dirs = Directory.EnumerateDirectories(path).Where(Shown).OrderBy(d => d, StringComparer.OrdinalIgnoreCase).ToList();
+                    if (!folder)
+                        files = Directory.EnumerateFiles(path).Where(f => all || extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException)
+                {
+                    Dialogs.Message(dialog.IsVisible ? dialog : owner, "Couldn't read the folder: " + e.Message).Watch();
+                    return false;
+                }
+            }
+            current = path;
+            page.Children.Clear();
+            if (path == null) Places();
+            else
+            {
+                string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } n ? n : path;
+                string hint = path;
+                if (dirs.Count == 0 && files.Count == 0)
+                    hint += folder ? "\nNo folders in here." : "\nNo folders or " + typeName + " in here." + (all ? "" : " Show all files (below) lists every file.");
+                Heading(name, hint);
+                if (folder)
+                    page.Children.Add(new ActionRow("Use this folder", () => UseFolder().Watch(), "Choose", "Choose " + path + ".\n\n" + instruction));
+                string up = Directory.GetParent(path) is { } parent ? "Back to " + parent.FullName + "." : "Back to the drives and your folders.";
+                page.Children.Add(new ActionRow("Up a folder", Up, "Open", up + "\n\nX does this from any row.") { Value = ".." });
+                foreach (var d in dirs)
+                    page.Children.Add(new ActionRow(Path.GetFileName(d), () => Show(d, null), "Open", d) { Value = "Folder", Tag = d });
+                foreach (var f in files)
+                    page.Children.Add(new ActionRow(Path.GetFileName(f), () => Pick(f).Watch(), "Choose", f + "\n\n" + instruction)
+                                      { Value = Size(f), ValueColor = Skin.Cream, Tag = f });
+                Heading("Elsewhere");
+                page.Children.Add(new ActionRow("Drives and folders", () => Show(null, path), "Open", "Your drives, and your home, Desktop, Documents and Downloads folders."));
+                page.Children.Add(new ActionRow("Type a path", () => TypePath().Watch(), "Type", "Type the path of a folder" + (folder ? "" : " or a file") + "."));
+                if (folder) page.Children.Add(new ActionRow("New folder", () => NewFolder().Watch(), "Create", "Make a folder in " + path + "."));
+                else
+                {
+                    var showAll = new ToggleRow("Show all files", "Off: only " + typeName + " and folders. On: every file.") { IsChecked = all };
+                    showAll.IsCheckedChanged += (_, _) => { all = showAll.IsChecked == true; Show(current, "Show all files"); };
+                    page.Children.Add(showAll);
+                }
+            }
+            screen.ScreenExtra = path == null ? null : ("Up a folder", Up);
+            if (dialog.IsVisible) Reselect(select);
+            return true;
+        }
+
+        void Places()
         {
-            var roots = DriveInfo.GetDrives().Select(d => d.RootDirectory.FullName).ToArray();
-            int? choice = await Choose(dialog, roots.Cast<object?>().ToArray(), 0, "Locations");
-            if (choice is int index) await Load(roots[index]);
-        }));
-        tools.Children.Add(new PlankButton("Enter path", async (_, _) =>
+            Heading("Your folders");
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var seen = new List<string>();
+            foreach (var (name, place) in new[] { ("Home", home), ("Desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)),
+                         ("Documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)), ("Downloads", Path.Combine(home, "Downloads")) })
+            {
+                if (string.IsNullOrEmpty(place) || !Directory.Exists(place) || seen.Any(p => Same(p, place))) continue;
+                seen.Add(place);
+                page.Children.Add(new ActionRow(name, () => Show(place, null), "Open", place) { Tag = place });
+            }
+            Heading("Drives");
+            foreach (var (drive, about) in Drives())
+                page.Children.Add(new ActionRow(drive, () => Show(drive, null), "Open", drive) { Value = about, Tag = drive });
+            Heading("Elsewhere");
+            page.Children.Add(new ActionRow("Type a path", () => TypePath().Watch(), "Type", "Type the path of a folder" + (folder ? "" : " or a file") + "."));
+        }
+
+        void Heading(string text, string? hint = null)
         {
-            var path = await Text(dialog, "Enter a folder path", current);
-            if (path != null) await Load(path);
-        }));
-        if (folder) tools.Children.Add(new PlankButton("New folder", async (_, _) =>
+            var h = new MenuHeading(text, hint);
+            if (page.Children.Count == 0) h.Margin = new Thickness(0, 0, 0, 2);
+            page.Children.Add(h);
+        }
+
+        // The selection after a change: the row for `key` (a path or a label), else the first folder or file, else the first.
+        void Reselect(string? key)
         {
+            dialog.UpdateLayout();
+            var rows = screen.Rows.ToList();
+            var row = (key == null ? null : rows.FirstOrDefault(r => r.Tag is string t ? Same(t, key) : r.Label == key))
+                      ?? rows.FirstOrDefault(r => r.Tag is string) ?? rows.FirstOrDefault();
+            screen.Scroller.Offset = default;
+            screen.Select(row);
+        }
+
+        void Up()
+        {
+            if (current == null) return;
+            Show(Directory.GetParent(current)?.FullName, current);
+        }
+
+        async Task Pick(string file)
+        {
+            if (!File.Exists(file)) { await Dialogs.Message(dialog, "The file no longer exists."); return; }
+            answer = file;
+            dialog.Close();
+        }
+
+        async Task UseFolder()
+        {
+            if (current == null || !Directory.Exists(current)) { await Dialogs.Message(dialog, "The folder no longer exists."); return; }
+            answer = current;
+            dialog.Close();
+        }
+
+        async Task TypePath()
+        {
+            var typed = await Text(dialog, folder ? "Type a folder's path" : "Type a folder's or a file's path", current ?? "");
+            if (string.IsNullOrWhiteSpace(typed)) return;
+            typed = typed.Trim().Trim('"');
+            if (!folder && File.Exists(typed)) { await Pick(typed); return; }
+            if (!Directory.Exists(typed)) { await Dialogs.Message(dialog, "There's no folder at " + typed + "."); return; }
+            Show(typed, null);
+        }
+
+        async Task NewFolder()
+        {
+            if (current == null) return;
             var name = await Text(dialog, "New folder name", "");
             if (name == null) return;
             if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
                 name.Contains(Path.DirectorySeparatorChar) || name.Contains(Path.AltDirectorySeparatorChar))
             { await Dialogs.Message(dialog, "Enter a single valid folder name."); return; }
-            try { Directory.CreateDirectory(Path.Combine(current, name)); await Load(current); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
-            { await Dialogs.Message(dialog, "Couldn't create the folder: " + e.Message); }
-        }));
-        if (!folder)
-        {
-            var showAll = new CheckBox { Content = "Show all files", Margin = new Thickness(8) };
-            showAll.IsCheckedChanged += (_, _) => { all = showAll.IsChecked == true; Load(current).Watch(); };
-            tools.Children.Add(showAll);
-        }
-        Grid.SetRow(tools, 1);
-        grid.Children.Add(tools);
-        Grid.SetRow(list, 2);
-        grid.Children.Add(list);
-        var actions = new WrapPanel();
-        actions.Children.Add(new PlankButton(folder ? "Use this folder" : "Open", (_, _) => Accept(false).Watch(), true));
-        actions.Children.Add(new PlankButton("Cancel", (_, _) => dialog.Close()));
-        Grid.SetRow(actions, 3);
-        grid.Children.Add(actions);
-        list.Activate = () => Accept(true).Watch();
-        dialog.Content = grid;
-        dialog.Opened += (_, _) => list.Focus(NavigationMethod.Directional);
-        await Load(current);
-        await Dialogs.ShowModal(dialog, owner);
-        return answer;
-
-        async Task Load(string path)
-        {
             try
             {
-                var full = Path.GetFullPath(path);
-                var entries = Directory.EnumerateDirectories(full).OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-                    .Select(p => new Entry(p, true)).ToList();
-                if (!folder) entries.AddRange(Directory.EnumerateFiles(full)
-                    .Where(p => all || extensions.Contains(Path.GetExtension(p).ToLowerInvariant()))
-                    .OrderBy(p => p, StringComparer.OrdinalIgnoreCase).Select(p => new Entry(p, false)));
-                current = full;
-                pathLabel.Text = current;
-                list.ItemsSource = entries;
-                list.SelectedIndex = entries.Count > 0 ? 0 : -1;
+                string made = Directory.CreateDirectory(Path.Combine(current, name)).FullName;
+                Show(current, made);
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-            { await Dialogs.Message(dialog.IsVisible ? dialog : owner, "Couldn't read the folder: " + e.Message); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+            { await Dialogs.Message(dialog, "Couldn't create the folder: " + e.Message); }
         }
+    }
 
-        async Task Accept(bool browseSelected)
+    static bool Same(string a, string b) => string.Equals(Path.TrimEndingDirectorySeparator(a), Path.TrimEndingDirectorySeparator(b),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    // Not hidden or a system folder (AppData, $Recycle.Bin; on Linux the dot folders).
+    static bool Shown(string dir)
+    {
+        try { return (File.GetAttributes(dir) & (FileAttributes.Hidden | FileAttributes.System)) == 0; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    static string Size(string file)
+    {
+        try { return Size(new FileInfo(file).Length); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
+    }
+
+    static string Size(long bytes) => bytes >= 1L << 30 ? (bytes / (double)(1L << 30)).ToString("0.0", CultureInfo.CurrentCulture) + " GB"
+        : bytes >= 1L << 20 ? (bytes >> 20) + " MB" : Math.Max(1, bytes >> 10) + " KB";
+
+    // The drives to offer: every ready one on Windows; elsewhere / and the mounts under /media, /run/media and /mnt (not
+    // /proc, /sys and the like).
+    static List<(string Root, string About)> Drives()
+    {
+        var list = new List<(string, string)>();
+        foreach (var d in DriveInfo.GetDrives())
         {
-            if (folder && browseSelected && list.SelectedItem is Entry { Directory: true } directory)
-            { await Load(directory.Path); return; }
-            if (folder)
+            string root = d.RootDirectory.FullName;
+            if (!OperatingSystem.IsWindows() && root != "/" && !root.StartsWith("/media/") && !root.StartsWith("/run/media/") && !root.StartsWith("/mnt/"))
+                continue;
+            try
             {
-                if (!Directory.Exists(current)) { await Dialogs.Message(dialog, "The folder no longer exists."); return; }
-                answer = current;
-                dialog.Close();
+                if (!d.IsReady) continue;
+                string label = d.VolumeLabel is { Length: > 0 } v && v != root ? v + ", " : "";
+                list.Add((root, label + Size(d.TotalSize)));
             }
-            else if (list.SelectedItem is Entry entry)
-            {
-                if (entry.Directory) { await Load(entry.Path); return; }
-                if (!File.Exists(entry.Path)) { await Dialogs.Message(dialog, "The file no longer exists."); return; }
-                answer = entry.Path;
-                dialog.Close();
-            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
+        return list;
     }
 }
 
