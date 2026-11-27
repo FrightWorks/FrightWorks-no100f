@@ -13,8 +13,8 @@ using static FrightWorks.Skin;
 namespace FrightWorks;
 
 // The launcher window: the haunted mansion (MansionScene) whose signs are the menu. Play starts the game; Settings,
-// Mods and Extras open a board over the left of the house. Everything it changes goes to Config.toml (DataPaths),
-// the keys the game's F10 menu uses. No game data or character art is shipped.
+// Mods and Extras open a full-window menu laid out like the game's F10 menu (GameMenu.cs). Everything it changes goes
+// to Config.toml (DataPaths), the keys the game's F10 menu uses. No game data or character art is shipped.
 sealed class MainWindow : Window
 {
     internal const string AppTitle = "FrightWorks: Night of 100 Frights";
@@ -29,32 +29,33 @@ sealed class MainWindow : Window
     internal bool launchInFixture;
     internal bool GameOwnsControllers { get; private set; }
     internal readonly MansionScene scene;
-    internal readonly Dictionary<string, Board> boards = new();
+    internal readonly Dictionary<string, MenuScreen> boards = new();
     readonly Stage stage;
+    readonly PromptBar mainPrompts;  // the main screen's button prompts (hidden under an open menu)
     TextBlock discStatus = null!, dumpHelp = null!;
-    PlankButton chooseDisc = null!;
+    ActionRow chooseDisc = null!;
     ThemedBar progress = null!, ffmpegBar = null!;
     TextBlock ps2Status = null!;
-    PlankButton choosePs2 = null!, removePs2 = null!;
+    ActionRow choosePs2 = null!, removePs2 = null!;
     ThemedBar ps2Bar = null!;
     TextBlock ffmpegStatus = null!, savesNote = null!, updateStatus = null!;
-    PlankButton savesDefault = null!, checkNow = null!;
+    ActionRow savesDefault = null!, checkNow = null!;
     readonly Updater updater;
     bool updating;  // checking, or downloading / applying an update: Play waits
     bool asking;    // a question (Xbox layout, update) is open: the other waits, so one never disables the other
-    PlankButton ffmpegButton = null!;
+    ActionRow ffmpegButton = null!;
     CancellationTokenSource? ffmpegCancel;  // an ffmpeg download is running
     internal Action<bool>? showControlsTab;
     readonly Gamepads gamepads;
     internal readonly ControllerNavigation navigation;
     internal TextBlock padStatus = null!;
-    internal ThemedCombo layoutBox = null!;
-    readonly List<(PadMapping.Row Row, SettingRow View, ThemedCombo Box)> padRows = new();
+    internal ChoiceRow layoutBox = null!;
+    readonly List<(PadMapping.Row Row, ChoiceRow Box)> padRows = new();
     bool askedLayout;
     string hdrStatus = "Saved HDR settings are kept. Windows defaults are used only for settings not saved yet.";
     bool fillingLayout;
     bool startupReady;
-    internal CheckBox autoLayout = null!;
+    internal ToggleRow autoLayout = null!;
     readonly DispatcherTimer padTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
     public MainWindow(string? shotDir = null, DataPaths? dataPaths = null, bool enableServices = true)
@@ -81,7 +82,17 @@ sealed class MainWindow : Window
 
         scene = new MansionScene(enableServices && shotDir == null && MansionScene.AnimationsEnabled(), shotDir == null ? Environment.TickCount : 1);
         scene.SignClicked += id => OnSign(id).Watch();
-        stage = new Stage(scene);
+        Prompts.SetFolder(play);
+        mainPrompts = new PromptBar
+        {
+            Centred = true,
+            Items = new[]
+            {
+                new PromptBar.Item(new[] { Prompts.Button.Move }, "Move", null),
+                new PromptBar.Item(new[] { Prompts.Button.Confirm }, "Select", () => scene.Navigate(LauncherButtons.Confirm)),
+            },
+        };
+        stage = new Stage(scene, mainPrompts);
         Content = stage;
 
         AddBoard("settings", "Settings", BuildSettings);
@@ -89,7 +100,9 @@ sealed class MainWindow : Window
         AddBoard("extras", "Extras", BuildExtras);
         RefreshDisc();
 
-        // Escape closes an open board (an open drop-down list takes it first).
+        // The prompts show the keys once the keyboard is used (the menus mark their own keys too).
+        AddHandler(KeyDownEvent, (_, _) => Prompts.UsedKeyboard(), RoutingStrategies.Tunnel);
+        // Escape closes an open menu (the menu takes it first; this is for a key it doesn't see).
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape && boards.Values.Any(b => b.IsVisible)) { CloseBoards(); e.Handled = true; }
@@ -108,40 +121,48 @@ sealed class MainWindow : Window
         };
     }
 
-    // The scene fills the window; the open board sits over the house's left part, clear of the signs.
+    // The scene fills the window, with the main screen's button prompts at the bottom in the middle; an open menu covers
+    // the whole window.
     sealed class Stage : Panel
     {
         readonly MansionScene scene;
+        readonly PromptBar prompts;
 
-        public Stage(MansionScene scene)
+        public Stage(MansionScene scene, PromptBar prompts)
         {
             this.scene = scene;
+            this.prompts = prompts;
             Children.Add(scene);
-        }
-
-        Rect BoardRect(Size size)
-        {
-            scene.Place(size);
-            double left = 14, top = 14, right = scene.SignsLeft - 18, bottom = size.Height - 44;
-            return new Rect(left, top, Math.Max(300, right - left), Math.Max(300, bottom - top));
+            Children.Add(prompts);
         }
 
         protected override Size MeasureOverride(Size availableSize)
         {
-            scene.Measure(availableSize);
-            var board = BoardRect(availableSize).Size;
-            foreach (var child in Children) if (child != scene) child.Measure(board);
+            foreach (var child in Children) child.Measure(availableSize);
             return availableSize;
         }
 
         protected override Size ArrangeOverride(Size finalSize)
         {
-            scene.Arrange(new Rect(finalSize));
-            var board = BoardRect(finalSize);
-            foreach (var child in Children) if (child != scene) child.Arrange(board);
+            foreach (var child in Children)
+            {
+                if (child == prompts)
+                {
+                    // On the line of the build ID and status pills (MansionScene draws those 30 px from the bottom).
+                    double w = Math.Min(prompts.DesiredSize.Width, finalSize.Width);
+                    child.Arrange(new Rect(Math.Round((finalSize.Width - w) / 2), finalSize.Height - 34, w, prompts.DesiredSize.Height));
+                }
+                else child.Arrange(new Rect(finalSize));
+            }
             return finalSize;
         }
     }
+
+    // The open menu, if any.
+    internal MenuScreen? OpenMenu => boards.Values.FirstOrDefault(b => b.IsVisible);
+
+    // The connected controller's family, for the button prompts (the first one when there are several).
+    internal Gamepads.Kind? PadKind => gamepads.Connected.FirstOrDefault()?.Kind;
 
     // Headless visual check (--shots <dir>): the main screen, a lightning flash and every board, then exit.
     void TakeShots(string dir)
@@ -200,9 +221,9 @@ sealed class MainWindow : Window
         }
     }
 
-    void AddBoard(string id, string title, Action<Board> build)
+    void AddBoard(string id, string title, Action<MenuScreen> build)
     {
-        var board = new Board(title, CloseBoards);
+        var board = new MenuScreen(title, CloseBoards);
         build(board);
         boards[id] = board;
         stage.Children.Add(board);
@@ -212,15 +233,17 @@ sealed class MainWindow : Window
     {
         RefreshDisc();
         foreach (var (key, b) in boards) b.IsVisible = key == id;
+        mainPrompts.IsVisible = false;
         scene.ActiveSign = id;
         UpdateLayout();
-        ControllerNavigation.FocusFirst(boards[id]);
+        boards[id].SelectFirst();
         navigation.Reset();
     }
 
     internal void CloseBoards()
     {
         foreach (var b in boards.Values) b.IsVisible = false;
+        mainPrompts.IsVisible = true;
         scene.ActiveSign = null;
         scene.Focus(NavigationMethod.Directional);
         navigation.Reset();
@@ -228,7 +251,6 @@ sealed class MainWindow : Window
 
     static WrapPanel Row() => new() { Orientation = Orientation.Horizontal };
 
-    static StackPanel Column() => new() { Orientation = Orientation.Vertical };
 
     async Task OpenFolder(string path)
     {
@@ -241,11 +263,11 @@ sealed class MainWindow : Window
     }
 
     // ----- Settings: Display, Graphics and Controls -----
-    void BuildSettings(Board board)
+    void BuildSettings(MenuScreen board)
     {
-        var display = Column();
-        var graphics = Column();
-        var controls = Column();
+        var display = MenuScreen.NewPage();
+        var graphics = MenuScreen.NewPage();
+        var controls = MenuScreen.NewPage();
         BuildDisplay(display, graphics);
         BuildControls(controls);
         board.AddTab("Display", display);
@@ -254,16 +276,23 @@ sealed class MainWindow : Window
         showControlsTab = showControls => board.SelectTab(showControls ? 2 : 0);
     }
 
-    // A heading and the card under it, at the end of the page.
-    static Card Section(StackPanel page, string title, string? hint = null)
+    // A heading at the end of the page; the rows after it go on the page too (returned, to add them to).
+    static StackPanel Section(StackPanel page, string title, string? hint = null)
     {
-        var heading = SectionTitle(title, hint);
-        if (page.Children.Count == 0) heading.Margin = new Thickness(4, 2, 0, 6);
+        var heading = new MenuHeading(title, hint);
+        if (page.Children.Count == 0) heading.Margin = new Thickness(0, 0, 0, 2);
         page.Children.Add(heading);
-        var card = new Card();
-        page.Children.Add(card);
-        return card;
+        return page;
     }
+
+    // Text in a menu page (a status, a note), lined up with the rows' names.
+    static T Indent<T>(T text) where T : Control
+    {
+        text.Margin = new Thickness(22, 2, 14, 6);
+        return text;
+    }
+
+    static ThemedBar Bar() => new() { IsVisible = false, MaxWidth = 480, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(22, 4, 14, 8), Width = 420 };
 
     const string SavedNote = "Changes save at once and apply the next time the game starts. In the game, F10 has these settings and more.";
 
@@ -308,9 +337,9 @@ sealed class MainWindow : Window
         var cfg = new GameConfig(configPath);
         var card = Section(display, "Screen");  // Row adds to this one
         bool filling = false;  // a box is being set from the config, not by the player
-        ThemedCombo Row(string label, string? hint, string key, (string text, string raw)[] options, string fallback, Action<GameConfig>? changed = null)
+        ChoiceRow Row(string label, string? hint, string key, (string text, string raw)[] options, string fallback, Action<GameConfig>? changed = null)
         {
-            var box = new ThemedCombo();
+            var box = new ChoiceRow(label, hint);
             foreach (var o in options) box.Items.Add(o.text);
             var current = cfg.Get("video", key) ?? fallback;
             int index = Array.FindIndex(options, o => SameValue(o.raw, current));
@@ -323,10 +352,11 @@ sealed class MainWindow : Window
                 changed?.Invoke(c);
                 c.Save();
             };
-            card.Children.Add(new SettingRow(label, hint, box));
+            card.Children.Add(box);
             return box;
         }
-        Row("Window", "F11 switches in the game.", "display_mode", new[] { ("Borderless fullscreen", "\"borderless\""), ("Window", "\"windowed\""), ("Exclusive fullscreen", "\"exclusive\"") }, "borderless");
+        Row("Window", "How the game opens: borderless fullscreen, in a window, or exclusive fullscreen. F11 switches in the game.",
+            "display_mode", new[] { ("Borderless fullscreen", "\"borderless\""), ("Window", "\"windowed\""), ("Exclusive fullscreen", "\"exclusive\"") }, "borderless");
 
         // A saved monitor that isn't connected stays selected and saved, so it works again when plugged back in. One found
         // by model on another port keeps its saved id: both mean the same monitor to the game.
@@ -339,11 +369,12 @@ sealed class MainWindow : Window
             var monitorOptions = new List<(string text, string raw)> { ("Automatic (where the game window is)", "\"auto\"") };
             foreach (var m in monitors) monitorOptions.Add((m.Label, "\"" + (m == savedMatch ? savedMonitor : m.Id) + "\""));
             if (savedMonitor != "auto" && savedMatch == null) monitorOptions.Add(("Saved monitor (not connected)", "\"" + savedMonitor + "\""));
-            Row("Fullscreen monitor", "Also used when F11 goes fullscreen.", "fullscreen_display", monitorOptions.ToArray(), "auto");
+            Row("Fullscreen monitor", "The monitor the game goes fullscreen on. Also used when F11 goes fullscreen.", "fullscreen_display", monitorOptions.ToArray(), "auto");
         }
 
         // Resolution: refilled when frame interpolation crosses 60 fps. A missing or unknown value is the game's 1080p.
-        var resolutionBox = new ThemedCombo();
+        var resolutionBox = new ChoiceRow("Resolution", "How sharply the game is drawn: higher is sharper, and harder on the graphics card. " +
+                                                        "Auto matches the window or screen.");
         var shownResolutions = Resolutions;
         void FillResolutions(GameConfig c)
         {
@@ -356,6 +387,7 @@ sealed class MainWindow : Window
             resolutionBox.Items.Clear();
             foreach (var r in shownResolutions) resolutionBox.Items.Add(r.text);
             resolutionBox.SelectedIndex = Array.FindIndex(shownResolutions, r => SameValue(r.raw, current));
+            resolutionBox.Refresh();
             filling = false;
         }
         FillResolutions(cfg);
@@ -366,17 +398,18 @@ sealed class MainWindow : Window
             c.Set("video", "resolution_multiplier", shownResolutions[resolutionBox.SelectedIndex].raw);
             c.Save();
         };
-        card.Children.Add(new SettingRow("Resolution", "Higher is sharper, but slower.", resolutionBox));
+        card.Children.Add(resolutionBox);
 
         // Without aspect_mode the game goes by the older keys (main.cpp): force_16_9 = 16:9, widescreen = false = 4:3,
         // else fill the screen.
         string aspectFallback = cfg.Get("video", "force_16_9") == "true" ? "1" : cfg.Get("video", "widescreen") == "false" ? "0" : "2";
-        Row("Picture shape", null, "aspect_mode", new[] { ("Original 4:3", "0"), ("Widescreen 16:9", "1"), ("Fill the screen", "2"), ("Cinematic 2.39:1", "3") }, aspectFallback);
+        Row("Picture shape", "The shape of the picture: the original 4:3, widescreen 16:9, the whole screen, or cinematic 2.39:1.",
+            "aspect_mode", new[] { ("Original 4:3", "0"), ("Widescreen 16:9", "1"), ("Fill the screen", "2"), ("Cinematic 2.39:1", "3") }, aspectFallback);
         // The Frame interpolation row (Graphics): Off and locked at 30 fps. Changing the frame rate saves it as off in both
         // directions, so what comes back at 60 fps is the Off the player was just shown, not an old choice that would
         // also drop the resolution to 4x.
         (string text, string raw)[] interpolationModes = { ("Off", "0"), ("120 FPS", "120"), ("180 FPS", "180") };
-        ThemedCombo? interpolationBox = null;
+        ChoiceRow? interpolationBox = null;
         void ShowInterpolation(GameConfig c)
         {
             filling = true;
@@ -384,20 +417,21 @@ sealed class MainWindow : Window
             filling = false;
             interpolationBox.IsEnabled = Fps60(c);
         }
-        Row("Frame rate", null, "fps60", new[] { ("30 fps (original)", "false"), ("60 fps", "true") }, "false", c =>
+        Row("Frame rate", "30 fps is the game's original speed; 60 fps is smoother. Frame interpolation (Graphics) needs 60 fps.",
+            "fps60", new[] { ("30 fps (original)", "false"), ("60 fps", "true") }, "false", c =>
         {
             c.Set("video", "frame_interpolation_fps", "0");
             FillResolutions(c);
             ShowInterpolation(c);
         });
-        card.Children.Add(new SettingRow("HDR", "Brightness on an HDR screen.", new PlankButton("Adjust HDR", (_, _) => OpenHdr().Watch())));
+        card.Children.Add(new ActionRow("HDR", () => OpenHdr().Watch(), "Adjust", "Brightness on an HDR screen: opens the HDR adjustment."));
 
         card = Section(display, "Startup");
-        Row("Intro movies", null, "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
-        display.Children.Add(Footnote(SavedNote));
+        Row("Intro movies", "Whether the intro movies play when the game starts.", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
+        display.Children.Add(Indent(Footnote(SavedNote)));
 
         card = Section(graphics, "Picture");
-        Row("HD textures", "Sharper textures from the HD pack.", "texture_replacements", new[] { ("On", "true"), ("Off (original textures)", "false") }, "true");
+        Row("HD textures", "Sharper textures from a texture pack (Extras > Textures).", "texture_replacements", new[] { ("On", "true"), ("Off (original textures)", "false") }, "true");
         Row("Anti-aliasing", "Smooths jagged edges.", "msaa", new[] { ("Off", "1"), ("2x MSAA", "2"), ("4x MSAA", "4"), ("8x MSAA", "8") }, "1");
 
         // Going above 60 fps at 6x or 8x drops the resolution to 4x, as F10 does.
@@ -428,7 +462,7 @@ sealed class MainWindow : Window
             Levels("ambient_occlusion", ("Off", "0"), ("Low", "35"), ("Medium", "65")), "0");
         Row("Bloom", "A glow around lamps, fire and sparkles.", "bloom",
             Levels("bloom", ("Off", "0"), ("Low", "40"), ("Medium", "70"), ("High", "100")), "0");
-        graphics.Children.Add(Footnote(SavedNote));
+        graphics.Children.Add(Indent(Footnote(SavedNote)));
     }
 
     internal HdrWindow CreateHdrWindow() => new(configPath, hdrStatus, this);
@@ -482,10 +516,10 @@ sealed class MainWindow : Window
     void BuildControls(StackPanel page)
     {
         var card = Section(page, "Controller");
-        padStatus = Hint("Looking for controllers...");
-        card.Children.Add(new CardBlock(padStatus));
+        padStatus = Indent(Hint("Looking for controllers..."));
+        card.Children.Add(padStatus);
         // [controller] layout: "gamecube" or "xbox_original" (the game's original Xbox controls, hle/no100f_xbox_layout.h).
-        layoutBox = new ThemedCombo();
+        layoutBox = new ChoiceRow("Layout", "Which version's controls the game uses. Original Xbox uses the buttons of the game's Xbox version.");
         layoutBox.Items.Add("GameCube");
         layoutBox.Items.Add("Original Xbox");
         var config = new GameConfig(configPath);
@@ -499,10 +533,13 @@ sealed class MainWindow : Window
         }
         layoutBox.SelectedIndexChanged += (_, _) => ManualLayout();
         layoutBox.SelectionCommitted += (_, _) => ManualLayout();
-        card.Children.Add(new SettingRow("Layout", "Original Xbox uses the buttons of the game's Xbox version.", layoutBox));
+        card.Children.Add(layoutBox);
         // Xbox (including Xbox One) matches Original Xbox, GameCube matches GameCube; other or conflicting controller types
         // leave the layout as it is. Choosing a layout by hand, even the current one, stops it; bindings are kept.
-        autoLayout = new CheckBox { IsChecked = ControllerLayout.Automatic(config) };
+        autoLayout = new ToggleRow("Match my controller", "Picks the layout for an Xbox or GameCube controller until you choose one yourself.")
+        {
+            IsChecked = ControllerLayout.Automatic(config),
+        };
         autoLayout.IsCheckedChanged += (_, _) =>
         {
             if (fillingLayout) return;
@@ -511,44 +548,38 @@ sealed class MainWindow : Window
             c.Save();
             ApplyControllerLayout(gamepads.Connected).Watch();
         };
-        card.Children.Add(new SettingRow("Match my controller", "Picks the layout for an Xbox or GameCube controller until you choose one.", autoLayout));
+        card.Children.Add(autoLayout);
         BuildPadMapping(page);
         card = Section(page, "Keyboard");
         foreach (var (what, key) in new[] { ("Move", "W A S D"), ("Camera (C-stick)", "Arrow keys"), ("A (jump)", "Space"), ("B", "Left Shift"),
                      ("X / Y", "R / F"), ("Z", "C"), ("L / R", "Q / E"), ("Start (pause)", "Enter"), ("D-pad", "I J K L") })
-        {
-            var keys = new TextBlock { Text = key, Foreground = Brush(CreamDim), FontFamily = BodyFamily, FontSize = BodySize, TextWrapping = TextWrapping.Wrap };
-            card.Children.Add(new SettingRow(what, null, keys) { Compact = true });
-        }
-        page.Children.Add(Footnote("In the game: F10 settings  ·  F11 fullscreen  ·  F2 screenshot  ·  F1 project page"));
-        page.Children.Add(Footnote("In the launcher: the D-pad or left stick moves, South selects, East goes back, the bumpers switch tabs and the right stick scrolls."));
+            card.Children.Add(new InfoRow(what, key));
+        page.Children.Add(Indent(Footnote("In the game: F10 settings  ·  F11 fullscreen  ·  F2 screenshot  ·  F1 project page")));
     }
 
     // ----- Mods -----
-    void BuildMods(Board board)
+    void BuildMods(MenuScreen board)
     {
         var body = board.Body;
         var sep = Path.DirectorySeparatorChar;
         var patches = Patches;
         var list = new StackPanel { Orientation = Orientation.Vertical };
+        string modHelp = $"A mod is a folder with files{sep} (replaces game files), textures{sep} or a patch.json (adds to levels from your disc). " +
+                         "When two mods change the same file, the later name wins.";
         void Fill()
         {
-            // The list is rebuilt after every tick: put the pad back on the same mod, or it would be left on nothing.
-            // Only a pad/keyboard focus shows the focus box; a mouse click must not get one, so restore it the way it came.
-            var focused = TopLevel.GetTopLevel(list)?.FocusManager?.GetFocusedElement() as CheckBox;
-            var keep = focused is { Parent: { } p } && ReferenceEquals(p, list) ? (focused.Content as TextBlock)?.Text : null;
-            var how = focused?.Classes.Contains(":focus-visible") == true ? NavigationMethod.Directional : NavigationMethod.Pointer;
-            CheckBox? refocus = null;
+            // The list is rebuilt after every switch: keep the selection on the same mod, or it would be left on nothing.
+            var keep = board.Selected is ToggleRow { Parent: { } p } kept && ReferenceEquals(p, list) ? kept.Label : null;
+            ToggleRow? reselect = null;
             list.Children.Clear();
             var dirs = Directory.Exists(modsDir) ? Directory.GetDirectories(modsDir).Where(ModPatches.ModPatchPanel.IsListed).OrderBy(d => d, StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
-            if (dirs.Length == 0) { list.Children.Add(Hint("No mods yet. Add one from a zip, or put its folder in the mods folder.")); return; }
+            if (dirs.Length == 0) { list.Children.Add(Indent(Hint("No mods yet. Add one from a zip, or put its folder in the mods folder."))); return; }
             foreach (var d in dirs)
             {
-                var box = new CheckBox
+                var status = patches.StatusText(d);
+                var box = new ToggleRow(Path.GetFileName(d), (status != null ? status + "\n\n" : "") + "Switch a mod off to leave it out without removing it.")
                 {
-                    Content = new TextBlock { Text = Path.GetFileName(d), TextWrapping = TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis },
-                    IsChecked = !File.Exists(Path.Combine(d, "disabled")), Foreground = Brush(Cream),
-                    Cursor = new Cursor(StandardCursorType.Hand), Margin = new Thickness(0, 3, 0, 3),
+                    IsChecked = !File.Exists(Path.Combine(d, "disabled")),
                 };
                 var dir = d;
                 box.IsCheckedChanged += (_, _) =>
@@ -558,24 +589,18 @@ sealed class MainWindow : Window
                     patches.Update(Fill).Watch();
                 };
                 list.Children.Add(box);
-                if (keep != null && Path.GetFileName(d) == keep) refocus = box;
-                if (patches.StatusText(d) is { } status) list.Children.Add(Note(status));
+                if (keep != null && Path.GetFileName(d) == keep) reselect = box;
+                if (status != null) list.Children.Add(Indent(Note(status)));
             }
-            if (refocus != null) Dispatcher.UIThread.Post(() => { refocus.Focus(how); refocus.BringIntoView(); }, DispatcherPriority.Loaded);
+            if (reselect != null && board.IsVisible) Dispatcher.UIThread.Post(() => board.Select(reselect), DispatcherPriority.Loaded);
         }
-        var row = Row();
-        row.Children.Add(new PlankButton("Add a mod (zip)", (_, _) => patches.AddFromZip(Fill).Watch(), primary: true));
-        row.Children.Add(new PlankButton("Open the mods folder", (_, _) => OpenFolder(modsDir).Watch()));
-        row.Children.Add(new PlankButton("Refresh", (_, _) => { Fill(); patches.Update(Fill).Watch(); }));
-        body.Children.Add(row);
-        var card = Section(body, "Installed mods");
-        card.Children.Add(new ScrollViewer
-        {
-            Content = list, Height = 300, Margin = new Thickness(12, 8, 6, 8),
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled, AllowAutoHide = false,
-        });
-        body.Children.Add(Footnote("Untick a mod to turn it off. When two mods change the same file, the later name wins."));
-        body.Children.Add(Footnote($"A mod is a folder with files{sep} (replaces game files), textures{sep} or a patch.json (adds to levels from your disc)."));
+        Section(body, "Add mods");
+        body.Children.Add(new ActionRow("Add a mod (zip)", () => patches.AddFromZip(Fill).Watch(), "Choose", "Choose a mod's zip file to add it."));
+        body.Children.Add(new ActionRow("Open the mods folder", () => OpenFolder(modsDir).Watch(), "Open", modsDir));
+        body.Children.Add(new ActionRow("Refresh", () => { Fill(); patches.Update(Fill).Watch(); }, "Refresh", "Looks at the mods folder again."));
+        Section(body, "Installed mods");
+        body.Children.Add(list);
+        body.Children.Add(Indent(Footnote(modHelp)));
         Fill();
         patches.Update(Fill).Watch();
     }
@@ -584,13 +609,13 @@ sealed class MainWindow : Window
     ModPatches.ModPatchPanel Patches => patchPanel ??= new ModPatches.ModPatchPanel(this, paths, GameRunning);
 
     // ----- Extras: discs, game options, folders, about -----
-    void BuildExtras(Board board)
+    void BuildExtras(MenuScreen board)
     {
-        var discs = Column();
-        var textures = Column();
-        var game = Column();
-        var folders = Column();
-        var about = Column();
+        var discs = MenuScreen.NewPage();
+        var textures = MenuScreen.NewPage();
+        var game = MenuScreen.NewPage();
+        var folders = MenuScreen.NewPage();
+        var about = MenuScreen.NewPage();
         board.AddTab("Discs", discs);
         board.AddTab("Textures", textures);
         board.AddTab("Game", game);
@@ -598,26 +623,31 @@ sealed class MainWindow : Window
         board.AddTab("About", about);
 
         // Discs
+        const string discHelp = "Your own USA disc (GIHE78, version 1.01), dumped as .iso or .ciso, for example with CleanRip on a Wii. " +
+                                "The game files are copied once; the image isn't needed afterwards.";
         var card = Section(discs, "GameCube disc");
-        discStatus = Status();
-        chooseDisc = new PlankButton("Choose disc image", (_, _) => ChooseDisc().Watch(), primary: true);
-        progress = new ThemedBar { IsVisible = false };
-        dumpHelp = Hint("Your own USA disc (GIHE78, version 1.01), dumped as .iso or .ciso, for example with CleanRip on a Wii. " +
-                        "The game files are copied once; the image isn't needed afterwards.");
-        card.Children.Add(new CardBlock(discStatus, chooseDisc, new LeftCap(480, progress), dumpHelp));
+        discStatus = Indent(Status());
+        chooseDisc = new ActionRow("Choose disc image", () => ChooseDisc().Watch(), "Choose", discHelp);
+        progress = Bar();
+        dumpHelp = Indent(Hint(discHelp));
+        card.Children.Add(discStatus);
+        card.Children.Add(chooseDisc);
+        card.Children.Add(progress);
+        card.Children.Add(dumpHelp);
 
         card = Section(discs, "PS2 and Xbox extras", "Optional.");
-        ps2Status = Status();
-        var ps2Row = Row();
-        choosePs2 = new PlankButton("Choose PS2 or Xbox disc image", (_, _) => ChoosePs2Disc().Watch());
-        ps2Row.Children.Add(choosePs2);
-        removePs2 = new PlankButton("Remove", (_, _) => RemovePs2Cutscenes().Watch());
-        ps2Row.Children.Add(removePs2);
-        ps2Bar = new ThemedBar { IsVisible = false };
-        card.Children.Add(new CardBlock(ps2Status, ps2Row, new LeftCap(480, ps2Bar), Hint(
-            "Plays the story scenes in the game itself instead of as movies. An Xbox disc also brings the ending scene, its " +
-            "textures (used where a texture pack has none) and its sound without the GameCube's hiss. About 240 MB from a PS2 " +
-            "disc or 800 MB from an Xbox disc; the image isn't needed afterwards.")));
+        const string ps2Help = "Plays the story scenes in the game itself instead of as movies. An Xbox disc also brings the ending scene, its " +
+                               "textures (used where a texture pack has none) and its sound without the GameCube's hiss. About 240 MB from a PS2 " +
+                               "disc or 800 MB from an Xbox disc; the image isn't needed afterwards.";
+        ps2Status = Indent(Status());
+        choosePs2 = new ActionRow("Choose PS2 or Xbox disc image", () => ChoosePs2Disc().Watch(), "Choose", ps2Help);
+        removePs2 = new ActionRow("Remove the extras", () => RemovePs2Cutscenes().Watch(), "Remove",
+            "Removes the cutscenes, textures and sound taken from the PS2 or Xbox disc. The game goes back to the GameCube's movies.");
+        ps2Bar = Bar();
+        card.Children.Add(ps2Status);
+        card.Children.Add(choosePs2);
+        card.Children.Add(removePs2);
+        card.Children.Add(ps2Bar);
         RefreshPs2();
 
         // Textures
@@ -625,68 +655,71 @@ sealed class MainWindow : Window
 
         // Game
         card = Section(game, "Holidays");
-        card.Children.Add(new SettingRow("Holiday events", "Outside Mystic Manor and in the playground, on their real dates.", HolidayBox()));
+        card.Children.Add(HolidayBox());
         card = Section(game, "Developer tools");
-        card.Children.Add(new SettingRow("Developer tools", "F8 dev menu, F3 video recording and a DEV mark. From the next game start.", DevToolsBox()));
-        ffmpegStatus = Hint("");
-        ffmpegButton = new PlankButton("Download ffmpeg", (_, _) => DownloadFfmpeg().Watch());
-        ffmpegBar = new ThemedBar { IsVisible = false };
-        card.Children.Add(new CardBlock(ffmpegStatus, ffmpegButton, new LeftCap(480, ffmpegBar)));
+        card.Children.Add(DevToolsBox());
+        ffmpegStatus = Indent(Hint(""));
+        ffmpegButton = new ActionRow("Download ffmpeg", () => DownloadFfmpeg().Watch(), "Download",
+            "F3 videos need ffmpeg: about 200 MB, the free win64 build from github.com/BtbN/FFmpeg-Builds, checked against its published SHA-256.");
+        ffmpegBar = Bar();
+        card.Children.Add(ffmpegStatus);
+        card.Children.Add(ffmpegButton);
+        card.Children.Add(ffmpegBar);
         RefreshFfmpeg(offerDownload: false);
 
         // Folders
         card = Section(folders, "Open a folder");
-        var open = Row();
-        open.Children.Add(new PlankButton("Saves", (_, _) => OpenFolder(paths.Saves).Watch()));
-        open.Children.Add(new PlankButton("Settings and mods", (_, _) => OpenFolder(userData).Watch()));
-        open.Children.Add(new PlankButton("Screenshots", (_, _) => OpenFolder(paths.Screenshots).Watch()));
-        open.Children.Add(new PlankButton("Videos", (_, _) => OpenFolder(paths.Videos).Watch()));
-        open.Children.Add(new PlankButton("Game", (_, _) => OpenFolder(play).Watch()));
-        card.Children.Add(new CardBlock(open));
+        foreach (var (label, path) in new[] { ("Saves", paths.Saves), ("Settings and mods", userData), ("Screenshots", paths.Screenshots),
+                     ("Videos", paths.Videos), ("Game", play) })
+            card.Children.Add(new ActionRow(label, () => OpenFolder(path).Watch(), "Open", path));
         card = Section(folders, "Saves");
-        savesNote = Hint("");
-        var saveRow = Row();
-        saveRow.Children.Add(new PlankButton("Change the saves folder", (_, _) => ChooseSavesFolder().Watch()));
-        savesDefault = new PlankButton("Back to the usual folder", (_, _) => MoveSaves(null).Watch());
-        saveRow.Children.Add(savesDefault);
-        saveRow.Children.Add(new PlankButton("Copy from an earlier version", async (_, _) =>
+        savesNote = Indent(Hint(""));
+        card.Children.Add(savesNote);
+        card.Children.Add(new ActionRow("Change the saves folder", () => ChooseSavesFolder().Watch(), "Choose",
+            "Keep your saves in another folder. The launcher offers to move the saves already there."));
+        savesDefault = new ActionRow("Back to the usual folder", () => MoveSaves(null).Watch(), "Move", "Puts the saves folder back where the game keeps it.");
+        card.Children.Add(savesDefault);
+        async Task CopyEarlier()
         {
             await DataImport.FromFolder(this, paths, AppTitle);
             RefreshDisc();
             RefreshSaves();
-        }));
-        card.Children.Add(new CardBlock(savesNote, saveRow));
+        }
+        card.Children.Add(new ActionRow("Copy from an earlier version", () => CopyEarlier().Watch(), "Choose",
+            "Copies the saves, settings and disc from the folder of an earlier FrightWorks copy."));
         RefreshSaves();
 
         // About
         card = Section(about, "Updates");
-        updateStatus = Hint("");
+        updateStatus = Indent(Hint(""));
         if (updater.CanCheck)
         {
-            card.Children.Add(new SettingRow("Look for updates", null, UpdateBox()));
-            checkNow = new PlankButton("Check now", (_, _) => CheckForUpdates(manual: true).Watch());
-            card.Children.Add(new CardBlock(updateStatus, checkNow));
+            card.Children.Add(UpdateBox());
+            checkNow = new ActionRow("Check now", () => CheckForUpdates(manual: true).Watch(), "Check", "Looks for a new version now.");
+            card.Children.Add(checkNow);
+            card.Children.Add(updateStatus);
             ShowUpdateState(null);
         }
         else
         {
             updateStatus.Text = paths.DevTree ? "A source build doesn't look for updates."
                                               : "This copy wasn't installed with the FrightWorks installer, so it can't look for updates.";
-            card.Children.Add(new CardBlock(updateStatus));
+            card.Children.Add(updateStatus);
         }
 
         card = Section(about, "About");
         var version = typeof(MainWindow).Assembly.GetName().Version;
-        var name = Status();
+        var name = Indent(Status());
         name.Text = "FrightWorks" + (version == null ? "" : " v" + version.ToString(3));
         name.Foreground = Brush(Cream);
-        card.Children.Add(new CardBlock(name, Hint(
+        card.Children.Add(name);
+        card.Children.Add(Indent(Hint(
             "By Loneranger419 with the help of BitsofBitsofBits and Junkaholic55, based on Scooby-Doo: Refrightened by JosiahG. Built on WiiCompiled (GPLv3) " +
             "and Aurora (MIT). Scooby-HD texture pack (optional download) by dogerki. Button prompts by Kenney (CC0). Lettering in " +
             "Luckiest Guy by Astigmatic and in-game menu text in Roboto by Christian Robertson (both Apache 2.0)" +
             "; the launcher bundles Inter by Rasmus Andersson (SIL Open Font License), which it uses for text on Linux. " +
-            "Scooby-Doo is a trademark of Hanna-Barbera / Warner Bros.; this is an unofficial fan project."),
-            new PlankButton("Project page", async (_, _) => await Launcher.LaunchUriAsync(new Uri(ProjectUrl)))));
+            "Scooby-Doo is a trademark of Hanna-Barbera / Warner Bros.; this is an unofficial fan project.")));
+        card.Children.Add(new ActionRow("Project page", () => Launcher.LaunchUriAsync(new Uri(ProjectUrl)).Watch(), "Open", ProjectUrl));
     }
 
     // ----- The saves folder ([paths] saves_dir) -----
@@ -787,7 +820,7 @@ sealed class MainWindow : Window
     // ----- Updates (Updater) -----
     Control UpdateBox()
     {
-        var box = new ThemedCombo();
+        var box = new ChoiceRow("Look for updates", "Whether the launcher looks for a new version each time it starts.");
         box.Items.Add("When the launcher starts");
         box.Items.Add("Never");
         box.SelectedIndex = updater.CheckAtStart ? 0 : 1;
@@ -893,12 +926,14 @@ sealed class MainWindow : Window
 
     Control HolidayBox()
     {
-        var box = new ThemedCombo();
+        var box = new ChoiceRow("Holiday events", "Fireworks and decorations outside Mystic Manor and in the playground, on their real dates, " +
+                                                  "or on the day you pick here.");
         foreach (var h in Holidays) box.Items.Add(h.text);
         var current = new GameConfig(configPath).Get("game", "holiday") ?? "auto";
         int index = Array.FindIndex(Holidays, h => h.value == current);
         if (index < 0) { box.Items.Add("Custom date (" + current + ")"); index = box.Items.Count - 1; }
         box.SelectedIndex = index;
+        box.Refresh();
         box.SelectedIndexChanged += (_, _) =>
         {
             if (box.SelectedIndex < 0 || box.SelectedIndex >= Holidays.Length) return;
@@ -912,16 +947,16 @@ sealed class MainWindow : Window
     // [game] dev_tools: the F8 dev menu and the DEV build mark (the game reads it at startup).
     Control DevToolsBox()
     {
-        var box = new ThemedCombo();
-        box.Items.Add("Off");
-        box.Items.Add("On");
-        box.SelectedIndex = new GameConfig(configPath).Get("game", "dev_tools") == "true" ? 1 : 0;
-        box.SelectedIndexChanged += (_, _) =>
+        var box = new ToggleRow("Developer tools", "The F8 dev menu, F3 video recording and a DEV mark on the screen. From the next game start.")
+        {
+            IsChecked = new GameConfig(configPath).Get("game", "dev_tools") == "true",
+        };
+        box.IsCheckedChanged += (_, _) =>
         {
             var c = new GameConfig(configPath);
-            c.Set("game", "dev_tools", box.SelectedIndex == 1 ? "true" : "false");
+            c.Set("game", "dev_tools", box.IsChecked == true ? "true" : "false");
             c.Save();
-            RefreshFfmpeg(offerDownload: box.SelectedIndex == 1);
+            RefreshFfmpeg(offerDownload: box.IsChecked == true);
         };
         return box;
     }
@@ -996,18 +1031,19 @@ sealed class MainWindow : Window
     {
         foreach (var pack in TexturePacks.All)
             Section(page, pack.Name, "By " + pack.Credit + ".").Children.Add(PackBlock(pack));
-        page.Children.Add(Footnote("Fans made these from the game's own textures, so they're a separate download. " +
-                                   "Your texture_replacements folder and mods win over them; Settings > HD textures turns them off. " +
-                                   "Changes apply at the next game start."));
+        page.Children.Add(Indent(Footnote("Fans made these from the game's own textures, so they're a separate download. " +
+                                          "Your texture_replacements folder and mods win over them; Settings > HD textures turns them off. " +
+                                          "Changes apply at the next game start.")));
     }
 
     Control PackBlock(TexturePacks.Pack pack)
     {
-        var status = Status();
+        var status = Indent(Status());
         bool filling = false;
-        var use = new CheckBox { Content = "Use it", Foreground = Brush(Cream), Cursor = new Cursor(StandardCursorType.Hand), Margin = new Thickness(0, 6, 16, 6) };
-        PlankButton download = null!, remove = null!, cancel = null!;
-        var bar = new ThemedBar { IsVisible = false, Maximum = 1000 };
+        var use = new ToggleRow("Use this pack", pack.About);
+        ActionRow download = null!, remove = null!, cancel = null!;
+        var bar = Bar();
+        bar.Maximum = 1000;
 
         void Refresh()
         {
@@ -1067,9 +1103,9 @@ sealed class MainWindow : Window
             if (error != null) await Dialogs.Message(this, $"Downloading {pack.Name} failed: {error}");
         }
 
-        download = new PlankButton($"Download (about {pack.ApproxBytes >> 20} MB)", (_, _) => Download().Watch());
-        remove = new PlankButton("Remove", (_, _) => RemovePack().Watch());
-        cancel = new PlankButton("Cancel", (_, _) => packCancel?.Cancel()) { IsVisible = false };
+        download = new ActionRow($"Download (about {pack.ApproxBytes >> 20} MB)", () => Download().Watch(), "Download", pack.About);
+        remove = new ActionRow("Remove the pack", () => RemovePack().Watch(), "Remove", "Deletes the downloaded pack. It can be downloaded again any time.");
+        cancel = new ActionRow("Cancel the download", () => packCancel?.Cancel(), "Cancel") { IsVisible = false };
 
         async Task RemovePack()
         {
@@ -1087,14 +1123,9 @@ sealed class MainWindow : Window
             catch (Exception) { }
             Refresh();
         };
-        var row = Row();
-        row.Children.Add(use);
-        row.Children.Add(download);
-        row.Children.Add(remove);
-        row.Children.Add(cancel);
         packRefresh.Add(Refresh);
         Refresh();
-        return new CardBlock(Hint(pack.About), status, row, new LeftCap(480, bar));
+        return new StackPanel { Children = { status, use, download, remove, cancel, bar } };
     }
 
     // ----- The disc and starting the game -----
@@ -1116,7 +1147,7 @@ sealed class MainWindow : Window
         if (discStatus == null) return;
         discStatus.Text = text;
         discStatus.Foreground = Brush(ok ? Good : Warn);
-        chooseDisc.Text = ok ? "Change disc image" : "Choose disc image";
+        chooseDisc.Label = ok ? "Change disc image" : "Choose disc image";
         dumpHelp.IsVisible = !ok;
     }
 
@@ -1169,7 +1200,7 @@ sealed class MainWindow : Window
         bool any = parts.Count > 0;
         ps2Status.Text = any ? "Set up: " + string.Join(", ", parts) + "." : "Not set up: the game shows the GameCube's movies.";
         ps2Status.Foreground = Brush(any ? Good : CreamDim);  // optional: nothing is missing
-        choosePs2.Text = any ? "Choose another PS2 or Xbox disc image" : "Choose PS2 or Xbox disc image";
+        choosePs2.Label = any ? "Choose another PS2 or Xbox disc image" : "Choose PS2 or Xbox disc image";
         removePs2.IsVisible = any;
     }
 
@@ -1296,15 +1327,15 @@ sealed class MainWindow : Window
     // Gamepad buttons: the [controller] keys F10 > Controls edits too (PadMapping). The game reads them at start.
     void BuildPadMapping(StackPanel page)
     {
-        var card = Section(page, "Gamepad buttons", "By position: South is A on Xbox, Cross on PlayStation, B on Nintendo. F10 > Controls edits the same mapping.");
+        var card = Section(page, "Gamepad buttons", "F10 > Controller edits the same mapping.");
         var config = new GameConfig(configPath);
         foreach (var row in PadMapping.Rows)
         {
-            var box = new ThemedCombo();
+            var box = new ChoiceRow(row.Label, $"The controller button that works as {row.Label}. By position: South is A on Xbox, " +
+                                               "Cross on PlayStation, B on Nintendo.");
             foreach (var choice in PadMapping.ChoicesFor(row)) box.Items.Add(choice);
-            var view = new SettingRow(row.Label, null, box) { Compact = true };
-            card.Children.Add(view);
-            padRows.Add((row, view, box));
+            card.Children.Add(box);
+            padRows.Add((row, box));
             ShowPadValue(row, box, config.Get("controller", row.Key));
             box.SelectedIndexChanged += (_, _) =>
             {
@@ -1318,11 +1349,11 @@ sealed class MainWindow : Window
             };
         }
         ShowXboxRows();
-        card.Children.Add(new CardBlock(new PlankButton("Restore defaults", (_, _) => RestorePadDefaults()) { Margin = default }));
+        card.Children.Add(new ActionRow("Restore defaults", RestorePadDefaults, "Restore", "Puts every button back to the GameCube default."));
     }
 
     // Selects the value's pad button; one the list doesn't know stays as it is, shown as "(custom)".
-    static void ShowPadValue(PadMapping.Row row, ThemedCombo box, string? value)
+    static void ShowPadValue(PadMapping.Row row, ChoiceRow box, string? value)
     {
         string name = value == null ? row.Default : PadMapping.Split(value).Name;
         for (int i = box.Items.Count - 1; i >= 0; i--)
@@ -1332,14 +1363,15 @@ sealed class MainWindow : Window
             if (box.Items[i] is PadMapping.Choice c && c.Name == name) { index = i; break; }
         if (index < 0) { box.Items.Add("(custom) " + value); index = box.Items.Count - 1; }
         box.SelectedIndex = index;
+        box.Refresh();
     }
 
     // Black / White exist only with the original Xbox layout.
     void ShowXboxRows()
     {
         bool xbox = layoutBox.SelectedIndex == 1;
-        foreach (var (row, view, _) in padRows)
-            if (row.Xbox) { view.IsVisible = xbox; view.Label.IsVisible = xbox; }
+        foreach (var (row, box) in padRows)
+            if (row.Xbox) box.IsVisible = xbox;
     }
 
     // Writes every GameCube button's default (so a mapping saved for one controller in F10 doesn't stay in force) and
@@ -1353,7 +1385,7 @@ sealed class MainWindow : Window
             else c.SetString("controller", row.Key, row.Default);
         }
         c.Save();
-        foreach (var (row, _, box) in padRows) ShowPadValue(row, box, c.Get("controller", row.Key));
+        foreach (var (row, box) in padRows) ShowPadValue(row, box, c.Get("controller", row.Key));
     }
 
     void SaveLayout(bool original) => SaveLayout(original ? "xbox_original" : "gamecube");
@@ -1415,6 +1447,7 @@ sealed class MainWindow : Window
             int index = layout switch { "xbox_original" => 1, null or "gamecube" => 0, _ => 2 };
             if (index == 2) layoutBox.Items.Add(ControllerLayout.Describe(layout));
             layoutBox.SelectedIndex = index;
+            layoutBox.Refresh();
             if (autoLayout != null) autoLayout.IsChecked = ControllerLayout.Automatic(config);
             ShowXboxRows();
         }

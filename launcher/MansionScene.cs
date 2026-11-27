@@ -1058,6 +1058,17 @@ sealed class MansionScene : Control
     {
         base.OnPointerMoved(e);
         var now = SignAt(e.GetPosition(this));
+        // The pointer moves the selection, as the pad does (one lit sign, and Confirm takes the one under the pointer).
+        if (now != null)
+        {
+            int index = signs.FindIndex(s => s.Id == now);
+            if (index >= 0 && (index != focusedSign || !signButtons[index].IsFocused))
+            {
+                focusedSign = index;
+                signButtons[index].Focus(NavigationMethod.Pointer);
+                InvalidateVisual();
+            }
+        }
         if (now == hover) return;
         hover = now;
         Cursor = hover != null ? new Cursor(StandardCursorType.Hand) : Cursor.Default;
