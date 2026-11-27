@@ -79,6 +79,7 @@ sealed class MainWindow : Window
         MinHeight = Math.Min(680, area.Height);
         Background = Brush(BoardBottom);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        if (shotDir == null) WindowState = SavedWindowState();
 
         scene = new MansionScene(enableServices && shotDir == null && MansionScene.AnimationsEnabled(), shotDir == null ? Environment.TickCount : 1);
         scene.SignClicked += id => OnSign(id).Watch();
@@ -106,6 +107,13 @@ sealed class MainWindow : Window
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape && boards.Values.Any(b => b.IsVisible)) { CloseBoards(); e.Handled = true; }
+            // F11 switches borderless fullscreen, as in the game; back to a window, or maximized if it was before.
+            else if (e.Key == Key.F11)
+            {
+                if (WindowState == WindowState.FullScreen) SetLauncherWindow(beforeFullScreen == WindowState.Maximized ? "\"maximized\"" : "\"windowed\"");
+                else SetLauncherWindow("\"fullscreen\"");
+                e.Handled = true;
+            }
         };
         // Connected controllers: shown on Settings > Controls; an Xbox pad asks for the layout once.
         padTimer.Tick += (_, _) => RefreshGamepads().Watch();
@@ -299,6 +307,37 @@ sealed class MainWindow : Window
 
     // Config values as the game reads them: numbers by value (F10 writes 8 or 0.75, a hand-edited file may say 8.0 or
     // 2.250), the rest as text without the quotes.
+    // ----- The launcher's own window: [launcher] window = "windowed" (the default), "maximized" or "fullscreen" (borderless) -----
+    static readonly (string text, string raw)[] LauncherWindowModes =
+        { ("Window", "\"windowed\""), ("Maximized", "\"maximized\""), ("Borderless fullscreen", "\"fullscreen\"") };
+    ChoiceRow? launcherWindowRow;
+    bool showingLauncherWindow;  // the row is being set to match the window, not by the player
+    WindowState beforeFullScreen = WindowState.Normal;
+
+    static int LauncherWindowIndex(string? raw) => Math.Max(0, Array.FindIndex(LauncherWindowModes, m => raw != null && SameValue(m.raw, raw)));
+
+    static WindowState ToWindowState(int index) => index switch { 1 => WindowState.Maximized, 2 => WindowState.FullScreen, _ => WindowState.Normal };
+
+    internal WindowState SavedWindowState() => ToWindowState(LauncherWindowIndex(new GameConfig(configPath).Get("launcher", "window")));
+
+    // Applies a mode at once, saves it and shows it on Settings > Display.
+    internal void SetLauncherWindow(string raw)
+    {
+        int index = LauncherWindowIndex(raw);
+        var state = ToWindowState(index);
+        if (state == WindowState.FullScreen && WindowState != WindowState.FullScreen) beforeFullScreen = WindowState;
+        WindowState = state;
+        var c = new GameConfig(configPath);
+        c.Set("launcher", "window", LauncherWindowModes[index].raw);
+        c.Save();
+        if (launcherWindowRow != null && launcherWindowRow.SelectedIndex != index)
+        {
+            showingLauncherWindow = true;
+            try { launcherWindowRow.SelectedIndex = index; }
+            finally { showingLauncherWindow = false; }
+        }
+    }
+
     static bool SameValue(string a, string b)
     {
         a = a.Trim('"');
@@ -429,6 +468,17 @@ sealed class MainWindow : Window
 
         card = Section(display, "Startup");
         Row("Intro movies", "Whether the intro movies play when the game starts.", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
+
+        card = Section(display, "Launcher");
+        launcherWindowRow = new ChoiceRow("Launcher window", "How this launcher shows: in a window, maximized, or borderless fullscreen. " +
+                                                             "Changes at once, and it opens that way next time. F11 also switches fullscreen.");
+        foreach (var mode in LauncherWindowModes) launcherWindowRow.Items.Add(mode.text);
+        launcherWindowRow.SelectedIndex = LauncherWindowIndex(cfg.Get("launcher", "window"));
+        launcherWindowRow.SelectedIndexChanged += (_, _) =>
+        {
+            if (!showingLauncherWindow && launcherWindowRow.SelectedIndex >= 0) SetLauncherWindow(LauncherWindowModes[launcherWindowRow.SelectedIndex].raw);
+        };
+        card.Children.Add(launcherWindowRow);
         display.Children.Add(Indent(Footnote(SavedNote)));
 
         card = Section(graphics, "Picture");
@@ -1366,7 +1416,7 @@ sealed class MainWindow : Window
         // Always back, after a clean quit too: the pad can't reach a minimized launcher (navigation ignores it).
         if (IsVisible)
         {
-            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            if (WindowState == WindowState.Minimized) WindowState = SavedWindowState();
             Activate();
         }
         if (code == 0) return;

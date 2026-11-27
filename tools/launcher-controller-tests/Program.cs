@@ -260,6 +260,16 @@ static class LauncherControllerTests
         var rows = settings.Rows.ToList();
         Check(settings.SelectedTab == 0 && settings.Selected == rows[0] && rows[0].IsFocused, "Settings did not open on Display's first row.");
         Shot(w, "Display-focus");
+        // Settings > Display > Launcher window: applies at once and is saved; F11 switches fullscreen and back.
+        var windowRow = settings.Rows.OfType<ChoiceRow>().Single(r => r.Label == "Launcher window");
+        windowRow.SelectedIndex = 1; Pump();
+        Check(w.WindowState == WindowState.Maximized && new GameConfig(config).Get("launcher", "window") == "maximized", "Launcher window Maximized didn't apply or save: " + w.WindowState + " / " + new GameConfig(config).Get("launcher", "window"));
+        windowRow.SelectedIndex = 2; Pump();
+        Check(w.WindowState == WindowState.FullScreen && w.SavedWindowState() == WindowState.FullScreen, "Launcher window Borderless fullscreen didn't apply or save.");
+        w.SetLauncherWindow("\"windowed\""); Pump();
+        Check(w.WindowState == WindowState.Normal && windowRow.SelectedIndex == 0, "Going back to a window didn't show on the row.");
+        { var c0 = new GameConfig(config); c0.Remove("launcher", "window"); c0.Save(); }
+        settings.Select(rows[0]); Pump();
         // Up / down pick a row and stop at the ends (as F10's).
         Press(w, LauncherButtons.Up);
         Check(settings.Selected == rows[0], "Up on the first row left it.");

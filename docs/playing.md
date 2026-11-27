@@ -67,6 +67,9 @@ the right explains the selected setting, and the bottom row shows the buttons fo
 With more than one monitor, **Settings > Display > Fullscreen monitor** (or **F10** > Video) picks the one fullscreen
 uses.
 
+**Settings > Display > Launcher window** shows the launcher in a window, maximized or borderless fullscreen; it opens that
+way next time. **F11** in the launcher switches fullscreen too.
+
 **Texture packs.** **Extras > Textures** lists every pack in `UserData\texture_packs`: the ones the launcher downloads
 and any pack folder you put there yourself (**Open the texture packs folder**). Higher in the list wins. Left/right
 switch a pack off or on; A picks it up to move it (up/down, then A to put it down, B to put it back), or drag it by its
