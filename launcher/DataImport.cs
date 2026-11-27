@@ -14,7 +14,7 @@ namespace FrightWorks;
 // Offered once at the first start (OfferAtStart); Extras > Folders copies from any folder (FromFolder).
 static class DataImport
 {
-    static readonly string[] GameExes = { DataPaths.GameExe, "Scooby-Doo Refrightened.exe", "Scooby-Doo Re-Masked.exe" };
+    static readonly string[] GameExes = { DataPaths.GameExe, DataPaths.OldGameExe, "Scooby-Doo Refrightened.exe", "Scooby-Doo Re-Masked.exe" };
     internal const string Mark = "imported.txt", OldMark = "imported-from-refrightened.txt";  // in UserData: asked once
     // Rebuilt by the game, shipped with it (or once shipped: Refrightened's HD pack), or a half-done pack download.
     static readonly string[] Skip = { "Logs", "Cache", "button_icons", "Disc", Path.Combine("texture_replacements", "ScoobyHD"), "texture_packs.download" };

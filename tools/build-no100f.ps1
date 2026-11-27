@@ -127,15 +127,22 @@ Invoke-Step 'configure' $cmake $configure $wc
 if ($ConfigureOnly) { Set-Status 'configure only: done'; exit 0 }
 Invoke-Step 'compile' $cmake @('--build', $build, '--target', 'WiiCompiled', '--parallel', "$Jobs") $wc
 Set-Status "DONE: $build\WiiCompiled.exe"
-$playExe = Join-Path $root 'Play\FrightWorks Game.exe'
-# Only the game running from Play\ holds the file; the launcher shares its process name.
-Get-Process 'FrightWorks Game' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $playExe } | Stop-Process -Force
+$playExe = Join-Path $root 'Play\FrightWorks-No100F-Game.exe'
+# Only the game running from Play\ holds the file.
+Get-Process 'FrightWorks-No100F-Game' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $playExe } | Stop-Process -Force
 Start-Sleep -Seconds 1
 Copy-Item -LiteralPath (Join-Path $build 'WiiCompiled.exe') -Destination $playExe -Force
+# The game's name up to 1.2.1: a Play\ built before the rename still has it, and it would be the stale one.
+$oldExe = Join-Path $root 'Play\FrightWorks Game.exe'
+if (Test-Path -LiteralPath $oldExe) {
+    Get-Process 'FrightWorks Game' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $oldExe } | Stop-Process -Force
+    Start-Sleep -Seconds 1
+    Remove-Item -LiteralPath $oldExe -Force
+}
 # The runtime DLLs (SDL3, Dawn, DXC, libc++ ...) and Dolphin's free dsp_coef.bin sit next to the build output.
 Get-ChildItem -LiteralPath $build -File | Where-Object { $_.Extension -eq '.dll' -or $_.Name -eq 'dsp_coef.bin' } |
     Copy-Item -Destination (Join-Path $root 'Play') -Force
-Set-Status 'copied to Play\FrightWorks Game.exe (+ runtime DLLs)'
+Set-Status 'copied to Play\FrightWorks-No100F-Game.exe (+ runtime DLLs)'
 # Like a release: the button prompt icons beside the game (rebuilt only when changed). No HD pack: a launcher download.
 $env:PATH = $userPath
 & (Join-Path $PSScriptRoot 'stage-assets.ps1') -GameDir (Join-Path $root 'Play')

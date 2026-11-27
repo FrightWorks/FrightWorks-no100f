@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
-EXE_NAMES = ("FrightWorks Game.exe", "FrightWorks Game")
+EXE_NAMES = ("FrightWorks-No100F-Game.exe", "FrightWorks-No100F-Game")
 IGNORE_PADS_EXCEPT = "0xDEAD/0xBEEF"   # no controller has this vendor/product ID
 DUMMY_PAD_SCRIPT = "none"              # any non-empty text without events: pad 1 reports connected, nothing is pressed
 SCRUB_PREFIXES = ("NO100F_", "AX_", "AUDIO_", "AURORA_")

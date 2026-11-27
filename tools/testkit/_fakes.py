@@ -18,7 +18,7 @@ class FakeGameCase(unittest.TestCase):
         self.src = root / "srcPlay"
         (self.src / "button_icons").mkdir(parents=True)
         (self.src / "button_icons" / "a.png").write_bytes(b"png")
-        (self.src / "FrightWorks Game.exe").write_bytes(b"MZ fake")
+        (self.src / "FrightWorks-No100F-Game.exe").write_bytes(b"MZ fake")
         (self.src / "SDL3.dll").write_bytes(b"dll")
         (self.src / "texture_replacements" / "ScoobyHD").mkdir(parents=True)
         (self.src / "texture_replacements" / "ScoobyHD" / "t.png").write_bytes(b"png")

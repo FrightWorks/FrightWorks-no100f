@@ -13,7 +13,9 @@
 // In both, [paths] saves_dir in Config.toml moves the saves.
 sealed class DataPaths
 {
-    public static readonly string GameExe = OperatingSystem.IsWindows() ? "FrightWorks Game.exe" : "FrightWorks Game";
+    public static readonly string GameExe = OperatingSystem.IsWindows() ? "FrightWorks-No100F-Game.exe" : "FrightWorks-No100F-Game";
+    // The game's name up to 1.2.1 ("FrightWorks Game"): an older copy to import from, or an installed one still running.
+    public static readonly string OldGameExe = OperatingSystem.IsWindows() ? "FrightWorks Game.exe" : "FrightWorks Game";
     const string Marker = "portable.txt";
     const int MarkerSearchDepth = 4;  // the game's kPortableSearchDepth
     public const string InstalledDataName = "FrightWorks-Data", UserFolderName = "FrightWorks";

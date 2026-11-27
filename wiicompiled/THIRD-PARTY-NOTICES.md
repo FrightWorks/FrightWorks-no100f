@@ -154,11 +154,11 @@ trees themselves (fetched by `Launcher/Prepare-Dependencies.ps1`) so end-user bu
 - **Zstandard** is offered under BSD-3-Clause or GPL-2.0. **This project elects BSD-3-Clause.**
   Copyright (c) Meta Platforms, Inc. and affiliates.
 
-## Launcher (`launcher/`) - NuGet packages built into `FrightWorks.exe`
+## Launcher (`launcher/`) - NuGet packages built into `FrightWorks-No100F-Launcher.exe`
 
 The launcher is an Avalonia application. Its packages are restored from nuget.org at build time (versions as
 restored for the current build: `launcher/FrightWorks.Launcher.csproj` and `obj/project.assets.json`) and
-end up inside the single-file `FrightWorks.exe`, with their native libraries unpacked next to it when it
+end up inside the single-file `FrightWorks-No100F-Launcher.exe`, with their native libraries unpacked next to it when it
 starts. Where a row says Windows or Linux, it is only used there.
 
 | Component | Version | License | Upstream |
@@ -171,7 +171,7 @@ starts. Where a row says Windows or Linux, it is only used there.
 | ANGLE (`Avalonia.Angle.Windows.Natives`, `av_libglesv2.dll`, Windows) | 2.1.27548.20260419 | BSD-3-Clause, Copyright 2018 The ANGLE Project Authors | <https://github.com/AvaloniaUI/angle> (Avalonia's build of Google's ANGLE) |
 | MicroCom.Runtime | 0.11.6 | MIT, Copyright 2021 Nikita Tsukanov | <https://github.com/kekekeks/MicroCom> |
 | Tmds.DBus.Protocol (used on Linux; the DLL is in both builds) | 0.94.1 | MIT, Copyright Tom Deseyn | <https://github.com/tmds/Tmds.DBus> |
-| Inter (the launcher's text font on Linux; bundled in `Avalonia.Fonts.Inter`, so also inside the Windows `FrightWorks.exe`) | 3.019 | SIL Open Font License 1.1, Copyright 2020 The Inter Project Authors ("Inter" is a trademark of Rasmus Andersson); the package `Avalonia.Fonts.Inter` 12.1.5 itself is MIT | <https://github.com/rsms/inter> |
+| Inter (the launcher's text font on Linux; bundled in `Avalonia.Fonts.Inter`, so also inside the Windows `FrightWorks-No100F-Launcher.exe`) | 3.019 | SIL Open Font License 1.1, Copyright 2020 The Inter Project Authors ("Inter" is a trademark of Rasmus Andersson); the package `Avalonia.Fonts.Inter` 12.1.5 itself is MIT | <https://github.com/rsms/inter> |
 
 `Avalonia.BuildServices` (a build-time package from Avalonia that reports usage) is not used: the
 launcher and layout-test projects pin it with every asset excluded and the repository's

@@ -1,4 +1,4 @@
-# Starts Play\FrightWorks Game.exe, waits, saves a PNG of the game window only (PrintWindow, no desktop input), stops it.
+# Starts Play\FrightWorks-No100F-Game.exe, waits, saves a PNG of the game window only (PrintWindow, no desktop input), stops it.
 # Usage: capture-window.ps1 [-Seconds 20] [-Out <png>] [-Every N]   (-Every: a shot every N s as <out>-<s>s.png)
 # Takes an exclusive game-run slot for the run (the screen; a slot the caller's checkout already holds is reused). Rumble is off and sound muted for the run; Play\UserData\Config.toml comes back byte for byte.
 param([int]$Seconds = 20, [string]$Out = '', [int]$Every = 0)
@@ -50,7 +50,7 @@ try {
     Enter-GameSlot $root 'capture-window'
     $userCfg = Set-RumbleOffForRun $cfg; $haveCfg = $true
     Set-ConfigLine $cfg 'audio' 'muted' 'muted = true' | Out-Null
-    $p = Start-Process (Join-Path $root 'Play\FrightWorks Game.exe') -WorkingDirectory (Join-Path $root 'Play') -PassThru `
+    $p = Start-Process (Join-Path $root 'Play\FrightWorks-No100F-Game.exe') -WorkingDirectory (Join-Path $root 'Play') -PassThru `
         -RedirectStandardOutput "$Out.log" -RedirectStandardError "$Out.err.log"
     if ($Every -gt 0) {
         for ($t = $Every; $t -le $Seconds -and -not $p.HasExited; $t += $Every) {

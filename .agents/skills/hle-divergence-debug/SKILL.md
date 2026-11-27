@@ -38,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
 # RT_LOGF goes to stderr; manual-session does not capture it, so launch directly after manual-session prepare (writes
 # Config/boot; manual-session stop afterwards puts the user's config back):
 $env:NO100F_DLTAIL = '1'
-Start-Process 'Play\FrightWorks Game.exe' -WorkingDirectory Play -RedirectStandardError autotest\manual\dltail.log -RedirectStandardOutput autotest\manual\dltail.out.log
+Start-Process 'Play\FrightWorks-No100F-Game.exe' -WorkingDirectory Play -RedirectStandardError autotest\manual\dltail.log -RedirectStandardOutput autotest\manual\dltail.out.log
 Select-String autotest\manual\dltail.log -Pattern '\[dltail\]' -Context 0,2
 git apply -R tools\debug\patches\dltail-diagnostic.patch   # remove before any PR
 ```

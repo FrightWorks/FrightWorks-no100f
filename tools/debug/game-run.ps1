@@ -21,7 +21,7 @@
 
 function Get-CheckoutGames([string]$Root) {
     $prefix = (Resolve-Path -LiteralPath $Root).Path.TrimEnd('\') + '\'
-    Get-CimInstance Win32_Process -Filter "Name = 'FrightWorks Game.exe'" -ErrorAction SilentlyContinue |
+    Get-CimInstance Win32_Process -Filter "Name = 'FrightWorks-No100F-Game.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }
 }
 

@@ -1,4 +1,4 @@
-# Assembles dist\FrightWorks: one exe on top (the launcher, named "FrightWorks.exe"), README.txt, recomplauncher.json
+# Assembles dist\FrightWorks: one exe on top (the launcher, named "FrightWorks-No100F-Launcher.exe"), README.txt, recomplauncher.json
 # (for RecompLauncher), and data\ with the game's runtime files. No disc data and no HD texture pack in the package (packs are an opt-in launcher
 # download, launcher\TexturePacks.cs).
 #   powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 [-Build] [-Zip]
@@ -19,7 +19,7 @@
 [CmdletBinding()] param([switch]$Build, [switch]$Zip, [switch]$Installer, [string]$Version, [string]$Feed, [switch]$NoDownload)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$launcher = "$root\launcher\publish\FrightWorks.exe"
+$launcher = "$root\launcher\publish\FrightWorks-No100F-Launcher.exe"
 $VpkVersion = '1.2.161'  # keep in step with the Velopack PackageReference in the launcher's .csproj
 if (-not $Version) {
     $Version = ([xml](Get-Content -Raw "$root\launcher\FrightWorks.Launcher.csproj")).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
@@ -33,13 +33,13 @@ elseif (-not (Test-Path -LiteralPath $launcher)) { & "$PSScriptRoot\build-launch
 function Stage([string]$to, [switch]$Installed) {
     New-Item -ItemType Directory -Force "$to\data" | Out-Null
     if (-not $Installed) { New-Item -ItemType Directory -Force "$to\data\UserData\mods" | Out-Null }
-    Copy-Item -LiteralPath $launcher -Destination "$to\FrightWorks.exe" -Force
+    Copy-Item -LiteralPath $launcher -Destination "$to\FrightWorks-No100F-Launcher.exe" -Force
     if (-not $Installed) {
         Copy-Item -LiteralPath "$PSScriptRoot\package-README.txt" -Destination "$to\README.txt" -Force
         # RecompLauncher reads it from the top of the zip, beside the program, to install, set up and start the game.
         Copy-Item -LiteralPath "$root\recomplauncher.json" -Destination "$to\recomplauncher.json" -Force
     }
-    $files = 'FrightWorks Game.exe', '*.dll', 'dsp_coef.bin', 'initial_pipeline_cache.db'
+    $files = 'FrightWorks-No100F-Game.exe', '*.dll', 'dsp_coef.bin', 'initial_pipeline_cache.db'
     if (-not $Installed) { $files += 'portable.txt' }
     foreach ($f in $files) {
         if (Test-Path "$root\Play\$f") { Copy-Item "$root\Play\$f" "$to\data" -Force }
@@ -109,7 +109,7 @@ if ($Installer) {
         & $vpk download github --repoUrl $RepoUrl --outputDir $Feed
         if ($LASTEXITCODE -ne 0) { throw "vpk download github failed" }
     }
-    & $vpk pack --packId FrightWorks --packVersion $Version --packDir $clean --mainExe FrightWorks.exe --runtime win-x64 `
+    & $vpk pack --packId FrightWorks --packVersion $Version --packDir $clean --mainExe FrightWorks-No100F-Launcher.exe --runtime win-x64 `
         --packTitle FrightWorks --packAuthors Loneranger419 --icon "$root\launcher\frightworks.ico" `
         --noPortable --outputDir $Feed
     if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }

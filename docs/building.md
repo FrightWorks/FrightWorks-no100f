@@ -8,7 +8,7 @@ Windows 10/11 x64 with Python 3.8 or newer and Git. The build downloads its own 
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\build-launcher.ps1
-& "launcher\publish\FrightWorks.exe" --extract "C:\path\to\game.iso" Disc\DATA
+& "launcher\publish\FrightWorks-No100F-Launcher.exe" --extract "C:\path\to\game.iso" Disc\DATA
 powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1
 powershell -ExecutionPolicy Bypass -File tools\package-scooby.ps1 -Zip          # or -Installer (Velopack)
 ```
@@ -41,6 +41,6 @@ them by those names). These packages build SDL3 for X11 only.
 
 ```sh
 tools/build-no100f-linux.sh /path/to/game.iso   # extracts the disc the first time, then builds the game into Play/
-tools/build-launcher.sh                         # the launcher: launcher/publish/FrightWorks
-launcher/publish/FrightWorks                    # or start the game directly: "Play/FrightWorks Game"
+tools/build-launcher.sh                         # the launcher: launcher/publish/FrightWorks-No100F-Launcher
+launcher/publish/FrightWorks-No100F-Launcher                    # or start the game directly: "Play/FrightWorks-No100F-Game"
 ```

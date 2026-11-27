@@ -43,7 +43,7 @@ boot mod that `manual-session start` creates (game data: local only).
 powershell -ExecutionPolicy Bypass -File tools\debug\manual-session.ps1 prepare -Boot i004 -AllPowerups   # saves user setup, writes zz-manual + Config
 python tools\debug\game\mkhip.py i004 --spot spot1            # spawn there, all NPCs moved off-map (--npc none keeps them)
 #   or: mkhip.py i004 --pos X Y Z --yaw R
-Start-Process 'Play\FrightWorks Game.exe' -WorkingDirectory Play   # not manual-session start: it rewrites zz-manual
+Start-Process 'Play\FrightWorks-No100F-Game.exe' -WorkingDirectory Play   # not manual-session start: it rewrites zz-manual
 powershell -ExecutionPolicy Bypass -File tools\debug\manual-session.ps1 stop   # when done: game closed, user setup back
 ```
 
@@ -132,14 +132,14 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
 powershell -ExecutionPolicy Bypass -File tools\debug\manual-session.ps1 prepare -Boot e001  # muted, rumble off, boot mod
 $env:NO100F_DEV_TOOLS = '0'
 $env:NO100F_PAD_SCRIPT = (Resolve-Path tools\debug\game\pad-walk-check.txt).Path            # full path: the game runs in Play\
-Start-Process 'Play\FrightWorks Game.exe' -WorkingDirectory Play -RedirectStandardError autotest\pad-script.log
+Start-Process 'Play\FrightWorks-No100F-Game.exe' -WorkingDirectory Play -RedirectStandardError autotest\pad-script.log
 # wait on the [padscript] step lines in the log; manual-session.ps1 shot takes a picture
 powershell -ExecutionPolicy Bypass -File tools\debug\manual-session.ps1 stop
 Remove-Item Env:NO100F_*
 git apply -R tools\debug\patches\pad-script.patch                                           # next build: full translate
 ```
 
-For dev tools on, `manual-session start` passes the variable to the game. A real pad still counts, and the game reads it without focus, so leave it alone during a run. On Linux `manual-session` isn't available: set the same variables, set `[audio] muted` and `[controller] rumble = false` yourself and run `Play/FrightWorks Game`.
+For dev tools on, `manual-session start` passes the variable to the game. A real pad still counts, and the game reads it without focus, so leave it alone during a run. On Linux `manual-session` isn't available: set the same variables, set `[audio] muted` and `[controller] rumble = false` yourself and run `Play/FrightWorks-No100F-Game`.
 
 Textures tab (for HD pack audits): every static texture drawn since the level was entered, from aurora's drawn list
 (`aurora_texture_track_drawn` / `aurora_texture_drawn`, filled in gx.cpp `note_debug_key` on every texture resolve; the

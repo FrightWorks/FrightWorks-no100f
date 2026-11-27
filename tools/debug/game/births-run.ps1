@@ -9,7 +9,7 @@ $root = (Resolve-Path "$PSScriptRoot\..\..\..").Path
 Set-Location $root
 $out = Join-Path $root 'autotest\manual\births'
 New-Item -ItemType Directory -Force $out | Out-Null
-$exe = Join-Path $root 'Play\FrightWorks Game.exe'
+$exe = Join-Path $root 'Play\FrightWorks-No100F-Game.exe'
 $cfg = Join-Path $root 'Play\UserData\Config.toml'
 function Stop-Game { Stop-CheckoutGames $root; Start-Sleep 1 }
 try {

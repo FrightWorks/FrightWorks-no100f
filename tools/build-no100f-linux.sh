@@ -4,7 +4,7 @@
 # (or 7z / unrar) on PATH; CMake and the .NET 10 SDK are downloaded into toolchain/ (nothing system-wide).
 #   tools/build-no100f-linux.sh [path/to/game.iso]
 # FRIGHTWORKS_JOBS=<n> limits the parallel jobs (default: all cores).
-# The disc image is only needed the first time (it is extracted to Disc/DATA). The game ends up in "Play/FrightWorks Game",
+# The disc image is only needed the first time (it is extracted to Disc/DATA). The game ends up in "Play/FrightWorks-No100F-Game",
 # with settings, saves and logs in Play/UserData (Play/portable.txt is the marker).
 set -euo pipefail
 
@@ -81,15 +81,18 @@ step configure-linux "$cmake" -S runtime -B "$build" -G Ninja \
 step compile-linux "$cmake" --build "$build" --target WiiCompiled --parallel "$jobs"
 
 # 4. Stage Play/: the program, its runtime files and a Config.toml pointing at Disc/DATA
+pkill -f "^$play/FrightWorks-No100F-Game" 2>/dev/null || true
+install -m 755 "$build/WiiCompiled" "$play/FrightWorks-No100F-Game"
+# The game's name up to 1.2.1: a Play/ built before the rename still has it, and it would be the stale one.
 pkill -f "^$play/FrightWorks Game" 2>/dev/null || true
-install -m 755 "$build/WiiCompiled" "$play/FrightWorks Game"
+rm -f "$play/FrightWorks Game"
 cp "$build/dsp_coef.bin" "$build/cacert.pem" "$build/initial_pipeline_cache.db" "$play/"
 mkdir -p "$play/UserData"
 [[ -f "$play/UserData/Config.toml" ]] || printf "[paths]\ndvd_root = '../../Disc/DATA'\n" >"$play/UserData/Config.toml"
-status "copied to $play/FrightWorks Game"
+status "copied to $play/FrightWorks-No100F-Game"
 
 # 5. The button prompt icons: tools/stage-assets.py, the same script the Windows build runs. No HD texture pack: the
 # launcher downloads one when the player chooses it (2026-11-24).
 step stage-assets python3 "$root/tools/stage-assets.py" --game-dir "$play"
 grep -E '^(Removed|Button icons|WARNING)' "$logs/stage-assets.log" | while IFS= read -r line; do status "$line"; done || true
-status "DONE: run $play/FrightWorks Game (or the launcher: tools/build-launcher.sh)"
+status "DONE: run $play/FrightWorks-No100F-Game (or the launcher: tools/build-launcher.sh)"

@@ -14,7 +14,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path   # repo root
 . (Join-Path $PSScriptRoot '..\game-run.ps1')  # Get-CheckoutGames: only this checkout's game
 Set-Location $root
 $play = Join-Path $root 'Play'
-$exe = Join-Path $play 'FrightWorks Game.exe'
+$exe = Join-Path $play 'FrightWorks-No100F-Game.exe'
 $ms = Join-Path $root 'tools\debug\manual-session.ps1'
 $cfg = Join-Path $play 'UserData\Config.toml'
 $cmdFile = Join-Path $play 'devmenu.txt'
