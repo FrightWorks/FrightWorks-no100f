@@ -402,7 +402,9 @@ static class LauncherControllerTests
         Check(modsBoard.Selected?.Label == "ModB", "Up after a switch did not go back to the previous mod.");
         // A mouse click on a mod's switch: it switches, and the selection follows to that mod.
         var clicked = Mod("ModA");
-        var at = clicked.TranslatePoint(new Point(clicked.Bounds.Width - 40, clicked.Bounds.Height / 2), w)!.Value;
+        // The middle of its value (On / Off between the arrows) flips it.
+        double valueMiddle = clicked.Bounds.Width - 14 - Math.Clamp(clicked.Bounds.Width * 0.46, 170, 360) / 2;
+        var at = clicked.TranslatePoint(new Point(valueMiddle, clicked.Bounds.Height / 2), w)!.Value;
         w.MouseMove(at); w.MouseDown(at, MouseButton.Left); w.MouseUp(at, MouseButton.Left);
         Wait(() => File.Exists(Path.Combine(paths.Mods, "ModA", "disabled")) && modsBoard.Selected?.IsAttachedToVisualTree() == true);
         Check(File.Exists(Path.Combine(paths.Mods, "ModA", "disabled")) && modsBoard.Selected?.Label == "ModA", "A mouse click on a mod didn't switch it and select it.");

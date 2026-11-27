@@ -599,12 +599,14 @@ static class LauncherLayoutTests
         Check(PackFolders().StartsWith("10-scoobyhd,20-menu,30-My own pack"), "Dropping a dragged pack didn't renumber the folders: " + PackFolders());
         Pump();
         var own = extrasMenu.Rows.OfType<OrderRow>().Single(r => r.Label.StartsWith("My own pack"));
-        var toggle = own.TranslatePoint(new Point(own.Bounds.Width - 40, own.Bounds.Height / 2), window)!.Value;
+        // The value's left arrow (the value takes 46% of the row, 170 to 360 wide, 14 from the right edge).
+        double valueLeft = own.Bounds.Width - 14 - Math.Clamp(own.Bounds.Width * 0.46, 170, 360);
+        var toggle = own.TranslatePoint(new Point(valueLeft + 14, own.Bounds.Height / 2), window)!.Value;
         window.MouseMove(toggle);
         window.MouseDown(toggle, MouseButton.Left);
         window.MouseUp(toggle, MouseButton.Left);
         Pump();
-        Check(File.Exists(Path.Combine(Path.GetDirectoryName(config)!, "texture_packs", own.Key, "disabled")), "A click on a pack's switch didn't switch it off");
+        Check(File.Exists(Path.Combine(Path.GetDirectoryName(config)!, "texture_packs", own.Key, "disabled")), "A click on a pack's left arrow didn't switch it off");
         window.boards["extras"].SelectTab(0);
         window.CloseBoards();
         Pump();

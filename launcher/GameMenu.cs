@@ -230,17 +230,24 @@ abstract class MenuRow : Control
     public virtual bool Busy => false;
     public virtual void Settle() { }
 
-    // An on / off switch at the right of the value area, with On or Off before it.
-    protected void DrawSwitch(DrawingContext g, bool on)
+    // On / off drawn the console way, like a two-value choice: an arrow each side of On or Off and two dots (Off, On).
+    // Left turns it off and right on, so the arrow that would do nothing now is dimmed.
+    protected void DrawSwitch(DrawingContext g, bool on, bool arrows = true)
     {
         var v = ValueRect;
         bool enabled = IsEffectivelyEnabled;
-        var track = new Rect(v.Right - 50, (v.Height - 24) / 2, 48, 24);
-        g.DrawGeometry(Brush(on && enabled ? Lime : Field), new Pen(Brush(on && enabled ? LimeDeep : Purple), 1.5), Rounded(track, 12));
-        double knob = on ? track.Right - 12 : track.X + 12;
-        g.DrawEllipse(Brush(on && enabled ? Ink : enabled ? CreamDim : WithAlpha(CreamDim, 90)), null, new Point(knob, track.Center.Y), 8, 8);
-        var text = MenuText.Make(on ? "On" : "Off", 15, TextColor(true));
-        g.DrawText(text, new Point(track.X - 12 - text.Width, Math.Round((v.Height - text.Height) / 2)));
+        double mid = v.Height / 2 - 3;
+        Color Arrow(bool live) => !enabled ? WithAlpha(CreamDim, 70) : !live ? WithAlpha(CreamDim, 60) : Selected ? Lime : WithAlpha(CreamDim, 150);
+        if (arrows)
+        {
+            MenuRow.Arrow(g, new Point(v.X + 12, mid), -1, Arrow(on));
+            MenuRow.Arrow(g, new Point(v.Right - 12, mid), 1, Arrow(!on));
+        }
+        var text = MenuText.Make(on ? "On" : "Off", 15, on && enabled ? Cream : TextColor(false), on ? FontWeight.SemiBold : FontWeight.Normal);
+        g.DrawText(text, new Point(Math.Round(v.X + (v.Width - text.Width) / 2), Math.Round(mid - text.Height / 2)));
+        double y = mid + text.Height / 2 + 5, x = v.X + v.Width / 2 - 4.5;
+        g.DrawEllipse(Brush(!on && enabled ? Lime : WithAlpha(CreamDim, 90)), null, new Point(x, y), 2, 2);
+        g.DrawEllipse(Brush(on && enabled ? Lime : WithAlpha(CreamDim, 90)), null, new Point(x + 9, y), 2, 2);
     }
 
     protected double ValueWidth => Math.Clamp(Bounds.Width * 0.46, 170, 360);
@@ -458,6 +465,15 @@ sealed class ToggleRow : MenuRow
     public override void Change(int direction) { if (IsEffectivelyEnabled) IsChecked = direction > 0; }
     public override void Activate() { if (IsEffectivelyEnabled) IsChecked = isChecked != true; }
 
+    // A click on an arrow sets it as left / right do; anywhere else on the row flips it.
+    protected override void Click(Point at)
+    {
+        var v = ValueRect;
+        if (v.Contains(at) && at.X < v.X + 34) Change(-1);
+        else if (v.Contains(at) && at.X > v.Right - 34) Change(1);
+        else Activate();
+    }
+
     protected override void RenderValue(DrawingContext g) => DrawSwitch(g, isChecked == true);
 }
 
@@ -579,7 +595,11 @@ sealed class OrderRow : MenuRow
     // ----- The mouse: a click on the switch flips it; a press on the name and a move up or down drags the row -----
     protected override void Click(Point at)
     {
-        if (!carrying && ValueRect.Contains(at)) IsChecked = !on;
+        var v = ValueRect;
+        if (carrying || !v.Contains(at)) return;
+        if (at.X < v.X + 34) Change(-1);
+        else if (at.X > v.Right - 34) Change(1);
+        else IsChecked = !on;
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -629,13 +649,13 @@ sealed class OrderRow : MenuRow
         if (!carrying) return;
         var r = new Rect(Bounds.Size);
         g.DrawGeometry(null, new Pen(Brush(Lime), 2), Rounded(r.Deflate(1), 9));
-        // Up and down marks before the value: this row moves.
-        double x = ValueRect.X + 14, y = r.Height / 2;
+        // Up and down marks where the left arrow was (left / right do nothing while it is carried): this row moves.
+        double x = ValueRect.X + 12, y = r.Height / 2;
         g.DrawGeometry(Brush(Lime), null, Polygon(new[] { new Point(x, y - 12), new Point(x - 6, y - 4), new Point(x + 6, y - 4) }));
         g.DrawGeometry(Brush(Lime), null, Polygon(new[] { new Point(x, y + 12), new Point(x - 6, y + 4), new Point(x + 6, y + 4) }));
     }
 
-    protected override void RenderValue(DrawingContext g) => DrawSwitch(g, on);
+    protected override void RenderValue(DrawingContext g) => DrawSwitch(g, on, arrows: !carrying);
 }
 
 // Opens or does something: A or a click. Its value (a status, a key) shows on the right, before a small arrow.
