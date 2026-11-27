@@ -78,7 +78,7 @@ X removes a downloaded pack; the launcher never deletes a folder you added. To k
 numbers the folders (`10-`, `20-`, ...). Your own `texture_replacements` folder and mods still win over every pack.
 
 **Discord.** With the Discord desktop app running, your Discord status shows the launcher, or in the game the level
-you're in, your completion (the percentage the load screen shows, from your last save) and Snacks, the main menu or the
+you're in, your completion (live, the same percentage the load screen shows for a save) and Snacks, the main menu or the
 credits, and how long you've played. Friends also see
 two buttons to get the game. The launcher and the game only talk to the Discord app on your PC. Discord's **User
 Settings > Activity Privacy** decides who sees it; **Settings > Game > Show in my Discord status** in the launcher

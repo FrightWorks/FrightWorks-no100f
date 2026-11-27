@@ -528,6 +528,11 @@ target_include_directories(no100f_discord_status_tests PRIVATE "${CMAKE_CURRENT_
 target_compile_features(no100f_discord_status_tests PRIVATE cxx_std_17)
 add_test(NAME no100f_discord_status_tests COMMAND no100f_discord_status_tests)
 
+add_executable(no100f_progress_tests "${CMAKE_CURRENT_LIST_DIR}/tests/no100f_progress_tests.cpp")
+target_include_directories(no100f_progress_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
+target_compile_features(no100f_progress_tests PRIVATE cxx_std_17)
+add_test(NAME no100f_progress_tests COMMAND no100f_progress_tests)
+
 add_executable(no100f_title_backdrop_tests "${CMAKE_CURRENT_LIST_DIR}/tests/no100f_title_backdrop_tests.cpp")
 target_include_directories(no100f_title_backdrop_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
 target_compile_features(no100f_title_backdrop_tests PRIVATE cxx_std_17)
