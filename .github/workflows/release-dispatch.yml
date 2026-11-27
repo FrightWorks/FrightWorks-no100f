@@ -1,0 +1,35 @@
+name: Release dispatch
+
+# When a release is published, rebuild https://frightworks.dev (version label, download buttons, zip and tarball
+# links) and refresh the download stats right away, instead of waiting for their polling (up to about an hour).
+# Releases are made by hand as drafts with every file uploaded first, so "published" fires once all assets exist.
+#
+# Needs the repo secret RELEASE_DISPATCH_TOKEN: a fine-grained token, resource owner FrightWorks, repositories
+# FrightWorks-site and download-stats only, permission Actions: read and write (to start their workflows; it can't
+# push code). It expires; when it does this workflow warns and the sites fall back to polling.
+
+on:
+  release:
+    types: [published]
+  # Run by hand from the Actions tab, e.g. after renewing the token.
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Start the site build and the stats run
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::RELEASE_DISPATCH_TOKEN isn't set; frightworks.dev and the stats pick up the release by polling (up to about an hour)."
+            exit 0
+          fi
+          fail=0
+          gh workflow run deploy.yml --repo FrightWorks/FrightWorks-site --ref main || { echo "::error::Couldn't start FrightWorks-site deploy.yml"; fail=1; }
+          gh workflow run stats.yml --repo FrightWorks/download-stats --ref main || { echo "::error::Couldn't start download-stats stats.yml"; fail=1; }
+          exit $fail
