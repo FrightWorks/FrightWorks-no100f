@@ -453,33 +453,44 @@ bool SliderInt(const char* label, int* value, int min, int max, int step, const 
     return true;
 }
 
+// On / off drawn the console way, like a two-value Choice (the D-pad sets it, so no pill switch): an arrow each side of
+// On or Off and two pips (Off, On). Left turns it off and right on, so the arrow that would do nothing now is dimmed. A
+// click on an arrow does what that direction does; elsewhere on the row (and A) flips it.
 bool Toggle(const char* label, bool* value) {
     RowFrame r;
     const bool visible = BeginRow(label, Kind::Toggle, r);
     const bool before = *value;
+    const float arrowZone = Px(34);
     if (r.adjust < 0) *value = false;
     if (r.adjust > 0) *value = true;
-    if (r.activate) *value = !*value;
+    if (r.activate) {
+        const float mouseX = ImGui::GetIO().MousePos.x;
+        if (r.clicked && mouseX >= r.value.Min.x && mouseX < r.value.Min.x + arrowZone) *value = false;
+        else if (r.clicked && mouseX <= r.value.Max.x && mouseX > r.value.Max.x - arrowZone) *value = true;
+        else *value = !*value;
+    }
     const bool changed = *value != before;
     if (changed) ImGui::MarkItemEdited(r.id);
     if (!visible) return changed;
 
     ImDrawList* list = ImGui::GetCurrentWindow()->DrawList;
-    const float height = Px(26);
-    const float width = Px(50);
-    const float y = std::round((r.bb.Min.y + r.bb.Max.y) * 0.5f);
-    const ImVec2 a(r.value.Max.x - width, y - height * 0.5f);
-    const ImVec2 b(r.value.Max.x, y + height * 0.5f);
-    list->AddRectFilled(a, b, *value ? UiCol(Colour::LimeDeep) : UiCol(Colour::Field), height * 0.5f);
-    list->AddRect(a, b, *value ? UiCol(Colour::Lime) : UiCol(Colour::Purple, 0.9f), height * 0.5f, 0, Px(1.5f));
-    const float knob = height * 0.5f - Px(4);
-    list->AddCircleFilled(ImVec2(*value ? b.x - height * 0.5f : a.x + height * 0.5f, y), knob,
-                          *value ? UiCol(Colour::Cream) : UiCol(Colour::CreamDim, 0.85f));
-    ImFont* font = Row();
-    const char* text = *value ? "On" : "Off";
-    const ImVec2 size = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, text);
-    list->AddText(font, font->FontSize, ImVec2(std::round(a.x - Px(14) - size.x), std::round(y - size.y * 0.5f)),
-                  *value ? UiCol(Colour::Cream) : UiCol(Colour::CreamDim), text);
+    const float arrowSize = Px(14);
+    const float midY = std::round((r.value.Min.y + r.value.Max.y) * 0.5f - Px(4));
+    const auto arrow = [&](bool live) {
+        return live ? UiCol(r.selected ? Colour::Lime : Colour::CreamDim, r.selected ? 1.0f : 0.45f) : UiCol(Colour::CreamDim, 0.18f);
+    };
+    Arrow(list, ImVec2(r.value.Min.x + arrowZone * 0.5f, midY), arrowSize, false, arrow(*value));
+    Arrow(list, ImVec2(r.value.Max.x - arrowZone * 0.5f, midY), arrowSize, true, arrow(!*value));
+    const ImRect text(ImVec2(r.value.Min.x + arrowZone, r.value.Min.y), ImVec2(r.value.Max.x - arrowZone, r.value.Max.y));
+    CentredText(list, Row(), text, *value ? UiCol(Colour::Cream) : UiCol(Colour::CreamDim), *value ? "On" : "Off", -Px(4));
+    const float gap = Px(11);
+    const float y = r.value.Max.y - Px(9);
+    const float x = std::round((r.value.Min.x + r.value.Max.x) * 0.5f - gap * 0.5f);
+    for (int n = 0; n < 2; ++n) {
+        const bool on = (n == 1) == *value;
+        list->AddCircleFilled(ImVec2(x + gap * static_cast<float>(n), y), on ? Px(3) : Px(2.2f),
+                              on ? UiCol(Colour::Lime) : UiCol(Colour::CreamDim, 0.4f));
+    }
     return changed;
 }
 
