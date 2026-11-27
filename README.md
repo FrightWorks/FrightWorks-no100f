@@ -55,7 +55,9 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
 1. Download from the [latest release](https://github.com/FrightWorks/FrightWorks-no100f/releases/latest):
    - **Windows 10/11 (64-bit):** `FrightWorks-win-Setup.exe` (no admin rights; updates itself), or the zip to keep
      everything in one folder. Windows may warn about an unknown publisher: **More info** > **Run anyway**.
-   - **Linux (beta):** `FrightWorks.AppImage` (x86_64, glibc 2.34+, Vulkan). `chmod +x` it and run it.
+   - **Linux (beta):** `FrightWorks.AppImage` (x86_64, glibc 2.34+, Vulkan; updates itself). `chmod +x` it and run it.
+     Or the portable `FrightWorks-<version>-Linux-x64.tar.gz` to keep everything in one folder: extract it and run
+     `./FrightWorks` in the `FrightWorks` folder.
 2. Open **FrightWorks** and press **Play**. The first time, it asks for your disc image.
 
 Or install it from [RecompLauncher](https://recomplauncher.com): it sets up your disc and starts the game for you
