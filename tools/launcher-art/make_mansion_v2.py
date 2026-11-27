@@ -2,7 +2,8 @@
 
     python tools/launcher-art/make_mansion_v2.py <mansion concept.png> <background concept.png> <out_dir>
 
-Run tools/launcher-art/draw_bars.py on the house concept first: it redraws the window bars as straight lines.
+Run tools/launcher-art/draw_bars.py on the house concept first: it redraws the window bars as straight lines. Then run
+tools/launcher-art/smooth_glass.py on the result: it antialiases the glass cut-outs.
 """
 import json
 import os
