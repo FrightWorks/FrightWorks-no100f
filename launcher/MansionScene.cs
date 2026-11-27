@@ -103,7 +103,7 @@ sealed class MansionScene : Control
     // state.
     sealed class Group
     {
-        public double Light = 1, LightTo = 1, Curtain, CurtainTo, Figure, FigureTo, FigureUntil;
+        public double Light = 1, LightTo = 1, Curtain, CurtainTo, Figure;
         public double Seed;
         public bool Curtains, Flame, Lit = true;
         // Where the group's one set of curtains hangs: across all its panes (see GroupGlass).
@@ -127,6 +127,7 @@ sealed class MansionScene : Control
     readonly Dictionary<string, Group> groups = new();
     readonly List<Sign> signs = new();
     static readonly HashSet<string> CurtainGroups = new() { "parlor", "right_arch", "right_tower", "tower" };
+    static readonly HashSet<string> FigureGroups = new() { "parlor", "tower" };  // the dog's and the Mastermind's
     const string Lanterns = "lanterns";  // the porch lanterns: always lit, a flame that flickers and dips in the wind
 
     double s = 1;
@@ -165,9 +166,9 @@ sealed class MansionScene : Control
             g.Curtains = CurtainGroups.Contains(id);
             g.Flame = id == Lanterns;
         }
-        // A lived-in start: most rooms lit, a couple dark, some curtains half drawn.
+        // A lived-in start: most rooms lit, a couple dark, some curtains half drawn, the dog at the window.
         foreach (var id in new[] { "attic", "right_tower" }) Set(id, light: 0);
-        Set("parlor", curtain: 0.35);
+        Set("parlor", curtain: 0.35, figure: 1);
         Set("right_arch", curtain: 1);
         nextStrike = 3 + rnd.NextDouble() * 5;
         nextEvent = 1.5;
@@ -202,7 +203,7 @@ sealed class MansionScene : Control
         if (!groups.TryGetValue(id, out var g)) return;
         if (light is double l) { g.Light = g.LightTo = l; g.Lit = l > 0.5; }
         if (curtain is double c) g.Curtain = g.CurtainTo = c;
-        if (figure is double f) { g.Figure = g.FigureTo = f; g.FigureUntil = f > 0 ? double.MaxValue : 0; }
+        if (figure is double f) g.Figure = f;
     }
 
     void LoadLayout()
@@ -249,7 +250,7 @@ sealed class MansionScene : Control
     public void Showcase(bool lightning)
     {
         timer.Stop();
-        foreach (var g in groups.Values) { g.Light = g.LightTo = 1; g.Curtain = g.CurtainTo = 0; g.Figure = g.FigureTo = 0; }
+        foreach (var g in groups.Values) { g.Light = g.LightTo = 1; g.Curtain = g.CurtainTo = 0; g.Figure = 0; }
         Set("parlor", figure: 1);
         Set("tower", figure: 1);
         Set("parlor", curtain: 0.35);
@@ -275,8 +276,6 @@ sealed class MansionScene : Control
         {
             g.Light = Approach(g.Light, g.LightTo, dt * 2.5);
             g.Curtain = Approach(g.Curtain, g.CurtainTo, dt * 0.7);
-            if (g.FigureTo > 0 && t > g.FigureUntil) g.FigureTo = 0;
-            g.Figure = Approach(g.Figure, g.FigureTo, dt * 1.3);
         }
         if (t >= nextEvent) { WindowEvent(t); nextEvent = t + 1.2 + rnd.NextDouble() * 2.8; }
         if (t >= nextStrike)
@@ -301,20 +300,23 @@ sealed class MansionScene : Control
             g.Light = 0.45;  // the wind: a dip that comes straight back
             return;
         }
-        if ((id == "parlor" || id == "tower") && g.LightTo > 0.5 && g.FigureTo == 0 && r < 0.45)
-        {
-            g.FigureTo = 1;
-            g.FigureUntil = t + 3 + rnd.NextDouble() * 4;
-            return;
-        }
-        if (g.Curtains && g.LightTo > 0.5 && r < 0.75)
+        // A lit window with curtains: draw them (fully, half) or open them.
+        if (g.Curtains && g.LightTo > 0.5 && r < 0.5)
         {
             g.CurtainTo = g.CurtainTo > 0.3 ? 0 : rnd.NextDouble() < 0.5 ? 1 : 0.55;
             return;
         }
+        // Else the light: a lit window goes dark (always when more than four are lit); a dark one lights up again.
         int lit = groups.Where(x => x.Key != Lanterns).Count(x => x.Value.LightTo > 0.5);
-        if (g.LightTo > 0.5 && lit > 4) { g.LightTo = 0; g.FigureTo = 0; }
-        else g.LightTo = 1;
+        if (g.LightTo > 0.5)
+        {
+            if (lit > 4 || rnd.NextDouble() < 0.45) g.LightTo = 0;
+            return;
+        }
+        // The dog and the Mastermind come and go only while their window is black: lighting up again after it went
+        // fully dark, half the time someone has arrived or left.
+        if (FigureGroups.Contains(id) && g.Light < 0.02 && rnd.NextDouble() < 0.5) g.Figure = g.Figure > 0.5 ? 0 : 1;
+        g.LightTo = 1;
     }
 
     double Flash()
