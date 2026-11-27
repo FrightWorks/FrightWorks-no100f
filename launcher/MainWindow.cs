@@ -1007,7 +1007,7 @@ sealed class MainWindow : Window
     Control DiscordBox()
     {
         var box = new ToggleRow("Show in my Discord status", "With the Discord app running, your status shows the launcher, or the level " +
-                                "and Scooby Snacks you're on, with buttons for friends to get the game. Discord's Activity Privacy settings decide who sees it.")
+                                "you're on, your completion and Snacks, with buttons for friends to get the game. Discord's Activity Privacy settings decide who sees it.")
         {
             IsChecked = DiscordPresence.EnabledIn(new GameConfig(configPath)),
         };

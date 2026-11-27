@@ -430,7 +430,7 @@ inline void EnsureConfigFile() {
               "[network]\n"
               "enabled = true\n\n"
               "[discord]\n"
-              "# Shows what you're playing in your Discord status (level, area, Scooby\n"
+              "# Shows what you're playing in your Discord status (level, completion,\n"
               "# Snacks). Talks only to the Discord app running on this PC; Discord's own\n"
               "# Activity Privacy settings still apply. false turns it off.\n"
               "enabled = true\n"

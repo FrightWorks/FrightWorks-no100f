@@ -23,6 +23,8 @@ static Snapshot InPlay(const char (&scene)[5], uint32_t mode = kModeInPlay) {
     s.scene = SceneId(scene);
     s.snacksKnown = true;
     s.snacks = 1240;
+    s.percentKnown = true;
+    s.percent = 30;
     return s;
 }
 
@@ -43,27 +45,28 @@ int main() {
         }
         Require(FindLevel(0) == nullptr && FindLevel(SceneId("H001")) == nullptr, "no level for 0 or the hub");
 
-        Expect(Describe(InPlay("E004")), "On Edge in the Hedge!", "Part 1 | 1,240 Scooby Snacks",
-               "level in play");
-        Expect(Describe(InPlay("I001")), "Clamor in the Manor!", "Part 1 | 1,240 Scooby Snacks", "i001");
-        Expect(Describe(InPlay("I004")), "Mind Your Manors!", "Part 2 | 1,240 Scooby Snacks", "i004");
-        Expect(Describe(InPlay("E008")), "Chills & Spills on Haunted Hill!", "Part 3 | 1,240 Scooby Snacks",
-               "third level of an area");
-        Expect(Describe(InPlay("B002")), "Who's Yella' in the Cellar?", "1,240 Scooby Snacks",
-               "an area with one level has no part");
-        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In", "Part 2 (paused)",
-               "paused");
-        Expect(Describe(InPlay("G001", kModeSave)), "A Tight Spot for a Grave Plot!", "Saving the game", "save menu");
-        Expect(Describe(InPlay("H001")), "At the Mystery Machine", "1,240 Scooby Snacks", "hub");
-        Expect(Describe(InPlay("H002")), "In the playground", "1,240 Scooby Snacks", "playground");
-        Expect(Describe(InPlay("H002", kModePause)), "In the playground", "Paused", "playground paused");
-        Expect(Describe(InPlay("H003")), "In the Monster Gallery", "1,240 Scooby Snacks", "gallery");
+        Expect(Describe(InPlay("E004")), "On Edge in the Hedge!", "30% complete | 1,240 Snacks", "level in play");
+        Expect(Describe(InPlay("I004")), "Mind Your Manors!", "30% complete | 1,240 Snacks", "i004");
+        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In", "30% complete | 1,240 Snacks",
+               "paused: still only the completion and the snacks");
+        Expect(Describe(InPlay("G001", kModeSave)), "A Tight Spot for a Grave Plot!", "30% complete | 1,240 Snacks",
+               "save menu");
+        Expect(Describe(InPlay("H001")), "At the Mystery Machine", "30% complete | 1,240 Snacks", "hub");
+        Expect(Describe(InPlay("H002")), "In the playground", "30% complete | 1,240 Snacks", "playground");
+        Expect(Describe(InPlay("H003")), "In the Monster Gallery", "30% complete | 1,240 Snacks", "gallery");
         Expect(Describe(InPlay("S006")), "Watching the ending", "", "ending");
         Expect(Describe(InPlay("ZZZZ")), "", "", "unknown scene");
 
+        Snapshot noPercent = InPlay("F001");
+        noPercent.percentKnown = false;  // a new game before its first save
+        Expect(Describe(noPercent), "Shock on the Dock!", "1,240 Snacks", "completion not known yet");
         Snapshot noSnacks = InPlay("F001");
         noSnacks.snacksKnown = false;
-        Expect(Describe(noSnacks), "Shock on the Dock!", "Part 1", "snacks unreadable");
+        Expect(Describe(noSnacks), "Shock on the Dock!", "30% complete", "snacks unreadable");
+        Snapshot full = InPlay("S004");
+        full.percent = 100;
+        full.snacks = 1;
+        Expect(Describe(full), "Mastermind Unmasked!", "100% complete | 1 Snack", "100% and one snack");
 
         Snapshot menu = InPlay("H001", kModeTitle);
         Expect(Describe(menu), "In the main menu", "", "title");
@@ -85,12 +88,12 @@ int main() {
         unknownBuild.layoutVerified = false;
         Expect(Describe(unknownBuild), "", "", "unverified layout");
 
-        Require(SnackText(0) == "0 Scooby Snacks", "0");
-        Require(SnackText(1) == "1 Scooby Snack", "1");
-        Require(SnackText(999) == "999 Scooby Snacks", "999");
-        Require(SnackText(1000) == "1,000 Scooby Snacks", "1000");
-        Require(SnackText(99999) == "99,999 Scooby Snacks", "99999");
-        Require(SnackText(1234567) == "1,234,567 Scooby Snacks", "1234567");
+        Require(SnackText(0) == "0 Snacks", "0");
+        Require(SnackText(1) == "1 Snack", "1");
+        Require(SnackText(999) == "999 Snacks", "999");
+        Require(SnackText(1000) == "1,000 Snacks", "1000");
+        Require(SnackText(99999) == "99,999 Snacks", "99999");
+        Require(SnackText(1234567) == "1,234,567 Snacks", "1234567");
     } catch (const std::exception& error) {
         std::cerr << "FAILED: " << error.what() << '\n';
         return 1;
