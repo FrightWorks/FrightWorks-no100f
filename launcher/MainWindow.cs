@@ -57,6 +57,7 @@ sealed class MainWindow : Window
     bool startupReady;
     internal ToggleRow autoLayout = null!;
     readonly DispatcherTimer padTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    readonly DiscordPresence discord = new();
 
     public MainWindow(string? shotDir = null, DataPaths? dataPaths = null, bool enableServices = true)
     {
@@ -118,7 +119,7 @@ sealed class MainWindow : Window
         };
         // Connected controllers: shown on Settings > Controls; an Xbox pad asks for the layout once.
         padTimer.Tick += (_, _) => RefreshGamepads().Watch();
-        Closed += (_, _) => { padTimer.Stop(); navigation.Dispose(); gamepads.Dispose(); ffmpegCancel?.Cancel(); packCancel?.Cancel(); };
+        Closed += (_, _) => { padTimer.Stop(); navigation.Dispose(); gamepads.Dispose(); ffmpegCancel?.Cancel(); packCancel?.Cancel(); discord.Dispose(); };
         Opened += (_, _) =>
         {
             if (shotDir != null) { Dispatcher.UIThread.Post(() => TakeShots(shotDir), DispatcherPriority.Background); return; }
@@ -126,6 +127,8 @@ sealed class MainWindow : Window
             UpdateControllerOwnership();
             navigation.Start();
             padTimer.Start();
+            discord.SetPaused(GameRunning());
+            discord.SetEnabled(DiscordPresence.EnabledIn(new GameConfig(configPath)));
             scene.Focus(NavigationMethod.Directional);
         };
     }
@@ -710,6 +713,8 @@ sealed class MainWindow : Window
         // Game
         card = Section(game, "Holidays");
         card.Children.Add(HolidayBox());
+        card = Section(game, "Discord");
+        card.Children.Add(DiscordBox());
         card = Section(game, "Developer tools");
         card.Children.Add(DevToolsBox());
         ffmpegStatus = Indent(Hint(""));
@@ -994,6 +999,24 @@ sealed class MainWindow : Window
             var c = new GameConfig(configPath);
             c.SetString("game", "holiday", Holidays[box.SelectedIndex].value);
             c.Save();
+        };
+        return box;
+    }
+
+    // [discord] enabled: the launcher's status at once, the game's from its next start (on unless false).
+    Control DiscordBox()
+    {
+        var box = new ToggleRow("Show in my Discord status", "With the Discord app running, your status shows the launcher, or the level " +
+                                "you're on, your completion and Snacks, with buttons for friends to get the game. Discord's Activity Privacy settings decide who sees it.")
+        {
+            IsChecked = DiscordPresence.EnabledIn(new GameConfig(configPath)),
+        };
+        box.IsCheckedChanged += (_, _) =>
+        {
+            var c = new GameConfig(configPath);
+            c.Set("discord", "enabled", box.IsChecked == true ? "true" : "false");
+            c.Save();
+            if (enableServices) discord.SetEnabled(box.IsChecked == true);
         };
         return box;
     }
@@ -1398,6 +1421,7 @@ sealed class MainWindow : Window
         if (game == null) { UpdateControllerOwnership(); return; }
         // The status says so too: some window managers (tiling ones) don't minimise, and the launcher stays in view.
         scene.SetStatus("The game is running", true);
+        discord.SetPaused(true);  // the game shows its own Discord status
         var started = game;
         started.EnableRaisingEvents = true;
         started.Exited += (_, _) => Dispatcher.UIThread.Post(() => GameExited(started).Watch());
@@ -1415,6 +1439,7 @@ sealed class MainWindow : Window
         exited.Dispose();
         if (game == exited) game = null;
         UpdateControllerOwnership();
+        discord.SetPaused(GameRunning());
         RefreshDisc();
         // Always back, after a clean quit too: the pad can't reach a minimized launcher (navigation ignores it).
         if (IsVisible)

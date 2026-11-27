@@ -77,6 +77,15 @@ name with the mouse. The textures from your own Xbox disc are a pack here too ([
 X removes a downloaded pack; the launcher never deletes a folder you added. To keep the order it
 numbers the folders (`10-`, `20-`, ...). Your own `texture_replacements` folder and mods still win over every pack.
 
+**Discord.** With the Discord desktop app running, your Discord status shows the launcher, or in the game the level
+you're in, your completion (live, the same percentage the load screen shows for a save) and Snacks, the main menu or the
+credits, and how long you've played. Friends also see
+two buttons to get the game. The launcher and the game only talk to the Discord app on your PC. Discord's **User
+Settings > Activity Privacy** decides who sees it; **Settings > Game > Show in my Discord status** in the launcher
+switches it off (`[discord] enabled = false` in `UserData\Config.toml`).
+Discord doesn't know FrightWorks as a game yet, so it doesn't offer to stream it by itself: to get that, add
+**FrightWorks Game** in Discord's **User Settings > Registered Games** while it's running.
+
 ## Controllers and keyboard
 
 Gamepads work right away. Remap them in the launcher (**Settings > Controls**) or in game (**F10** > Controller, or Keyboard). Button
