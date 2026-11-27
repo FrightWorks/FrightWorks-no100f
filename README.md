@@ -7,7 +7,7 @@ emulator: the console's graphics, audio and system calls are reimplemented under
 FrightWorks continues [Scooby-Doo: Refrightened](https://github.com/josiahg2502-glitch/Scooby-Doo-Refrightened) by JosiahG,
 which it split off from on October 31, 2026 (version numbers carry on from its v1.0.2).
 
-[![Listed on PlayPorted](https://playported.com/badge.svg)](https://playported.com/ports/1163-scooby-doo-night-of-100-frights/)
+[![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/frightworks-no100f)
 [![Discord](https://img.shields.io/discord/1574226034293735575?label=Discord&logo=discord)](https://discord.gg/DnE5QcpNUF)
 
 > **Artists wanted:** the launcher needs new art in the style of the original show. [Details](docs/launcher-art.md).
