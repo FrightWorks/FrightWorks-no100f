@@ -36,24 +36,60 @@ sealed class MansionScene : Control
     const double StarSky = 0.55;
     static readonly Rect Lighthouse = new(80, 355, 130, 290);  // the tower and its lamp's halo
 
+    // mansion.png's alpha (ArtW x ArtH, row by row), or null if it can't be read.
+    static readonly byte[]? HouseAlpha = ReadAlpha(HouseArt);
+
+    static byte[]? ReadAlpha(Bitmap? art)
+    {
+        if (art == null || art.PixelSize.Width != ArtW || art.PixelSize.Height != ArtH || art.Format is not { BitsPerPixel: 32 }) return null;
+        int stride = ArtW * 4;
+        var px = new byte[stride * ArtH];
+        var pin = GCHandle.Alloc(px, GCHandleType.Pinned);
+        try { art.CopyPixels(new PixelRect(0, 0, ArtW, ArtH), pin.AddrOfPinnedObject(), px.Length, stride); }
+        catch (Exception) { return null; }
+        finally { pin.Free(); }
+        var alpha = new byte[ArtW * ArtH];
+        for (int i = 0; i < alpha.Length; i++) alpha[i] = px[i * 4 + 3];  // alpha is the 4th byte in RGBA and BGRA
+        return alpha;
+    }
+
     // For each column of mansion.png, the first row that isn't transparent (ArtH where there is none): the roofline
     // the title is fitted above.
-    static readonly int[] HouseTop = Roofline(HouseArt);
+    static readonly int[] HouseTop = Roofline();
 
-    static int[] Roofline(Bitmap? art)
+    static int[] Roofline()
     {
         var top = Enumerable.Repeat(ArtH, ArtW).ToArray();
-        if (art == null || art.PixelSize.Width != top.Length || art.Format is not { BitsPerPixel: 32 }) return top;
-        int w = art.PixelSize.Width, h = art.PixelSize.Height, stride = w * 4;
-        var px = new byte[stride * h];
-        var pin = GCHandle.Alloc(px, GCHandleType.Pinned);
-        try { art.CopyPixels(new PixelRect(0, 0, w, h), pin.AddrOfPinnedObject(), px.Length, stride); }
-        catch (Exception) { return top; }
-        finally { pin.Free(); }
-        for (int x = 0; x < w; x++)
-            for (int y = 0; y < h; y++)
-                if (px[y * stride + x * 4 + 3] > 32) { top[x] = y; break; }  // alpha is the 4th byte in RGBA and BGRA
+        if (HouseAlpha == null) return top;
+        for (int x = 0; x < ArtW; x++)
+            for (int y = 0; y < ArtH; y++)
+                if (HouseAlpha[y * ArtW + x] > 32) { top[x] = y; break; }
         return top;
+    }
+
+    // A window's glass, every few rows of its box: the row (art px) and the first and last see-through pixel of
+    // mansion.png in it. Curtains hang inside it, so they follow arches and the slanted panes of the bay window. Without
+    // the alpha it's the box.
+    static (double Y, double Left, double Right, double SmoothLeft, double SmoothRight)[] MeasureGlass(Rect box)
+    {
+        var rows = new List<(double, double, double)>();
+        int x0 = Math.Max(0, (int)box.X), x1 = Math.Min(ArtW - 1, (int)box.Right), y1 = Math.Min(ArtH - 1, (int)box.Bottom);
+        for (int y = Math.Max(0, (int)box.Y); y <= y1; y += 2)
+        {
+            if (HouseAlpha == null) { rows.Add((y, box.X, box.Right)); continue; }
+            int l = -1, r = -1;
+            for (int x = x0; x <= x1; x++)
+                if (HouseAlpha[y * ArtW + x] < 128) { if (l < 0) l = x; r = x + 1; }
+            if (l >= 0 && r - l >= 2) rows.Add((y, l, r));
+        }
+        // Over a few rows: the widest edges (the outer side of a drape hides behind the frame, so it may reach past the
+        // glass but never short of it) and the average ones (for the inner side, which shows: the painted frames'
+        // antialiasing makes the edges step by a pixel).
+        return rows.Select((row, i) =>
+        {
+            var near = rows.Skip(Math.Max(0, i - 2)).Take(5).ToList();
+            return (row.Item1, near.Min(n => n.Item2), near.Max(n => n.Item3), near.Average(n => n.Item2), near.Average(n => n.Item3));
+        }).ToArray();
     }
 
     readonly bool animate;
@@ -70,13 +106,16 @@ sealed class MansionScene : Control
         public double Seed;
         public bool Curtains, Lit = true;
     }
-    sealed record Win(string Id, Group Group, Rect Box);
+    sealed record Win(string Id, Group Group, Rect Box)
+    {
+        public readonly (double Y, double Left, double Right, double SmoothLeft, double SmoothRight)[] Glass = MeasureGlass(Box);
+    }
     sealed class Sign
     {
         public string Id = "";
         public Point[] Points = Array.Empty<Point>();
-        public RenderTargetBitmap? Normal, Hover;
-        public Point NormalAt, HoverAt;
+        public RenderTargetBitmap? Normal, Hover, Light;
+        public Point NormalAt, HoverAt, LightAt;
         public Geometry? Hit;
     }
 
@@ -606,19 +645,55 @@ sealed class MansionScene : Control
         return sg.Points.Select(p => Map(cx + (p.X - cx) * grow, cy + (p.Y - cy) * grow)).ToArray();
     }
 
+    // The painted plank itself: mansion.json's outline is the plank grown 6 art px away from its centre, so this takes
+    // each point back.
+    Point[] PlankPoints(Sign sg)
+    {
+        double cx = sg.Points.Average(p => p.X), cy = sg.Points.Average(p => p.Y);
+        return sg.Points.Select(p =>
+        {
+            double dx = p.X - cx, dy = p.Y - cy, d = Math.Max(7, Math.Sqrt(dx * dx + dy * dy));
+            return Map(p.X - dx / d * 6, p.Y - dy / d * 6);
+        }).ToArray();
+    }
+
     void BuildSign(Sign sg)
     {
         sg.Normal?.Dispose();
         sg.Hover?.Dispose();
+        sg.Light?.Dispose();
         (sg.Normal, sg.NormalAt) = RenderSign(sg, false);
         (sg.Hover, sg.HoverAt) = RenderSign(sg, true);
+        (sg.Light, sg.LightAt) = RenderPlankLight(sg);
         sg.Hit = Skin.Polygon(SignPoints(sg, 1));
     }
 
-    // The signs are the planks painted in mansion.png: only the label is drawn, centred on the plank's outline, in a
-    // dark brown that reads on the weathered wood. Hover and focus add the glow around the outline (OnRender) and a
-    // slightly warmer label.
-    static readonly Color Label = Color.Parse("#3A2412"), LabelLit = Color.Parse("#4E2C10");
+    // The selected plank (hover or keyboard focus) is lit from the front: a warm light added over the painted wood,
+    // brightest in the middle and clipped to the plank, so nothing spills onto the wall. Its label turns light with a
+    // dark edge (lime on Play). Play keeps a faint, slow light when it isn't selected, so it reads as the way in.
+    static readonly Color Label = Color.Parse("#3A2412"), LabelLit = Color.Parse("#FFF0C8"), PlayLit = Color.Parse("#D8F25A"),
+        LabelEdge = Color.Parse("#2A1606");
+
+    (RenderTargetBitmap, Point) RenderPlankLight(Sign sg)
+    {
+        var pts = PlankPoints(sg);
+        double minX = pts.Min(p => p.X), minY = pts.Min(p => p.Y), maxX = pts.Max(p => p.X), maxY = pts.Max(p => p.Y);
+        var at = new Point(Math.Floor(minX), Math.Floor(minY));
+        var bitmap = Layer(Math.Ceiling(maxX - minX) + 1, Math.Ceiling(maxY - minY) + 1, g =>
+        {
+            using var moved = g.PushTransform(Matrix.CreateTranslation(-at.X, -at.Y));
+            var brush = new RadialGradientBrush
+            {
+                GradientStops =
+                {
+                    new GradientStop(Skin.Argb(130, 255, 222, 160), 0), new GradientStop(Skin.Argb(90, 255, 214, 150), 0.6),
+                    new GradientStop(Skin.Argb(55, 255, 205, 140), 1),
+                },
+            };
+            g.DrawGeometry(brush, null, Skin.Polygon(pts));
+        });
+        return (bitmap, at);
+    }
 
     (RenderTargetBitmap, Point) RenderSign(Sign sg, bool lit)
     {
@@ -633,8 +708,9 @@ sealed class MansionScene : Control
             bool play = sg.Id == "play";
             // The outline is the plank grown by 6 picture pixels: the label goes inside the plank itself.
             var plank = box.Deflate(6 * s);
+            var fill = !lit ? Label : play ? PlayLit : LabelLit;
             FitText(g, SignText.GetValueOrDefault(sg.Id, sg.Id), (play ? 84 : 44) * s, plank.Deflate(new Thickness(plank.Width * 0.12, 0)),
-                    lit ? LabelLit : Label, default, 0);
+                    fill, LabelEdge, lit ? Math.Max(2, (play ? 7 : 5) * s) : 0);
         });
         return (bitmap, at);
     }
@@ -701,19 +777,14 @@ sealed class MansionScene : Control
         {
             bool focused = sg.Id == FocusedSign && (IsFocused || signButtons.Any(b => b.IsFocused));
             bool lit = sg.Id == hover || sg.Id == active || focused;
-            double breathe = (Math.Sin(t * 2.6) + 1) / 2;
-            if (sg.Id == "play" || lit)
-            {
-                int a = lit ? 150 : (int)(40 + 70 * breathe);
-                Color glowColor = sg.Id == "play" ? Skin.Lime : Skin.Gold;
-                g.DrawGeometry(null, new Pen(Skin.Brush(Skin.WithAlpha(glowColor, a)), Math.Max(6, 16 * s), lineJoin: PenLineJoin.Round),
-                               Skin.Polygon(SignPoints(sg, lit ? 1.045 : 1)));
-            }
+            double breathe = (Math.Sin(t * 1.6) + 1) / 2;
+            double light = lit ? 1 : sg.Id == "play" ? 0.15 + 0.15 * breathe : 0;
+            if (light > 0.01)
+                using (g.PushRenderOptions(new RenderOptions { BitmapBlendingMode = BitmapBlendingMode.Plus }))
+                using (g.PushOpacity(light))
+                    DrawLayer(g, sg.Light!, sg.LightAt);
             if (lit) DrawLayer(g, sg.Hover!, sg.HoverAt);
             else DrawLayer(g, sg.Normal!, sg.NormalAt);
-            if (focused)
-                g.DrawGeometry(null, new Pen(Skin.Brush(Skin.Cream), Math.Max(1, 2 * s), new DashStyle(new double[] { 2, 2 }, 0)),
-                               Skin.Polygon(SignPoints(sg, 1.045)));
         }
 
         DrawLayer(g, title!, new Point(TitleX, TitleY));
@@ -740,7 +811,7 @@ sealed class MansionScene : Control
         double curtain = gr.Curtain;
         if (gr.Curtains && curtain > 0.01)
         {
-            DrawCurtains(g, b, curtain, light);
+            DrawCurtains(g, w, curtain, light);
             if (figure != null && fig > 0.01) DrawFaded(g, figure, Map(w.Box), fig * curtain * 0.5 * light);  // its shadow on the curtain
         }
     }
@@ -751,24 +822,50 @@ sealed class MansionScene : Control
             g.DrawImage(art, new Rect(Math.Round(dest.X), Math.Round(dest.Y), Math.Round(dest.Width), Math.Round(dest.Height)));
     }
 
-    static void DrawCurtains(DrawingContext g, Rect b, double amount, double light)
+    // Two drapes of muted plum fabric hung inside the window's glass, row by row, so they follow its arch and the slant
+    // of a bay pane. Drawn partly open they're gathered at a tie-back a little below the middle; closed they meet. The
+    // window's light shows through the cloth a little, and the folds run down with the glass.
+    void DrawCurtains(DrawingContext g, Win w, double amount, double light)
     {
-        Color shade = Lerp(Color.Parse("#2E0B22"), Color.Parse("#B4453E"), light);
-        Color fold = Lerp(Color.Parse("#1C0616"), Color.Parse("#7E2830"), light);
-        double half = b.Width / 2 + 1, cw = half * amount;
+        var glass = w.Glass;
+        if (glass.Length < 2) return;
+        double top = glass[0].Y, height = Math.Max(1, glass[^1].Y - top);
+        Color cloth = Lerp(Color.Parse("#22102A"), Color.Parse("#6A2E4E"), light);
+        Color fold = Skin.WithAlpha(Lerp(Color.Parse("#12081A"), Color.Parse("#3E1730"), light), 170);
+        Color sheen = Skin.WithAlpha(Lerp(Color.Parse("#3A2040"), Color.Parse("#9A5470"), light), 80);
+        var folds = new Pen(Skin.Brush(fold), Math.Max(1, 1.6 * s), lineJoin: PenLineJoin.Round);
+        var sheens = new Pen(Skin.Brush(sheen), Math.Max(1, 1.2 * s), lineJoin: PenLineJoin.Round);
+        // How far a drape reaches into the glass at a row, as a share of half its width.
+        double Reach(double y)
+        {
+            double v = (y - top) / height;
+            return amount * (1 - (1 - amount) * 0.45 * Math.Exp(-Math.Pow((v - 0.62) / 0.16, 2)));
+        }
         foreach (var left in new[] { true, false })
         {
-            var r = left ? new Rect(b.Left, b.Top, cw, b.Height) : new Rect(b.Right - cw, b.Top, cw, b.Height);
-            if (r.Width < 0.5) continue;
-            g.FillRectangle(Skin.Brush(shade), r);
-            var pen = new Pen(Skin.Brush(fold), Math.Max(1, r.Width / 9));
-            for (int i = 1; i < 4; i++)
+            var outer = new List<Point>();
+            var inner = new List<Point>();
+            for (int i = 0; i < glass.Length; i++)
             {
-                double x = r.Left + r.Width * i / 4;
-                g.DrawLine(pen, new Point(x, r.Top), new Point(x, r.Bottom));
+                var (y, l, r, sl, sr) = glass[i];
+                double half = (sr - sl) / 2 + 0.5, reach = half * Reach(y);
+                double yy = i == 0 ? y - 1.5 : i == glass.Length - 1 ? y + 2.5 : y;  // rows are 2 apart: cover the ends
+                outer.Add(Map(left ? l - 1 : r + 1, yy));
+                inner.Add(Map(left ? sl + reach : sr - reach, yy));
+            }
+            if (inner.Select((p, i) => Math.Abs(p.X - outer[i].X)).Max() < 1.5) continue;
+            var outline = outer.Concat(Enumerable.Reverse(inner)).ToArray();
+            using (g.PushOpacity(0.9))
+                g.DrawGeometry(Skin.Brush(cloth), null, Skin.Polygon(outline));
+            // Folds at set shares of the drape's width, each with a faint lit edge beside it.
+            foreach (var share in new[] { 0.3, 0.58, 0.82 })
+            {
+                var line = outer.Select((p, i) => new Point(p.X + (inner[i].X - p.X) * share, p.Y)).ToArray();
+                if (Math.Abs(inner[^1].X - outer[^1].X) * share < 2) continue;
+                g.DrawGeometry(null, folds, Skin.Polyline(line));
+                g.DrawGeometry(null, sheens, Skin.Polyline(line.Select(p => new Point(p.X + 1.6 * s, p.Y)).ToArray()));
             }
         }
-        g.FillRectangle(Skin.Brush(fold), new Rect(b.Left, b.Top, b.Width, Math.Max(2, b.Height * 0.06 * Math.Min(1, amount * 3))));
     }
 
     static Color Lerp(Color a, Color b, double f) => Color.FromRgb(
