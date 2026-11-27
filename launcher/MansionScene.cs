@@ -524,6 +524,7 @@ sealed class MansionScene : Control
 
     readonly List<DriftLayer> clouds = new(), backFog = new(), frontFog = new();
     double backK = 1, backTop;
+    double beamStop = double.MaxValue;  // screen x where the house begins at the beam's height: the beam fades out before it
     RenderTargetBitmap? beam, flare;
     Geometry? frontFogClip;
 
@@ -552,6 +553,8 @@ sealed class MansionScene : Control
         beam = flare = null;
         double bl = Math.Round(0.8 * w), bh = Math.Max(1, Math.Round(bl * 220 / 1400));
         if (BeamArt is { } beamArt) beam = Layer(bl, bh, g => g.DrawImage(beamArt, new Rect(0, 0, bl, bh)));
+        double lampY = backTop + Lamp.Y * backK;
+        beamStop = HouseLeft(lampY - bh * 0.3, lampY + bh * 0.3);
         double fs = Math.Max(1, Math.Ceiling(FlareSize(1, 1.06)));
         if (FlareArt is { } flareArt) flare = Layer(fs, fs, g => g.DrawImage(flareArt, new Rect(0, 0, fs, fs)));
 
@@ -559,6 +562,18 @@ sealed class MansionScene : Control
         var signShapes = new GeometryGroup();
         foreach (var sg in signs) signShapes.Children.Add(Skin.Polygon(SignPoints(sg, 1)));
         frontFogClip = new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(new Rect(0, 0, w, h)), signShapes);
+    }
+
+    // Where the house begins on screen (its leftmost opaque pixel) between two screen rows; the width when it isn't there.
+    double HouseLeft(double y0, double y1)
+    {
+        double left = W;
+        if (HouseAlpha == null || s <= 0) return left;
+        int a0 = Math.Max(0, (int)Math.Floor((y0 - o.Y) / s)), a1 = Math.Min(ArtH - 1, (int)Math.Ceiling((y1 - o.Y) / s));
+        for (int y = a0; y <= a1; y++)
+            for (int x = 0; x < ArtW; x++)
+                if (HouseAlpha[y * ArtW + x] > 32) { left = Math.Min(left, o.X + x * s); break; }
+        return left;
     }
 
     // The flare's size for how much the light faces the viewer (0..1) and its flicker.
@@ -602,6 +617,19 @@ sealed class MansionScene : Control
             var src = new Rect(0, 0, beam.PixelSize.Width, beam.PixelSize.Height);
             var dest = new Rect(lamp.X, lamp.Y - bh / 2, len, bh);
             var mirror = c < 0 ? new Matrix(-1, 0, 0, 1, 2 * lamp.X, 0) : Matrix.Identity;
+            // Swinging right, the beam would run into the house and stop dead at the roofline: it fades out before it.
+            IDisposable? fade = null;
+            if (c > 0 && beamStop > lamp.X + 20 && lamp.X + len > beamStop - (beamStop - lamp.X) * 0.6)
+            {
+                double from = lamp.X + (beamStop - lamp.X) * 0.4;
+                fade = g.PushOpacityMask(new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(from, 0, RelativeUnit.Absolute),
+                    EndPoint = new RelativePoint(beamStop, 0, RelativeUnit.Absolute),
+                    GradientStops = { new GradientStop(Colors.White, 0), new GradientStop(Color.FromArgb(0, 255, 255, 255), 1) },
+                }, new Rect(0, 0, W, H));
+            }
+            using (fade)
             using (g.PushOpacity(beamOpacity))
             using (g.PushTransform(mirror))
                 g.DrawImage(beam, src, dest);

@@ -22,8 +22,10 @@ y = np.arange(H, dtype=np.float32)[:, None] - H / 2
 half = 7 + (H / 2 - 14) * (x / W) ** 0.6  # the cone's half-width at each x
 across = np.exp(-((y / half) ** 2) * 2.2)  # soft edges across the beam
 along = np.exp(-x / 700) * np.clip(x / 18, 0, 1) ** 0.5  # fades with distance; no hard tip
-alpha = across * along
-alpha[:, -120:] *= np.linspace(1, 0, 120)[None, :] ** 1.5  # never a hard end
+# The far end fades out over the outer 65% of the length (smoothstep), so there's no visible end even when the code
+# squeezes the beam short as it turns.
+k = np.clip((x - 0.35 * W) / (0.65 * W), 0, 1)
+alpha = across * along * (1 - k * k * (3 - 2 * k))
 rgb = np.broadcast_to(col, (H, W, 3))
 Image.fromarray(np.dstack([rgb, alpha * 255]).clip(0, 255).astype(np.uint8), "RGBA").save(os.path.join(out, "beam.png"), optimize=True)
 
