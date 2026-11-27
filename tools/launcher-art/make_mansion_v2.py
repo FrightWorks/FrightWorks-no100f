@@ -18,12 +18,12 @@ WINDOWS = [
     ("tower", "tower", (243, 272, 360, 503), "navy"),
     ("diamond", "attic", (962, 298, 1088, 438), "navy"),
     ("right_tower", "right_tower", (1280, 340, 1343, 472), "navy"),
-    ("parlor_left", "parlor_side", (86, 682, 147, 932), "navy"),
+    ("parlor_left", "parlor", (86, 682, 147, 932), "navy"),
     ("parlor", "parlor", (143, 664, 265, 922), "navy"),
-    ("parlor_side", "parlor_side", (275, 672, 328, 922), "navy"),
+    ("parlor_side", "parlor", (275, 672, 328, 922), "navy"),
     ("fanlight", "entrance", (444, 632, 610, 722), "navy"),
-    ("lantern_left", "entrance", (384, 770, 432, 820), "navy"),
-    ("lantern_right", "entrance", (615, 770, 665, 820), "navy"),
+    ("lantern_left", "lanterns", (384, 770, 432, 820), "navy"),
+    ("lantern_right", "lanterns", (615, 770, 665, 820), "navy"),
     ("right_arch", "right_arch", (1222, 724, 1293, 903), "navy"),
 ]
 

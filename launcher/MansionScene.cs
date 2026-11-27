@@ -99,12 +99,13 @@ sealed class MansionScene : Control
     double shift, last;
     double Now => clock.Elapsed.TotalSeconds + shift;
 
-    // A set of windows that light up together (the entrance's three, the tower's two) and its animation state.
+    // A set of windows that light up together (the three panes of the bay window, the two lanterns) and its animation
+    // state.
     sealed class Group
     {
         public double Light = 1, LightTo = 1, Curtain, CurtainTo, Figure, FigureTo, FigureUntil;
         public double Seed;
-        public bool Curtains, Lit = true;
+        public bool Curtains, Flame, Lit = true;
     }
     sealed record Win(string Id, Group Group, Rect Box)
     {
@@ -123,7 +124,8 @@ sealed class MansionScene : Control
     readonly List<Win> windows = new();
     readonly Dictionary<string, Group> groups = new();
     readonly List<Sign> signs = new();
-    static readonly HashSet<string> CurtainGroups = new() { "parlor", "parlor_side", "right_arch", "right_tower", "tower" };
+    static readonly HashSet<string> CurtainGroups = new() { "parlor", "right_arch", "right_tower", "tower" };
+    const string Lanterns = "lanterns";  // the porch lanterns: always lit, a flame that flickers and dips in the wind
 
     double s = 1;
     Point o;
@@ -159,10 +161,11 @@ sealed class MansionScene : Control
         {
             g.Seed = rnd.NextDouble() * 100;
             g.Curtains = CurtainGroups.Contains(id);
+            g.Flame = id == Lanterns;
         }
         // A lived-in start: most rooms lit, a couple dark, some curtains half drawn.
         foreach (var id in new[] { "attic", "right_tower" }) Set(id, light: 0);
-        Set("parlor_side", curtain: 0.55);
+        Set("parlor", curtain: 0.35);
         Set("right_arch", curtain: 1);
         nextStrike = 3 + rnd.NextDouble() * 5;
         nextEvent = 1.5;
@@ -228,7 +231,7 @@ sealed class MansionScene : Control
         foreach (var g in groups.Values) { g.Light = g.LightTo = 1; g.Curtain = g.CurtainTo = 0; g.Figure = g.FigureTo = 0; }
         Set("parlor", figure: 1);
         Set("tower", figure: 1);
-        Set("parlor_side", curtain: 0.55);
+        Set("parlor", curtain: 0.35);
         Set("right_arch", curtain: 1);
         Set("attic", light: 0);
         shift = 40 - clock.Elapsed.TotalSeconds;
@@ -272,9 +275,9 @@ sealed class MansionScene : Control
         var id = ids[rnd.Next(ids.Count)];
         var g = groups[id];
         double r = rnd.NextDouble();
-        if (id == "entrance")
+        if (id == Lanterns)
         {
-            g.Light = 0.3;  // a flicker; it comes straight back
+            g.Light = 0.45;  // the wind: a dip that comes straight back
             return;
         }
         if ((id == "parlor" || id == "tower") && g.LightTo > 0.5 && g.FigureTo == 0 && r < 0.45)
@@ -288,8 +291,8 @@ sealed class MansionScene : Control
             g.CurtainTo = g.CurtainTo > 0.3 ? 0 : rnd.NextDouble() < 0.5 ? 1 : 0.55;
             return;
         }
-        int lit = groups.Values.Count(x => x.LightTo > 0.5);
-        if (g.LightTo > 0.5 && lit > 5) { g.LightTo = 0; g.FigureTo = 0; }
+        int lit = groups.Where(x => x.Key != Lanterns).Count(x => x.Value.LightTo > 0.5);
+        if (g.LightTo > 0.5 && lit > 4) { g.LightTo = 0; g.FigureTo = 0; }
         else g.LightTo = 1;
     }
 
@@ -385,7 +388,7 @@ sealed class MansionScene : Control
     }
 
     // The porch lanterns' light on the house: a warm halo around each lantern, added over the house (inside its outline)
-    // while the entrance is lit. The profile is three stacked ellipses (radii 80, 48 and 26 art px, opacity 45, 75 and
+    // while they're lit. The profile is three stacked ellipses (radii 80, 48 and 26 art px, opacity 45, 75 and
     // 105 of 255) blurred by 18 px, as tuned on the art; it fades out by 120 px, before it reaches the door.
     const double GlowReach = 120;
     static readonly Color GlowColor = Color.FromRgb(255, 170, 70);
@@ -793,9 +796,12 @@ sealed class MansionScene : Control
 
     static readonly Color Dark = Color.Parse("#0D0E1E"), WarmTop = Color.Parse("#FFE27C"), WarmBottom = Color.Parse("#F39A2B");
 
-    // A group's light now, with its slight flicker (0..1).
-    static double GroupLight(Group gr, double t) =>
-        Math.Clamp(gr.Light * (0.95 + 0.05 * Math.Sin(t * 11 + gr.Seed) * Math.Sin(t * 6.7 + gr.Seed * 2)), 0, 1);
+    // A group's light now, with its flicker (0..1): slight for a room, more for the lanterns' flames.
+    static double GroupLight(Group gr, double t)
+    {
+        double f = gr.Flame ? 0.12 : 0.05;
+        return Math.Clamp(gr.Light * (1 - f + f * Math.Sin(t * 11 + gr.Seed) * Math.Sin(t * 6.7 + gr.Seed * 2)), 0, 1);
+    }
 
     void DrawWindow(DrawingContext g, Win w, double t)
     {

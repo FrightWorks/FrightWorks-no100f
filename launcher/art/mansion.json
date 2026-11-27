@@ -28,7 +28,7 @@
   },
   {
    "id": "parlor_left",
-   "group": "parlor_side",
+   "group": "parlor",
    "x": 88,
    "y": 688,
    "w": 56,
@@ -44,7 +44,7 @@
   },
   {
    "id": "parlor_side",
-   "group": "parlor_side",
+   "group": "parlor",
    "x": 280,
    "y": 679,
    "w": 43,
@@ -60,7 +60,7 @@
   },
   {
    "id": "lantern_left",
-   "group": "entrance",
+   "group": "lanterns",
    "x": 389,
    "y": 775,
    "w": 38,
@@ -68,7 +68,7 @@
   },
   {
    "id": "lantern_right",
-   "group": "entrance",
+   "group": "lanterns",
    "x": 621,
    "y": 775,
    "w": 37,
