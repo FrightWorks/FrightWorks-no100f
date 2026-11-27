@@ -268,6 +268,8 @@ static class LauncherControllerTests
         Check(w.WindowState == WindowState.FullScreen && w.SavedWindowState() == WindowState.FullScreen, "Launcher window Borderless fullscreen didn't apply or save.");
         w.SetLauncherWindow("\"windowed\""); Pump();
         Check(w.WindowState == WindowState.Normal && windowRow.SelectedIndex == 0, "Going back to a window didn't show on the row.");
+        { var c1 = new GameConfig(config); c1.Remove("launcher", "window"); c1.Save(); }
+        Check(w.SavedWindowState() == WindowState.FullScreen, "With no [launcher] window the launcher isn't borderless fullscreen.");
         { var c0 = new GameConfig(config); c0.Remove("launcher", "window"); c0.Save(); }
         settings.Select(rows[0]); Pump();
         // Up / down pick a row and stop at the ends (as F10's).
@@ -761,7 +763,8 @@ static class LauncherControllerTests
             var exited = typeof(MainWindow).GetMethod("GameExited", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
             Finish((Task)exited.Invoke(w, new object[] { quick })!);
         }
-        Check(w.WindowState == WindowState.Normal, "Launcher stayed minimized after a clean game exit.");
+        Check(w.WindowState == w.SavedWindowState() && w.WindowState != WindowState.Minimized,
+              "Launcher didn't come back in its saved window mode after a clean game exit: " + w.WindowState);
         w.Close(); Pump(); Fault.Owner = null;
     }
 }

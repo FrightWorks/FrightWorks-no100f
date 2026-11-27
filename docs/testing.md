@@ -86,7 +86,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   `dist\.vpk`. The installer puts the game in `%LOCALAPPDATA%\FrightWorks` (`current\` = the program, replaced on
   every update; the whole folder goes on uninstall) with Start menu and desktop shortcuts; the game's own data goes to
   the installed layout above.
-  The launcher asks to update on start (Update now / Not now / Skip this version; **Extras** has the `[launcher] check_updates` toggle; `[launcher] window` = `"windowed"`, `"maximized"` or `"fullscreen"` is Settings > Display > Launcher window, F11 in the launcher); the zip's launcher only links to the release page.
+  The launcher asks to update on start (Update now / Not now / Skip this version; **Extras** has the `[launcher] check_updates` toggle; `[launcher] window` = `"fullscreen"` (borderless, the default), `"windowed"` or `"maximized"` is Settings > Display > Launcher window, F11 in the launcher; the test windows and `--shots` keep their size); the zip's launcher only links to the release page.
   The update log of an installed copy is `%LOCALAPPDATA%\velopack\velopack_FrightWorks.log`.
 - **Testing an update without GitHub** (a local feed): pack two versions into one folder, install the first, point the
   launcher at the folder.

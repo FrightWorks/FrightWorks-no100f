@@ -79,7 +79,8 @@ sealed class MainWindow : Window
         MinHeight = Math.Min(680, area.Height);
         Background = Brush(BoardBottom);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        if (shotDir == null) WindowState = SavedWindowState();
+        // The saved mode, borderless fullscreen by default; not in the tests' windows or --shots, which need their size.
+        if (shotDir == null && enableServices) WindowState = SavedWindowState();
 
         scene = new MansionScene(enableServices && shotDir == null && MansionScene.AnimationsEnabled(), shotDir == null ? Environment.TickCount : 1);
         scene.SignClicked += id => OnSign(id).Watch();
@@ -307,14 +308,16 @@ sealed class MainWindow : Window
 
     // Config values as the game reads them: numbers by value (F10 writes 8 or 0.75, a hand-edited file may say 8.0 or
     // 2.250), the rest as text without the quotes.
-    // ----- The launcher's own window: [launcher] window = "windowed" (the default), "maximized" or "fullscreen" (borderless) -----
+    // ----- The launcher's own window: [launcher] window = "windowed", "maximized" or "fullscreen" (borderless, the default:
+    // the game's default too, so Play goes from one fullscreen to the other) -----
     static readonly (string text, string raw)[] LauncherWindowModes =
         { ("Window", "\"windowed\""), ("Maximized", "\"maximized\""), ("Borderless fullscreen", "\"fullscreen\"") };
     ChoiceRow? launcherWindowRow;
     bool showingLauncherWindow;  // the row is being set to match the window, not by the player
     WindowState beforeFullScreen = WindowState.Normal;
 
-    static int LauncherWindowIndex(string? raw) => Math.Max(0, Array.FindIndex(LauncherWindowModes, m => raw != null && SameValue(m.raw, raw)));
+    static int LauncherWindowIndex(string? raw) =>
+        Array.FindIndex(LauncherWindowModes, m => raw != null && SameValue(m.raw, raw)) is var i and >= 0 ? i : 2;  // unset or unknown: fullscreen
 
     static WindowState ToWindowState(int index) => index switch { 1 => WindowState.Maximized, 2 => WindowState.FullScreen, _ => WindowState.Normal };
 
@@ -470,7 +473,7 @@ sealed class MainWindow : Window
         Row("Intro movies", "Whether the intro movies play when the game starts.", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
 
         card = Section(display, "Launcher");
-        launcherWindowRow = new ChoiceRow("Launcher window", "How this launcher shows: in a window, maximized, or borderless fullscreen. " +
+        launcherWindowRow = new ChoiceRow("Launcher window", "How this launcher shows: borderless fullscreen (the default), in a window, or maximized. " +
                                                              "Changes at once, and it opens that way next time. F11 also switches fullscreen.");
         foreach (var mode in LauncherWindowModes) launcherWindowRow.Items.Add(mode.text);
         launcherWindowRow.SelectedIndex = LauncherWindowIndex(cfg.Get("launcher", "window"));
