@@ -98,6 +98,17 @@ sealed class ControllerNavigation : IDisposable
         if (!dispatching.Add(window)) return;
         try
         {
+            Prompts.UsedPad(owner.PadKind);
+            // An open menu (GameMenu.cs) has its own selection and handles every action itself, as F10 does. A pad Confirm
+            // marks Activating, so a file picker it opens is the controller-friendly one.
+            if (window == owner && owner.OpenMenu is { } menu)
+            {
+                Activating = action == LauncherButtons.Confirm;
+                try { menu.Handle(action); }
+                finally { Activating = false; }
+                if (action == LauncherButtons.Back) Reset();
+                return;
+            }
             if (action == LauncherButtons.Back)
             {
                 var dropdown = Targets(window).OfType<ComboBox>().FirstOrDefault(c => c.IsDropDownOpen);
@@ -134,10 +145,9 @@ sealed class ControllerNavigation : IDisposable
             int direction = action is LauncherButtons.Up or LauncherButtons.Left or LauncherButtons.Previous ? -1 : 1;
             if (action is LauncherButtons.Previous or LauncherButtons.Next)
             {
-                // A page with tabs: the bumpers switch tab. Anywhere else (dialogs, browsers, Mods, Extras) they keep moving
-                // to the previous/next control, which is also how a dialog's toolbar is reached.
-                var bar = window.GetVisualDescendants().OfType<TabBar>().FirstOrDefault(t => t.IsEffectivelyVisible);
-                if (bar != null) bar.Step(direction); else Move();
+                // In a dialog the bumpers move to the previous/next control, which is also how a dialog's toolbar is
+                // reached (the menus' tabs are handled by MenuScreen).
+                Move();
                 return;
             }
             if (focused is ListBox list && action is LauncherButtons.Up or LauncherButtons.Down)
@@ -256,7 +266,7 @@ sealed class ControllerNavigation : IDisposable
     internal static IEnumerable<Control> Targets(Control root)
     {
         if (!root.IsEffectivelyVisible || !root.IsEffectivelyEnabled) yield break;
-        if (root is PlankButton or Button or ComboBox or Slider or NumericUpDown or TextBox or ListBox)
+        if (root is PlankButton or Button or ComboBox or Slider or NumericUpDown or TextBox or ListBox or MenuRow)
         {
             if (root.Focusable) yield return root;
             yield break; // The control owns its template parts, not separate navigation stops.
@@ -305,20 +315,5 @@ sealed class ControllerList : ListBox
     {
         if (e.Key == Key.Enter) { Activate?.Invoke(); e.Handled = true; }
         else base.OnKeyDown(e);
-    }
-}
-
-// A row of tab buttons (the open one has Selected set). The bumpers step through it without wrapping: at either end they
-// do nothing. Mouse and keyboard use the buttons as before.
-sealed class TabBar : WrapPanel
-{
-    public bool Step(int direction)
-    {
-        var tabs = Children.OfType<PlankButton>().ToList();
-        int at = tabs.FindIndex(t => t.Selected), to = at + direction;
-        if (at < 0 || to < 0 || to >= tabs.Count) return false;
-        tabs[to].PerformClick();
-        ControllerNavigation.Focus(tabs[to]);  // the new tab's own button: D-pad Down goes on into its page
-        return true;
     }
 }

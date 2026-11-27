@@ -404,6 +404,7 @@ To build old source there, set only the paths that differ with `git restore --so
 **Launcher**
 - A lower `Avalonia.BuildServices` pin fails restore with NU1605.
 - `Fault` in `launcher/App.cs` is the Continue/Quit dialog; put `.Watch()` on a fire-and-forget `_ = Task()`.
+- The launcher's Settings, Mods and Extras are full-window menus like F10 (`launcher/GameMenu.cs`): a `MenuScreen` with pages (LB/RB, Q/E), one row per setting (`ChoiceRow`, `ToggleRow`, `ActionRow`), a details panel and a prompt bar with the game's `Play/button_icons` (text chips when they're missing). A visible menu takes the pad actions itself (`ControllerNavigation.Dispatch`); dialogs keep the generic focus walk. Only the open page is in the visual tree: reach rows on other pages through `MenuScreen.Pages` (logical tree), and test "on the open page" with `IsAttachedToVisualTree`, not `IsEffectivelyVisible`.
 - Display mirrors F10 Video: the same 12 `resolution_multiplier` values (compared as numbers), and 120/180 fps caps resolution at 4x.
   Missing keys fall back as the game does: resolution 2.25, aspect Fill unless `widescreen=false` or `force_16_9`.
 

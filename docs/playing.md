@@ -79,11 +79,12 @@ triggers, as on the Xbox); the prompts and tutorial hints follow. Black and Whit
 
 **Automatic layout.** **Settings > Controls** can match Xbox controllers to the Original Xbox layout and GameCube
 adapters to GameCube. Other or mixed controllers leave the layout alone, custom bindings are kept, and choosing a layout
-yourself stops the matching (the checkbox turns it back on).
+yourself stops the matching (the **Match my controller** switch turns it back on).
 
-**The launcher with a controller.** D-pad or left stick moves, South confirms (Xbox A, PlayStation Cross, Nintendo B),
-East goes back, the bumpers switch tabs (or move to the previous/next control), right stick scrolls, and left/right
-change sliders. File and folder choosers open the launcher's own browser with an on-screen keyboard; with a mouse you get
+**The launcher with a controller.** Settings, Mods and Extras work like F10: the D-pad or left stick picks a row and
+left/right changes it, South switches or opens it (Xbox A, PlayStation Cross, Nintendo B), East goes back, the bumpers
+(or **Q**/**E**) change the page and the right stick scrolls; the bar at the bottom shows the buttons for the selected
+row. On the keyboard: arrows, Enter, Esc. File and folder choosers open the launcher's own browser with an on-screen keyboard; with a mouse you get
 the system's file picker.
 
 ## Linux (beta)

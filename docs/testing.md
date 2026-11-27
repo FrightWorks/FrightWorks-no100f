@@ -173,12 +173,13 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-layo
 
 Test windows must pass their owned `DataPaths` and `enableServices: false`. That skips SDL/controller polling, game
 launching, updates and OS animation lookup; tests inject controller samples/foreground state rather than OS input.
-The controller suite checks neutral/repeat/deadzone gates, bumper tab switching (and the old bumper focus move where there are no tabs), owned modal routing, menu accessibility, settings and
-same-value native selection intent, cancellation, browsing/text/folder creation, scrolling and persisted auto/manual
+The controller suite checks neutral/repeat/deadzone gates, the menus' rows (up/down stop at the ends, left/right wrap, A
+steps a short choice and opens a long one's list, switches), bumper page switching (and the bumper focus move in
+dialogs), owned modal routing, menu accessibility, settings and same-value list choices, cancellation, browsing/text/folder creation, scrolling and persisted auto/manual
 layout policy. Generic navigation regressions cover narrow buttons beneath wide fields, horizontal button rows,
 ordinary slider precision and opt-in `ControllerSlider` coarse steps. Coarse steps retain the selected device's input
 source, give horizontal D-pad input precision priority, clamp to bounds and preserve repeat/ownership/neutral gates.
-The HDR window is covered too: the pad opens it from Display, the left stick steps paper white by 10 nits and peak by 100,
+The HDR window is covered too: the pad opens it from Display's HDR row, the left stick steps paper white by 10 nits and peak by 100,
 the D-pad by 0.1, ends clamp, the dropdown uses the themed popup and Back closes it.
 The layout suite deliberately provokes save/background/UI faults to check error routing; those expected
 errors appear on stderr even when the suite passes. Screenshots are synthetic headless evidence, not a hardware test.
@@ -608,10 +609,12 @@ useful:
   `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\launcher-layout-tests\LauncherLayoutTests.csproj -c Release -- autotest\launcher-layout`
   (Linux: `DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet run --project tools/launcher-layout-tests/LauncherLayoutTests.csproj -c Release -- autotest/launcher-layout`).
   It runs the launcher's real window on Avalonia's headless platform (no screen needed, drawn with Skia like on
-  screen) and checks every tab of Settings (Display, Graphics, Controls), Mods and Extras (Discs, Game, Folders, About) at 1180x830, the 960x680 minimum, 820x600 and 500x547
-  (what a tiling window manager can force): nothing wider than its page, no horizontal scrolling, usable drop-downs,
-  reopening keeps the layout, the wheel over a closed drop-down never changes a setting, long mod names, transparent
-  plank corners (normal, hover, pressed, disabled), keyboard activation and accessible names, the Xbox-only rows, the
+  screen) and checks every page of Settings (Display, Graphics, Controls), Mods and Extras (Discs, Textures, Game, Folders, About) at 1180x830, the 960x680 minimum, 820x600 and 500x547
+  (what a tiling window manager can force): the menu fills the window with its header, list, details and prompts apart,
+  room for at least two rows, nothing wider than its page, no horizontal scrolling, rows wide enough for a name and a
+  value, the first row selected, in view and named in the details, reopening keeps the layout, the wheel over a choice
+  never changes a setting, long mod names, the menus' keys (Q/E, arrows, Esc) and accessible roles, transparent plank
+  corners on the dialogs' buttons (normal, hover, pressed, disabled), the Xbox-only rows, the
   fullscreen monitor row (Windows only), and that custom HDR and unknown config values survive. On Linux it also clicks
   Play with stand-in scripts for the game: it starts in its folder and the launcher minimises, and a game that
   exits with an error brings the launcher back with a message. It uses

@@ -5,6 +5,7 @@ using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.LogicalTree;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -25,6 +26,18 @@ static class LauncherLayoutTests
     }
 
     static IEnumerable<Visual> Descendants(Visual v) => v.GetVisualDescendants();
+
+    // Every text on a menu: its notes and its rows' names.
+    static List<string> Texts(Visual v) => Descendants(v).OfType<TextBlock>().Select(t => t.Text ?? "")
+        .Concat(Descendants(v).OfType<MenuRow>().Select(r => r.Label)).ToList();
+
+    // Picks a value the way the player does (a committed choice).
+    static void Pick(ChoiceRow row, string item)
+    {
+        int index = row.Items.IndexOf(item);
+        if (index < 0) throw new InvalidOperationException($"{row.Label} has no '{item}'");
+        row.CommitSelection(index);
+    }
 
     static void Pump()
     {
@@ -122,7 +135,8 @@ static class LauncherLayoutTests
     static void CheckInterpolationLock(MainWindow window, string fixture, string game, string config, string output)
     {
         string? Saved(string key) => new GameConfig(config).Get("video", key);
-        ThemedCombo Box(MainWindow w, string item) => Descendants(w.boards["settings"]).OfType<ThemedCombo>().Single(c => c.Items.Contains(item));
+        // Searched on every page (only the open one is in the visual tree).
+        ChoiceRow Box(MainWindow w, string item) => w.boards["settings"].Pages.SelectMany(p => p.GetLogicalDescendants()).OfType<ChoiceRow>().Single(c => c.Items.Contains(item));
         void Open(MainWindow w)
         {
             w.boards["settings"].SelectTab(1);  // Graphics: the row and its note
@@ -152,25 +166,25 @@ static class LauncherLayoutTests
         Check(Saved("frame_interpolation_fps") == null, "Showing the locked row saved a value");
         Shot(window, "interpolation-30fps.png");
 
-        frameRate.SelectedItem = "60 fps";
+        Pick(frameRate, "60 fps");
         Pump();
         Expect(window, "60 fps", enabled: true, "Off");
         Check(Saved("fps60") == "true" && Saved("frame_interpolation_fps") == "0", "Going to 60 fps didn't save fps60 and interpolation off");
         Shot(window, "interpolation-60fps.png");
 
-        interpolation.SelectedItem = "120 FPS";
+        Pick(interpolation, "120 FPS");
         Pump();
         Check(Saved("frame_interpolation_fps") == "120", "120 FPS wasn't saved at 60 fps");
         Check(!resolution.Items.Contains("8x (3840p)"), "120 FPS still offers 8x");
         Shot(window, "interpolation-60fps-120.png");
 
-        frameRate.SelectedItem = "30 fps (original)";
+        Pick(frameRate, "30 fps (original)");
         Pump();
         Expect(window, "back at 30 fps", enabled: false, "Off");
         Check(Saved("fps60") == "false" && Saved("frame_interpolation_fps") == "0", "Going to 30 fps didn't save interpolation off");
         Check(resolution.Items.Contains("8x (3840p)"), "Interpolation is off at 30 fps but 8x is still not offered");
 
-        frameRate.SelectedItem = "60 fps";
+        Pick(frameRate, "60 fps");
         Pump();
         Expect(window, "60 fps again", enabled: true, "Off");
         Check(Saved("frame_interpolation_fps") == "0", "The old choice came back at 60 fps");
@@ -185,7 +199,7 @@ static class LauncherLayoutTests
         Expect(handEdited, "asked for at 30 fps by hand", enabled: false, "Off");
         Check((string)Box(handEdited, "4x (1920p)").SelectedItem! == "8x (3840p)", "Resolution capped for an interpolation that is off");
         Check(Saved("frame_interpolation_fps") == "120", "Opening the launcher rewrote the saved value");
-        Box(handEdited, "60 fps").SelectedItem = "60 fps";
+        Pick(Box(handEdited, "60 fps"), "60 fps");
         Pump();
         Expect(handEdited, "hand edit, then 60 fps", enabled: true, "Off");
         Check(Saved("frame_interpolation_fps") == "0" && Saved("resolution_multiplier") == "8", "The hand-edited value came back at 60 fps");
@@ -203,7 +217,7 @@ static class LauncherLayoutTests
         chosen.Close();
         Pump();
 
-        frameRate.SelectedItem = "30 fps (original)";  // this window's own boxes, as the file below says
+        Pick(frameRate, "30 fps (original)");  // this window's own boxes, as the file below says
         File.WriteAllText(config, before);
         window.boards["settings"].SelectTab(0);
         window.CloseBoards();
@@ -292,7 +306,7 @@ static class LauncherLayoutTests
 
         // ----- Mods page: the status of a patch mod appears once its background check is done; the generated folder stays out of the list -----
         window.ShowBoard("mods");
-        var modTexts = () => Descendants(window.boards["mods"]).OfType<TextBlock>().Select(t => t.Text ?? "").ToList();
+        var modTexts = () => Texts(window.boards["mods"]);
         for (int i = 0; i < 100 && !modTexts().Any(t => t.Contains("patch format 9")); i++)
         {
             Thread.Sleep(50);
@@ -301,34 +315,12 @@ static class LauncherLayoutTests
         Check(modTexts().Any(t => t.Contains("patch format 9")), "A patch mod's problem isn't shown on the Mods page");
         Check(modTexts().Contains("patch-mod"), "A patch mod isn't listed");
         Check(!modTexts().Contains("!patched"), "The generated folder is listed as a mod");
-        Check(Descendants(window.boards["mods"]).OfType<PlankButton>().Any(b => b.Text == "Add a mod (zip)"), "No button to add a mod");
+        Check(Descendants(window.boards["mods"]).OfType<ActionRow>().Any(b => b.Label == "Add a mod (zip)"), "No row to add a mod");
+        Check(Descendants(window.boards["mods"]).OfType<ToggleRow>().Any(r => r.Label == "patch-mod"), "A mod has no on/off switch");
         window.CloseBoards();
         Pump();
 
-        // ----- Planks: see-through corners in every state -----
-        window.ShowBoard("settings");
-        window.showControlsTab!(false);
-        Pump();
         var settings = window.boards["settings"];
-        foreach (var button in Descendants(settings).OfType<PlankButton>().Where(b => b.IsEffectivelyVisible).ToArray())
-        {
-            var center = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
-            CheckCorners(button, "normal", output);
-            window.MouseMove(center);
-            Pump();
-            Check(button.IsPointerOver, $"{button.Text}: the pointer over it doesn't count as hover");
-            CheckCorners(button, "hover", output);
-            window.MouseDown(center, MouseButton.Left);
-            Pump();
-            CheckCorners(button, "pressed", output);
-            window.MouseMove(new Point(1, 1));
-            window.MouseUp(new Point(1, 1), MouseButton.Left);  // released elsewhere: no click
-            button.IsEnabled = false;
-            Pump();
-            CheckCorners(button, "disabled", output);
-            button.IsEnabled = true;
-        }
-        window.showControlsTab!(false);
 
         void Validate(string name, int tab = 0, string? pageName = null)
         {
@@ -339,36 +331,52 @@ static class LauncherLayoutTests
             var stage = (Control)window.Content!;
             string page = pageName ?? name;
             window.SaveShot(Path.Combine(output, $"{window.ClientSize.Width:0}x{window.ClientSize.Height:0}-{page}.png"));
-            Check(new Rect(stage.Bounds.Size).Contains(board.Bounds), $"{page}: board {board.Bounds} escapes the window {stage.Bounds.Size}");
+            // Full window, as F10: the menu covers the mansion; header, list, details and prompts inside it and apart.
+            Check(board.Bounds == new Rect(stage.Bounds.Size), $"{page}: menu {board.Bounds} doesn't fill the window {stage.Bounds.Size}");
+            var parts = board.Children.Skip(1).ToList();  // after the backdrop
+            foreach (var part in parts)
+                Check(new Rect(board.Bounds.Size).Contains(part.Bounds), $"{page}: {part.GetType().Name} {part.Bounds} escapes the menu {board.Bounds.Size}");
+            for (int a = 0; a < parts.Count; a++)
+                for (int b = a + 1; b < parts.Count; b++)
+                    Check(!parts[a].Bounds.Intersects(parts[b].Bounds), $"{page}: {parts[a].GetType().Name} {parts[a].Bounds} overlaps {parts[b].GetType().Name} {parts[b].Bounds}");
             var scroller = board.Scroller;
+            Check(scroller.Bounds.Height >= 2 * MenuRow.RowHeight, $"{page}: room for fewer than two rows ({scroller.Bounds.Height:0})");
             Check(scroller.Extent.Width <= scroller.Viewport.Width + 1,
                 $"{page}: content {scroller.Extent.Width} is wider than the page {scroller.Viewport.Width} at {window.ClientSize}");
-            Check(board.Body.Bounds.Right <= scroller.Viewport.Width + 1, $"{page}: page body wider than its viewport");
-            string Describe(Control c) => $"{c.GetType().Name} '{(c as TextBlock)?.Text ?? (c as PlankButton)?.Text ?? (c as ThemedCombo)?.SelectedItem}'" +
-                (c is TextBlock or PlankButton or ThemedCombo ? "" : $" in {string.Join(" < ", c.GetVisualAncestors().Take(3).Select(a => a.GetType().Name + (a is Control { Name: { } n } ? "#" + n : "")))}");
-            double Right(Control c) => c.TranslatePoint(new Point(c.Bounds.Width, 0), board.Body)!.Value.X;
-            var visible = Descendants(board.Body).OfType<Control>().Where(c => c.IsEffectivelyVisible && c.Bounds.Width > 0).ToList();
+            var body = board.Page;
+            Check(body.Bounds.Right <= scroller.Viewport.Width + 1, $"{page}: page body wider than its viewport");
+            // Opening a menu selects its first row in view, and the details panel names it.
+            var selected = board.Selected;
+            Check(selected != null && selected.IsEffectivelyVisible, $"{page}: no row selected on opening");
+            var row0 = selected!;
+            var top = row0.TranslatePoint(default, scroller)!.Value.Y;
+            Check(top >= -1 && top + row0.Bounds.Height <= scroller.Bounds.Height + 1, $"{page}: the selected row '{row0.Label}' is out of view");
+            Check(Descendants(board).OfType<TextBlock>().Any(t => t.Text == row0.Label && t.IsEffectivelyVisible), $"{page}: the details panel doesn't name '{row0.Label}'");
+            string Describe(Control c) => $"{c.GetType().Name} '{(c as TextBlock)?.Text ?? (c as MenuRow)?.Label}'" +
+                (c is TextBlock or MenuRow ? "" : $" in {string.Join(" < ", c.GetVisualAncestors().Take(3).Select(a => a.GetType().Name + (a is Control { Name: { } n } ? "#" + n : "")))}");
+            double Right(Control c) => c.TranslatePoint(new Point(c.Bounds.Width, 0), body)!.Value.X;
+            var visible = Descendants(body).OfType<Control>().Where(c => c.IsEffectivelyVisible && c.Bounds.Width > 0).ToList();
             // Report the innermost control that sticks out (its panels stick out with it).
-            var outside = visible.Where(c => Right(c) > board.Body.Bounds.Width + 1).ToList();
+            var outside = visible.Where(c => Right(c) > body.Bounds.Width + 1).ToList();
             var innermost = outside.Where(c => !outside.Any(o => o != c && o.GetVisualAncestors().Contains(c))).ToList();
-            Check(innermost.Count == 0, $"{page}: sticks out of the {board.Body.Bounds.Width:0} wide page: " +
+            Check(innermost.Count == 0, $"{page}: sticks out of the {body.Bounds.Width:0} wide page: " +
                   string.Join("; ", innermost.Take(5).Select(c => $"{Describe(c)} to {Right(c):0} (width {c.Bounds.Width:0})")));
-            foreach (var box in visible.OfType<ThemedCombo>())
-                Check(box.Bounds.Width >= 80, $"{page}: unusably narrow drop-down ({box.Bounds.Width:0})");
-            // The wheel over a closed drop-down scrolls the page and never changes (and saves) a setting.
-            var firstBox = Descendants(board.Body).OfType<ThemedCombo>().FirstOrDefault(c => c.IsEffectivelyVisible);
-            if (firstBox != null)
+            foreach (var row in visible.OfType<MenuRow>())
+                Check(row.Bounds.Width >= 320, $"{page}: row '{row.Label}' too narrow for its name and value ({row.Bounds.Width:0})");
+            // The wheel over a choice scrolls the page and never changes (and saves) a setting.
+            var firstChoice = Descendants(body).OfType<ChoiceRow>().FirstOrDefault(c => c.IsEffectivelyVisible);
+            if (firstChoice != null)
             {
-                int selected = firstBox.SelectedIndex;
-                var over = firstBox.TranslatePoint(new Point(firstBox.Bounds.Width / 2, firstBox.Bounds.Height / 2), window)!.Value;
+                int was = firstChoice.SelectedIndex;
+                var over = firstChoice.TranslatePoint(new Point(firstChoice.Bounds.Width - 60, firstChoice.Bounds.Height / 2), window)!.Value;
                 window.MouseWheel(over, new Vector(0, -1));
                 Pump();
-                Check(firstBox.SelectedIndex == selected, $"{page}: the wheel over a closed drop-down changed a setting");
+                Check(firstChoice.SelectedIndex == was, $"{page}: the wheel over a choice changed a setting");
                 scroller.ScrollToHome();
                 Pump();
             }
             string Signature() => string.Join("\n", Descendants(board).OfType<Control>().Where(c => c.IsEffectivelyVisible)
-                .Select(c => $"{c.GetType().Name} {(c as TextBlock)?.Text ?? (c as PlankButton)?.Text} {c.Bounds}"));
+                .Select(c => $"{c.GetType().Name} {(c as TextBlock)?.Text ?? (c as MenuRow)?.Label} {c.Bounds}"));
             string before = Signature();
             window.CloseBoards();
             Pump();
@@ -409,31 +417,55 @@ static class LauncherLayoutTests
         }
         Check(File.ReadAllText(config) == initialConfig, "Opening, resizing, or navigation changed configuration");
 
-        // ----- Keyboard and accessibility -----
+        // ----- Keys (the menu's own, as F10's) and accessibility -----
+        void Press(Key key, PhysicalKey physical)
+        {
+            window.KeyPress(key, RawInputModifiers.None, physical, null);
+            window.KeyRelease(key, RawInputModifiers.None, physical, null);
+            Pump();
+        }
+        window.showControlsTab!(false);
         window.ShowBoard("settings");
-        window.showControlsTab!(true);
         Pump();
-        var displayTab = Descendants(settings).OfType<PlankButton>().Single(b => b.Text == "Display");
-        Check(displayTab.Focusable && displayTab.IsEffectivelyEnabled, "Display tab is not keyboard focusable");
-        Check(ControlAutomationPeer.CreatePeerForElement(displayTab).GetAutomationControlType() == AutomationControlType.Button,
-              "Themed button lacks a button role");
-        Check(Descendants(settings).OfType<PlankButton>().Any(b => AutomationProperties.GetName(b) == "Close Settings"), "Close button lacks an accessible name");
-        displayTab.Focus(NavigationMethod.Tab);
-        window.KeyPress(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
-        window.KeyRelease(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+        var display = settings.Page;
+        var displayRows = settings.Rows.ToList();
+        Check(settings.SelectedTab == 0 && settings.Selected == displayRows[0], "Settings didn't open on Display's first row");
+        Press(Key.E, PhysicalKey.E);
+        Check(settings.SelectedTab == 1 && settings.Selected != null && settings.Page != display, "E didn't go to the next page");
+        Press(Key.E, PhysicalKey.E);
+        Press(Key.E, PhysicalKey.E);
+        Check(settings.SelectedTab == 2, "E past the last page didn't stop there");
+        Press(Key.Q, PhysicalKey.Q);
+        Press(Key.Q, PhysicalKey.Q);
+        Press(Key.Q, PhysicalKey.Q);
+        Check(settings.SelectedTab == 0, "Q didn't go back to the first page");
+        Press(Key.Down, PhysicalKey.ArrowDown);
+        Check(settings.Selected == displayRows[1], "Down didn't select the next row");
+        Press(Key.Up, PhysicalKey.ArrowUp);
+        Press(Key.Up, PhysicalKey.ArrowUp);
+        Check(settings.Selected == displayRows[0], "Up past the first row didn't stop there");
+        foreach (var (row, type) in new (MenuRow, AutomationControlType)[]
+                 { (displayRows[0], AutomationControlType.ComboBox), (window.autoLayout, AutomationControlType.CheckBox),
+                   (Descendants(window.boards["mods"]).OfType<ActionRow>().First(), AutomationControlType.Button) })
+        {
+            var peer = ControlAutomationPeer.CreatePeerForElement(row);
+            Check(peer.GetAutomationControlType() == type && peer.GetName() == row.Label, $"'{row.Label}' reads as {peer.GetAutomationControlType()} '{peer.GetName()}'");
+        }
+        Press(Key.Escape, PhysicalKey.Escape);
+        Check(!settings.IsVisible && window.OpenMenu == null, "Escape didn't close the menu");
+        window.ShowBoard("settings");
         Pump();
-        var display = (StackPanel)settings.Body.Children[0];
-        Check(display.IsVisible, "Space did not select the Display tab");
 
         // ----- Settings are saved, and nothing else in the file changes -----
-        var boxes = Descendants(display).OfType<ThemedCombo>().ToList();
-        boxes[0].SelectedIndex = 1;
+        var boxes = Descendants(display).OfType<ChoiceRow>().ToList();
+        Check(settings.Selected == boxes[0], "Reopening didn't select the first row");
+        Press(Key.Right, PhysicalKey.ArrowRight);  // Borderless fullscreen to Window
         string saved = File.ReadAllText(config);
         Check(saved.Contains("display_mode = \"windowed\""), "Changed display setting was not saved");
         Check(saved.Contains("hdr = true") && saved.Contains("hdr_paper_white_nits = 237.5") &&
               saved.Contains("hdr_peak_nits = 1234.0") && saved.Contains("unknown_setting = 42"),
               "Changing another setting overwrote custom HDR/unknown values");
-        bool hasMonitorRow = Descendants(display).OfType<TextBlock>().Any(t => t.Text == "Fullscreen monitor");
+        bool hasMonitorRow = Descendants(display).OfType<MenuRow>().Any(r => r.Label == "Fullscreen monitor" && r.IsVisible);
         if (MainWindow.MonitorChoice)
         {
             Check(hasMonitorRow, "Fullscreen monitor row is missing");
@@ -450,15 +482,16 @@ static class LauncherLayoutTests
         }
 
         // ----- Holidays: confetti fireworks is a choice like the others, saved in [game] and off unless picked -----
+        window.boards["extras"].SelectTab(2);  // Game (only the open page is in the tree)
         window.ShowBoard("extras");
         Pump();
-        var holidayBox = Descendants(window.boards["extras"]).OfType<ThemedCombo>().Single(c => c.Items.Contains("Confetti fireworks"));
+        var holidayBox = Descendants(window.boards["extras"]).OfType<ChoiceRow>().Single(c => c.Items.Contains("Confetti fireworks"));
         Check((string)holidayBox.SelectedItem! == "By today's date", "Holidays doesn't start on today's date");
         Check(new GameConfig(config).Get("game", "holiday") == null, "Opening Extras saved a holiday");
-        holidayBox.SelectedItem = "Confetti fireworks";
+        Pick(holidayBox, "Confetti fireworks");
         Check(new GameConfig(config).Get("game", "holiday") == "confetti", "Confetti fireworks wasn't saved as holiday = confetti");
         Check(File.ReadAllText(config).Contains("unknown_setting = 42"), "Changing the holiday overwrote another setting");
-        holidayBox.SelectedItem = "By today's date";
+        Pick(holidayBox, "By today's date");
         Check(new GameConfig(config).Get("game", "holiday") == "auto", "Going back to today's date wasn't saved");
         window.CloseBoards();
         Pump();
@@ -484,6 +517,27 @@ static class LauncherLayoutTests
             var faultText = string.Join(" | ", Descendants(fault).OfType<TextBlock>().Select(t => t.Text));
             Check(faultText.Contains("Config.toml") && faultText.Contains("UnauthorizedAccessException"), "The dialog doesn't name the problem: " + faultText);
             var faultButtons = Descendants(fault).OfType<PlankButton>().Select(b => b.Text).ToList();
+            // The dialogs keep the plank buttons: see-through corners in every state (released elsewhere: no click).
+            foreach (var button in Descendants(fault).OfType<PlankButton>().ToArray())
+            {
+                var middle = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), fault)!.Value;
+                CheckCorners(button, "normal", output);
+                fault.MouseMove(middle);
+                Pump();
+                Check(button.IsPointerOver, $"{button.Text}: the pointer over it doesn't count as hover");
+                CheckCorners(button, "hover", output);
+                fault.MouseDown(middle, MouseButton.Left);
+                Pump();
+                CheckCorners(button, "pressed", output);
+                fault.MouseMove(new Point(1, 1));
+                fault.MouseUp(new Point(1, 1), MouseButton.Left);
+                button.IsEnabled = false;
+                Pump();
+                CheckCorners(button, "disabled", output);
+                button.IsEnabled = true;
+                Pump();
+            }
+            Check(fault.IsVisible, "A press released off the button closed the dialog");
             Check(faultButtons.SequenceEqual(new[] { "Continue", "Quit" }), "The dialog's buttons are " + string.Join(",", faultButtons));
             var @continue = Descendants(fault).OfType<PlankButton>().Single(b => b.Text == "Continue");
             var press = @continue.TranslatePoint(new Point(@continue.Bounds.Width / 2, @continue.Bounds.Height / 2), fault)!.Value;
@@ -516,7 +570,7 @@ static class LauncherLayoutTests
         window.layoutBox.SelectedIndex = 0;
         window.showControlsTab!(true);
         Pump();
-        var xboxLabel = Descendants(settings).OfType<TextBlock>().Single(l => l.Text == "Black (sneak)");
+        var xboxLabel = Descendants(settings).OfType<MenuRow>().Single(l => l.Label == "Black (sneak)");
         Check(!xboxLabel.IsVisible, "GameCube layout did not hide Xbox-only mapping");
         window.layoutBox.SelectedIndex = 1;
         Pump();

@@ -49,6 +49,9 @@ static class LauncherControllerTests
         return (visible, scroll.Extent.Height > scroll.Viewport.Height + 1, rows.Count);
     }
     static T Find<T>(Window w) where T : Control => w.GetVisualDescendants().OfType<T>().First();
+    static bool InView(MenuScreen menu, Control c) => c.TranslatePoint(default, menu.Scroller) is Point top &&
+        top.Y >= -1 && top.Y + c.Bounds.Height <= menu.Scroller.Bounds.Height + 1;
+    static void Wait(Func<bool> done) { for (int i = 0; i < 200 && !done(); i++) { Pump(); Thread.Sleep(10); } Pump(); }
     static PlankButton Button(Window w, string name) => w.GetVisualDescendants().OfType<PlankButton>().First(b => b.Text == name);
     static void Click(MainWindow owner, Window window, string name)
     {
@@ -112,9 +115,10 @@ static class LauncherControllerTests
             Press(w, LauncherButtons.Next);
             Press(w, LauncherButtons.Confirm);
             Check(w.boards["settings"].IsVisible, "Controller did not open Settings for the HDR checks.");
-            var adjust = Button(w, "Adjust HDR");
-            Check(ControllerNavigation.Targets(w.boards["settings"]).Contains(adjust), "Adjust HDR is not a controller target.");
-            adjust.Focus(NavigationMethod.Directional);
+            var settings = w.boards["settings"];
+            var adjust = settings.Rows.OfType<ActionRow>().Single(r => r.Label == "HDR");
+            while (settings.Selected != adjust && settings.Selected != settings.Rows.Last()) Press(w, LauncherButtons.Down);
+            Check(settings.Selected == adjust, "Down did not reach the HDR row.");
             Press(w, LauncherButtons.Confirm);
             var hdr = w.navigation.Modal as HdrWindow;
             Check(hdr != null && hdr.IsVisible && hdr.Owner == w, "Adjust HDR did not open the HDR window as the registered modal.");
@@ -156,7 +160,7 @@ static class LauncherControllerTests
             Check(w.navigation.Modal == hdr && new GameConfig(config).Get("video", "hdr") == "true", "Choosing the same HDR value with the pad changed it.");
             Press(w, LauncherButtons.Back);
             Check(w.navigation.Modal == null && !hdr.IsVisible, "Back did not close the HDR window.");
-            Check(adjust.IsFocused, "Closing the HDR window did not return focus to Adjust HDR.");
+            Check(settings.Selected == adjust && adjust.IsFocused, "Closing the HDR window did not return to the HDR row.");
         }
         finally
         {
@@ -242,174 +246,166 @@ static class LauncherControllerTests
         Check(w.scene.FocusedSign != first, "Menu movement failed.");
         Shot(w, "Main-focus");
         Press(w, LauncherButtons.Confirm);
-        Check(w.boards["settings"].IsVisible, "Controller did not open Settings.");
-        var targets = ControllerNavigation.Targets(w.boards["settings"]).ToList();
-        Check(targets.Any(t => t is ThemedCombo) && targets.OfType<PlankButton>().Any(b => b.Text == "Controls"), "Display navigation surfaces missing.");
+        var settings = w.boards["settings"];
+        Check(settings.IsVisible && w.OpenMenu == settings, "Controller did not open Settings.");
+        var rows = settings.Rows.ToList();
+        Check(settings.SelectedTab == 0 && settings.Selected == rows[0] && rows[0].IsFocused, "Settings did not open on Display's first row.");
         Shot(w, "Display-focus");
-        // A popup shows every option when they fit and scrolls only beyond its cap (it once showed 2 of 3, 7 of 12).
-        var combos = targets.OfType<ThemedCombo>().Where(c => c.ItemCount >= 3).OrderBy(c => c.ItemCount).ToList();
-        Check(combos.Count > 0, "No dropdown with three or more options on the Display page.");
-        foreach (var combo in new[] { combos.First(), combos.Last() }.Distinct())
+        // Up / down pick a row and stop at the ends (as F10's).
+        Press(w, LauncherButtons.Up);
+        Check(settings.Selected == rows[0], "Up on the first row left it.");
+        Press(w, LauncherButtons.Down);
+        Check(settings.Selected == rows[1] && rows[1].IsFocused, "Down did not select the next row.");
+        for (int i = 0; i < rows.Count + 2; i++) Press(w, LauncherButtons.Down);
+        Check(settings.Selected == rows[^1] && InView(settings, rows[^1]), "Down did not stop on the last row, in view.");
+        // A short choice: left / right step through its values and wrap; A steps it too. Each change is saved.
+        var shortChoice = rows.OfType<ChoiceRow>().First(r => r.ItemCount is >= 2 and <= 6 && r.IsEffectivelyEnabled);
+        settings.Select(shortChoice); Pump();
+        int start = shortChoice.SelectedIndex, count = shortChoice.ItemCount;
+        Press(w, LauncherButtons.Left);
+        Check(shortChoice.SelectedIndex == (start - 1 + count) % count, $"Left did not step {shortChoice.Label} back (wrapping).");
+        Press(w, LauncherButtons.Right);
+        Check(shortChoice.SelectedIndex == start, $"Right did not step {shortChoice.Label} forward.");
+        Press(w, LauncherButtons.Confirm);
+        Check(shortChoice.SelectedIndex == (start + 1) % count, $"A did not step {shortChoice.Label}.");
+        Press(w, LauncherButtons.Left);
+        Check(shortChoice.SelectedIndex == start, $"{shortChoice.Label} did not go back to its value.");
+        // A long choice: A opens the whole list, which shows every option when they fit (it once showed 2 of 3, 7 of 12);
+        // Back leaves it as it was, and picking the value it has counts as a choice.
+        var longChoices = rows.OfType<ChoiceRow>().Where(r => r.ItemCount > 6).ToList();
+        Check(longChoices.Count > 0, "No choice with more than six values on the Display page.");
+        foreach (var longChoice in longChoices)
         {
-            combo.Focus(NavigationMethod.Directional); Press(w, LauncherButtons.Confirm); Pump();
-            var manyPopup = w.navigation.Modal!;
-            var (visible, scrolls, realized) = PopupRows(manyPopup);
-            Check(visible == combo.ItemCount && !scrolls, $"A popup for {combo.ItemCount} options shows {visible} rows (scrolls: {scrolls}).");
-            Shot(manyPopup, $"Dropdown-popup-{combo.ItemCount}");
+            settings.Select(longChoice); Pump();
+            int was = longChoice.SelectedIndex, commits = 0;
+            EventHandler committed = (_, _) => commits++;
+            longChoice.SelectionCommitted += committed;
+            Press(w, LauncherButtons.Confirm);
+            var listPopup = w.navigation.Modal!;
+            Check(listPopup != null && listPopup.Title == longChoice.Label, $"A on {longChoice.Label} did not open its list.");
+            var (visible, scrolls, _) = PopupRows(listPopup!);
+            Check(visible == longChoice.ItemCount && !scrolls, $"A list of {longChoice.ItemCount} options shows {visible} rows (scrolls: {scrolls}).");
+            Shot(listPopup!, $"Choice-list-{longChoice.ItemCount}");
+            Press(w, LauncherButtons.Down);
             Press(w, LauncherButtons.Back);
+            Check(w.navigation.Modal == null && longChoice.SelectedIndex == was && commits == 0, $"Backing out of {longChoice.Label}'s list changed it.");
+            Press(w, LauncherButtons.Confirm);
+            Press(w, LauncherButtons.Confirm);
+            Check(w.navigation.Modal == null && longChoice.SelectedIndex == was && commits == 1, $"Picking {longChoice.Label}'s own value was not a choice.");
+            Check(settings.Selected == longChoice && longChoice.IsFocused, $"Closing {longChoice.Label}'s list lost the selection.");
+            longChoice.SelectionCommitted -= committed;
         }
-        Click(w, w, "Controls");
-        Check(w.layoutBox.IsEffectivelyVisible, "Controls tab failed.");
-        // A picker is the themed browser only when the pad started that action, never because the pad was used earlier.
-        var controlsTab = Button(w, "Controls");
+        // A row is told apart by who pressed it: the pad (a picker is the themed browser) or the mouse.
         var origins = new List<bool>();
-        EventHandler origin = (_, _) => origins.Add(w.navigation.Activating);
-        controlsTab.Click += origin;
-        Click(w, w, "Controls");
-        controlsTab.PerformClick();  // what a mouse click runs
-        controlsTab.Click -= origin;
+        var probe = new ActionRow("Synthetic origin", () => origins.Add(w.navigation.Activating));
+        settings.Page.Children.Add(probe); Pump();
+        settings.Select(probe); Pump();
+        Press(w, LauncherButtons.Confirm);
+        probe.PerformClick();  // what a mouse click runs
+        settings.Page.Children.Remove(probe); settings.SelectFirst(); Pump();
         Check(origins.SequenceEqual(new[] { true, false }) && w.navigation.Used && !w.navigation.Activating,
               "Pad-started and mouse-started actions are not told apart.");
-        // The bumpers switch tabs where a page has them: one per press, no wrap, focus on the new tab's button.
-        Press(w, LauncherButtons.Previous);
-        Check(Button(w, "Graphics").Selected && !w.layoutBox.IsEffectivelyVisible && Button(w, "Graphics").IsFocused, "LB did not switch to the Graphics tab.");
-        Press(w, LauncherButtons.Previous);
-        Check(Button(w, "Display").Selected && !w.layoutBox.IsEffectivelyVisible && Button(w, "Display").IsFocused, "LB did not switch to the Display tab.");
-        Press(w, LauncherButtons.Previous);
-        Check(Button(w, "Display").Selected && !Button(w, "Controls").Selected, "LB on the first tab wrapped or left it.");
+        // The bumpers switch pages: one per press, no wrap, the new page's first row selected.
         Press(w, LauncherButtons.Next);
-        Check(Button(w, "Graphics").Selected && Button(w, "Graphics").IsFocused, "RB did not switch to the Graphics tab.");
-        // Down from the tab goes into its page: the first setting there.
-        Press(w, LauncherButtons.Down);
-        Check(TopLevel.GetTopLevel(w)!.FocusManager!.GetFocusedElement() is ThemedCombo { IsEffectivelyVisible: true },
-              "Down from the Graphics tab did not reach its first setting.");
+        Check(settings.SelectedTab == 1 && settings.Selected == settings.Rows.First() && !w.layoutBox.IsAttachedToVisualTree(), "RB did not switch to Graphics.");
         Press(w, LauncherButtons.Next);
-        Check(Button(w, "Controls").Selected && w.layoutBox.IsEffectivelyVisible && Button(w, "Controls").IsFocused, "RB did not switch to the Controls tab.");
+        Check(settings.SelectedTab == 2 && w.layoutBox.IsAttachedToVisualTree() && settings.Selected == settings.Rows.First(), "RB did not switch to Controls.");
         Press(w, LauncherButtons.Next);
-        Check(Button(w, "Controls").Selected && !Button(w, "Display").Selected, "RB on the last tab wrapped or left it.");
-        // Extras has tabs too: Discs, Textures, Game, Folders, About.
+        Check(settings.SelectedTab == 2, "RB on the last page wrapped or left it.");
+        Press(w, LauncherButtons.Previous); Press(w, LauncherButtons.Previous);
+        Check(settings.SelectedTab == 0, "LB did not go back to Display.");
+        Press(w, LauncherButtons.Previous);
+        Check(settings.SelectedTab == 0, "LB on the first page wrapped or left it.");
+        // Extras has pages too: Discs, Textures, Game, Folders, About.
+        Press(w, LauncherButtons.Back);
+        Check(!settings.IsVisible && w.OpenMenu == null, "Back did not close Settings.");
         w.ShowBoard("extras"); Pump();
         var extras = w.boards["extras"];
-        PlankButton Tab(string name) => extras.GetVisualDescendants().OfType<TabBar>().Single().Children.OfType<PlankButton>().Single(b => b.Text == name);
-        Check(Tab("Discs").Selected, "Extras did not open on Discs.");
-        foreach (var name in new[] { "Textures", "Game", "Folders", "About", "About" })
+        Check(extras.SelectedTab == 0 && extras.Selected != null, "Extras did not open on Discs with a row selected.");
+        foreach (int tab in new[] { 1, 2, 3, 4, 4 })
         {
             Press(w, LauncherButtons.Next);
-            Check(Tab(name).Selected && Tab(name).IsFocused && extras.SelectedTab == Array.IndexOf(new[] { "Discs", "Textures", "Game", "Folders", "About" }, name),
-                  $"RB in Extras did not reach {name} (or wrapped).");
+            Check(extras.SelectedTab == tab && extras.Selected != null && extras.Selected.IsFocused, $"RB in Extras did not reach page {tab} (or wrapped).");
         }
         Press(w, LauncherButtons.Previous);
-        Check(Tab("Folders").Selected, "LB in Extras did not go back to Folders.");
+        Check(extras.SelectedTab == 3, "LB in Extras did not go back to Folders.");
+        Shot(w, "Extras-focus");
         extras.SelectTab(0);
         Press(w, LauncherButtons.Back);
         Check(!extras.IsVisible, "Back did not close Extras.");
+
+        // ----- Controls: the layout is a choice, Match my controller a switch -----
         w.ShowBoard("settings"); w.showControlsTab!(true); Pump();
         Shot(w, "Controls-focus");
-
+        Check(settings.Selected == w.layoutBox, "Controls did not open on Layout.");
         string before = File.ReadAllText(config);
-        w.layoutBox.Focus(NavigationMethod.Directional);
-        Feed(w, LauncherButtons.None); Feed(w, LauncherButtons.Confirm);
-        var choice = w.navigation.Modal!;
-        Check(choice != null, "Controller dropdown did not create a registered dialog.");
-        Check(choice!.WindowDecorations == WindowDecorations.None, "Dropdown popup kept the operating-system window frame.");
-        Check(choice.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "Layout") && choice.Title == "Layout",
-              "Dropdown popup does not name its setting.");
-        Shot(choice, "Dropdown-popup");
-        Check(PopupRows(choice).Visible == 2, "The two-option Layout popup does not show both options.");
-        Feed(w, LauncherButtons.Confirm);
-        Check(w.navigation.Modal == choice && choice!.IsVisible, "Held confirm accepted the new dialog.");
-        Press(w, LauncherButtons.Down);
-        Check(File.ReadAllText(config) == before, "Staged dropdown selection saved before confirmation.");
-        Press(w, LauncherButtons.Back);
-        Check(w.navigation.Modal == null && File.ReadAllText(config) == before, "Cancelled dropdown changed settings.");
-        w.layoutBox.Focus(NavigationMethod.Directional);
-        Press(w, LauncherButtons.Confirm);
-        Press(w, LauncherButtons.Down);
-        Press(w, LauncherButtons.Confirm);
+        Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Up);
+        Check(File.ReadAllText(config) == before, "Moving over the Layout row saved something.");
+        Press(w, LauncherButtons.Right);
         var c = new GameConfig(config);
         Check(c.Get("controller", "layout") == "xbox_original" && !ControllerLayout.Automatic(c), "Explicit controller choice did not persist manual scheme.");
         Check(c.Get("controller", "a") == "east@0.75,south" && c.Get("video", "hdr_paper_white_nits") == "237.5", "Choice altered unrelated settings/bindings.");
+        Check(w.autoLayout.IsChecked == false, "Choosing a layout left Match my controller on.");
+        Press(w, LauncherButtons.Down);
+        Check(settings.Selected == w.autoLayout, "Down did not reach Match my controller.");
+        Press(w, LauncherButtons.Confirm);
+        Check(w.autoLayout.IsChecked == true && ControllerLayout.Automatic(new GameConfig(config)), "A did not switch Match my controller on.");
+        Press(w, LauncherButtons.Right);
+        Check(w.autoLayout.IsChecked == true, "Right switched Match my controller off.");
+        Press(w, LauncherButtons.Left);
+        Check(w.autoLayout.IsChecked == false && !ControllerLayout.Automatic(new GameConfig(config)), "Left did not switch Match my controller off.");
+        Press(w, LauncherButtons.Left);
+        Check(w.autoLayout.IsChecked == false, "Left switched Match my controller back on.");
         w.autoLayout.IsChecked = true; Pump();
-        w.layoutBox.Focus(NavigationMethod.Directional);
-        Press(w, LauncherButtons.Confirm); Press(w, LauncherButtons.Confirm);
-        Check(!ControllerLayout.Automatic(new GameConfig(config)), "Same-value explicit choice did not stop automatic matching.");
-        w.autoLayout.IsChecked = true; Pump();
-        w.layoutBox.IsDropDownOpen = true; Pump();
-        var item = w.layoutBox.ContainerFromIndex(w.layoutBox.SelectedIndex)!;
-        Check(ControlAutomationPeer.CreatePeerForElement(item) is ISelectionItemProvider, "Native layout item lost accessibility selection.");
-        ((ISelectionItemProvider)ControlAutomationPeer.CreatePeerForElement(item)!).Select();
-        Pump();
-        Check(!ControllerLayout.Automatic(new GameConfig(config)), "Same-value native accessibility selection did not stop automatic matching.");
-        w.layoutBox.IsDropDownOpen = false; Pump();
-        w.autoLayout.IsChecked = true; Pump();
-        w.layoutBox.IsDropDownOpen = true; Pump();
-        w.layoutBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
-        Pump();
-        Check(!ControllerLayout.Automatic(new GameConfig(config)), "Same-value native keyboard choice did not stop automatic matching.");
-        w.layoutBox.IsDropDownOpen = false; Pump();
-        w.autoLayout.IsChecked = true; Pump();
-        w.layoutBox.IsDropDownOpen = true; Pump();
-        item = w.layoutBox.ContainerFromIndex(w.layoutBox.SelectedIndex)!;
-        var popup = TopLevel.GetTopLevel(item)!;
-        var center = item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), popup)!.Value;
-        popup.MouseMove(center); popup.MouseDown(center, MouseButton.Left); popup.MouseUp(center, MouseButton.Left); Pump();
-        Check(!ControllerLayout.Automatic(new GameConfig(config)), "Same-value native pointer choice did not stop automatic matching.");
-        w.layoutBox.IsDropDownOpen = false; Pump();
-        w.autoLayout.IsChecked = true; Pump();
-        w.layoutBox.IsDropDownOpen = true; Pump();
-        w.layoutBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
-        Pump();
-        Check(ControllerLayout.Automatic(new GameConfig(config)), "Cancelling an unchanged native picker changed manual intent.");
-        w.autoLayout.IsChecked = false; Pump();
-        w.layoutBox.IsDropDownOpen = true; Pump();
-        Press(w, LauncherButtons.Back);
-        Check(!w.layoutBox.IsDropDownOpen && w.boards["settings"].IsVisible, "Controller Back closed the board instead of its native dropdown.");
+        Press(w, LauncherButtons.Up); Press(w, LauncherButtons.Left);
+        c = new GameConfig(config);
+        Check(c.Get("controller", "layout") == "gamecube" && !ControllerLayout.Automatic(c), "Left on Layout did not choose GameCube and stop automatic matching.");
 
-        var scroller = w.boards["settings"].Scroller;
-        w.layoutBox.Focus(NavigationMethod.Directional);
+        // The right stick scrolls the page; the selection stays on a row in view.
+        var scroller = settings.Scroller;
         double old = scroller.Offset.Y;
         Press(w, LauncherButtons.ScrollDown);
         Check(scroller.Offset.Y > old, "Right-stick scrolling failed.");
+        Check(settings.Selected != null && InView(settings, settings.Selected), "Scrolling left the selection out of view.");
         double offset = scroller.Offset.Y;
         Press(w, LauncherButtons.Back); w.ShowBoard("settings"); Pump();
-        Check(Math.Abs(scroller.Offset.Y - offset) < 1, "Reopening a board reset its scroll offset.");
+        Check(Math.Abs(scroller.Offset.Y - offset) < 1, "Reopening a menu reset its scroll offset.");
+        Check(settings.Selected != null && InView(settings, settings.Selected), "Reopening a scrolled menu selected a row out of view.");
+
+        // ----- Mods: the pad reaches each mod's switch and the three actions; switching keeps the selection on the same
+        // mod after the list is rebuilt; Add a mod goes through the themed browser (zip files and folders only) -----
         w.ShowBoard("mods"); Pump();
-        Check(ControllerNavigation.Targets(w.boards["mods"]).OfType<PlankButton>().Any(), "Mods controls not navigable.");
-        Shot(w, "Mods-focus");
-        // Mods page: the pad reaches a mod's checkbox and the three buttons, ticking keeps the pad on the same row after the
-        // list is rebuilt, and Add a mod goes through the themed browser (zip files and folders only) when the pad pressed it.
-        foreach (var name in new[] { "ModA", "ModB", "ModC" }) Directory.CreateDirectory(Path.Combine(paths.Mods, name, "files"));
         var modsBoard = w.boards["mods"];
-        Click(w, w, "Refresh");
-        for (int i = 0; i < 100 && modsBoard.GetVisualDescendants().OfType<CheckBox>().Count() < 3; i++) { Pump(); Thread.Sleep(10); }
-        var modTargets = ControllerNavigation.Targets(modsBoard).ToList();
-        Check(modTargets.OfType<CheckBox>().Count() == 3, "Pad cannot reach the mods' checkboxes.");
-        foreach (var label in new[] { "Add a mod (zip)", "Open the mods folder", "Refresh" })
-            Check(modTargets.OfType<PlankButton>().Any(b => b.Text == label), "Pad cannot reach the Mods button " + label + ".");
-        var second = modTargets.OfType<CheckBox>().ElementAt(1);
-        second.Focus(NavigationMethod.Directional); Pump();
+        Shot(w, "Mods-focus");
+        foreach (var name in new[] { "ModA", "ModB", "ModC" }) Directory.CreateDirectory(Path.Combine(paths.Mods, name, "files"));
+        var refresh = modsBoard.Rows.OfType<ActionRow>().Single(r => r.Label == "Refresh");
+        modsBoard.Select(refresh); Pump();
         Press(w, LauncherButtons.Confirm);
-        for (int i = 0; i < 100 && second.IsChecked != false; i++) { Pump(); Thread.Sleep(10); }
-        Check(File.Exists(Path.Combine(paths.Mods, "ModB", "disabled")), "Controller did not untick the mod.");
-        for (int i = 0; i < 100; i++) { Pump(); Thread.Sleep(10); }  // the rebuild after the tick
-        var focusedBox = w.FocusManager?.GetFocusedElement() as CheckBox;
-        Check(focusedBox != null && modsBoard.GetVisualDescendants().Contains(focusedBox) &&
-              ((focusedBox.Content as TextBlock)?.Text == "ModB"), "Ticking a mod lost the pad's focus (list rebuilt under it).");
-        Check(focusedBox.Classes.Contains(":focus-visible"), "A pad tick did not keep the focus highlight on the mod.");
+        Wait(() => modsBoard.Rows.OfType<ToggleRow>().Count() >= 3);
+        Check(modsBoard.Rows.OfType<ToggleRow>().Select(r => r.Label).SequenceEqual(new[] { "ModA", "ModB", "ModC" }), "The mods' switches are not listed in order.");
+        foreach (var label in new[] { "Add a mod (zip)", "Open the mods folder", "Refresh" })
+            Check(modsBoard.Rows.OfType<ActionRow>().Any(b => b.Label == label), "Pad cannot reach the Mods action " + label + ".");
+        ToggleRow Mod(string name) => modsBoard.Rows.OfType<ToggleRow>().Single(r => r.Label == name);
+        modsBoard.Select(Mod("ModB")); Pump();
+        Press(w, LauncherButtons.Confirm);
+        Wait(() => File.Exists(Path.Combine(paths.Mods, "ModB", "disabled")));
+        Check(File.Exists(Path.Combine(paths.Mods, "ModB", "disabled")), "A did not switch the mod off.");
+        Wait(() => modsBoard.Selected is { } s && s.IsAttachedToVisualTree() && s.Label == "ModB");  // the rebuild after the switch
+        Check(modsBoard.Selected is ToggleRow { Label: "ModB", IsChecked: false } sel && sel.IsAttachedToVisualTree() && sel.IsFocused,
+              "Switching a mod lost the selection (list rebuilt under it).");
         Press(w, LauncherButtons.Down);
-        Check((((w.FocusManager?.GetFocusedElement() as CheckBox)?.Content as TextBlock)?.Text) == "ModC", "Down did not move to the next mod after a tick.");
-        Press(w, LauncherButtons.Confirm); for (int i = 0; i < 100; i++) { Pump(); Thread.Sleep(10); }
+        Check(modsBoard.Selected?.Label == "ModC", "Down did not move to the next mod after a switch.");
+        Press(w, LauncherButtons.Left);
+        Wait(() => File.Exists(Path.Combine(paths.Mods, "ModC", "disabled")) && modsBoard.Selected?.IsAttachedToVisualTree() == true);
+        Check(File.Exists(Path.Combine(paths.Mods, "ModC", "disabled")) && modsBoard.Selected?.Label == "ModC", "Left did not switch a mod off in place.");
         Press(w, LauncherButtons.Up);
-        Check((((w.FocusManager?.GetFocusedElement() as CheckBox)?.Content as TextBlock)?.Text) == "ModB", "Up after a tick did not go back to the previous mod.");
-        // A mouse click (pointer focus) on a mod's checkbox: after the rebuild it keeps focus but shows no focus box.
-        var clicked = modsBoard.GetVisualDescendants().OfType<CheckBox>().First(c => (c.Content as TextBlock)?.Text == "ModA");
-        clicked.Focus(NavigationMethod.Pointer); Pump();
-        Check(!clicked.Classes.Contains(":focus-visible"), "Harness: pointer focus unexpectedly shows the focus box.");
-        clicked.IsChecked = !clicked.IsChecked;
-        for (int i = 0; i < 100; i++) { Pump(); Thread.Sleep(10); }
-        var afterClick = w.FocusManager?.GetFocusedElement() as CheckBox;
-        Check(afterClick != null && (afterClick.Content as TextBlock)?.Text == "ModA", "A mouse tick lost focus on the mod.");
-        Check(!afterClick.Classes.Contains(":focus-visible"), "A mouse tick put a focus box around the mod.");
+        Check(modsBoard.Selected?.Label == "ModB", "Up after a switch did not go back to the previous mod.");
+        // A mouse click on a mod's switch: it switches, and the selection follows to that mod.
+        var clicked = Mod("ModA");
+        var at = clicked.TranslatePoint(new Point(clicked.Bounds.Width - 40, clicked.Bounds.Height / 2), w)!.Value;
+        w.MouseMove(at); w.MouseDown(at, MouseButton.Left); w.MouseUp(at, MouseButton.Left);
+        Wait(() => File.Exists(Path.Combine(paths.Mods, "ModA", "disabled")) && modsBoard.Selected?.IsAttachedToVisualTree() == true);
+        Check(File.Exists(Path.Combine(paths.Mods, "ModA", "disabled")) && modsBoard.Selected?.Label == "ModA", "A mouse click on a mod didn't switch it and select it.");
         string zips = Path.Combine(paths.Root, "zips");
         Directory.CreateDirectory(Path.Combine(zips, "Sub"));
         File.WriteAllText(Path.Combine(zips, "a.zip"), "x"); File.WriteAllText(Path.Combine(zips, "b.ISO"), "x"); File.WriteAllText(Path.Combine(zips, "c.txt"), "x");
@@ -417,14 +413,14 @@ static class LauncherControllerTests
         Pump(); var zipModal = w.navigation.Modal!;
         Check(Find<ControllerList>(zipModal).ItemCount == 2, "Zip browser did not list only .zip files and folders.");
         Press(w, LauncherButtons.Back); Finish(zipPick);
-        // The real button: pressed by the pad it opens the themed browser, not the OS picker.
-        Click(w, w, "Add a mod (zip)");
+        // The real row: pressed by the pad it opens the themed browser, not the OS picker.
+        modsBoard.Select(modsBoard.Rows.OfType<ActionRow>().Single(r => r.Label == "Add a mod (zip)")); Pump();
+        Press(w, LauncherButtons.Confirm);
         Check(w.navigation.Modal is { } zipDialog && zipDialog.GetVisualDescendants().OfType<ControllerList>().Any(), "Add a mod (zip) with the pad did not open the themed browser.");
         Press(w, LauncherButtons.Back); Pump();
-        Check(w.navigation.Modal == null, "Backing out of the mod browser left a dialog open.");
-        w.ShowBoard("extras"); Pump();
-        Check(ControllerNavigation.Targets(w.boards["extras"]).OfType<PlankButton>().Count() > 3, "Extras controls not navigable.");
-        Shot(w, "Extras-focus");
+        Check(w.navigation.Modal == null && modsBoard.IsVisible, "Backing out of the mod browser left a dialog open or closed Mods.");
+        Press(w, LauncherButtons.Back);
+        Check(w.OpenMenu == null, "Back did not close Mods.");
 
         var question = Dialogs.YesNo(w, "Synthetic safe-focus question.");
         var modal = w.navigation.Modal!;
@@ -615,8 +611,11 @@ static class LauncherControllerTests
         Check(w.layoutBox.SelectedIndex == 2 && w.layoutBox.SelectedItem?.ToString() == "(custom) unrecognized-layout", "Unknown layout was displayed as a different supported scheme.");
         Finish(w.ApplyControllerLayout(new[] { new Gamepads.Pad("Xbox", Gamepads.Kind.Xbox) }));
         Check(File.ReadAllText(config) == before, "Unknown deliberate scheme was overwritten.");
-        w.layoutBox.Focus(NavigationMethod.Directional); Press(w, LauncherButtons.Confirm); Press(w, LauncherButtons.Confirm);
-        Check(File.ReadAllText(config) == before, "Explicit same-value custom scheme rewrote unrelated configuration.");
+        w.ShowBoard("settings"); w.showControlsTab!(true); Pump();
+        Check(w.boards["settings"].Selected == w.layoutBox, "Controls did not open on Layout.");
+        Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Up);
+        Check(File.ReadAllText(config) == before, "Moving over a custom layout rewrote the configuration.");
+        w.CloseBoards(); Pump();
         w.Close(); Pump(); Fault.Owner = null;
 
         // The launcher comes back after the game exits, a clean quit (exit code 0) included.
