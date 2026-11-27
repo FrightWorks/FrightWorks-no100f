@@ -64,7 +64,8 @@ static class TexturePacks
             .Select(f =>
             {
                 var known = All.FirstOrDefault(p => BaseName(p.Folder).Equals(BaseName(f), StringComparison.OrdinalIgnoreCase));
-                return new Installed(f, known?.Name ?? BaseName(f), known, !File.Exists(Path.Combine(dir, f, "disabled")));
+                string name = XboxTextures.IsPack(f) ? "Xbox textures" : known?.Name ?? BaseName(f);
+                return new Installed(f, name, known, !File.Exists(Path.Combine(dir, f, "disabled")));
             }).ToList();
     }
 

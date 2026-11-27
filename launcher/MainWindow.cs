@@ -1047,12 +1047,16 @@ sealed class MainWindow : Window
         page.Children.Add(new ActionRow("Open the texture packs folder", () => OpenFolder(packsDir).Watch(), "Open",
             "Put a pack's folder in here (its PNG or DDS textures anywhere inside it) and it joins the list above. " + packsDir));
         page.Children.Add(new ActionRow("Refresh", () => Fill(), "Refresh", "Looks at the texture packs folder again."));
-        page.Children.Add(Indent(Footnote("Your texture_replacements folder and mods win over every pack; the Xbox textures (Extras > Discs) " +
-                                          "come after them. Settings > HD textures turns them all off. To keep this order the launcher numbers " +
-                                          "the pack folders (10-, 20-, ...). Changes apply at the next game start.")));
+        page.Children.Add(Indent(Footnote("Your texture_replacements folder and mods win over every pack. Settings > HD textures turns them " +
+                                          "all off except the Xbox textures. To keep this order the launcher numbers the pack folders (10-, 20-, " +
+                                          "...). Changes apply at the next game start.")));
 
         string Describe(TexturePacks.Installed pack, bool on) =>
-            (pack.Known != null ? $"{pack.Known.About} By {pack.Known.Credit}." : $"Added by you: the folder {pack.Folder} in the texture packs folder. To remove it, delete that folder.") +
+            (pack.Known != null ? $"{pack.Known.About} By {pack.Known.Credit}."
+             : XboxTextures.IsPack(pack.Folder) ? "The Xbox version's textures, taken from your own Xbox disc (Extras > Discs): the GameCube's textures " +
+                                                  "without its lossy compression. With Settings > HD textures off, the game uses only these. " +
+                                                  "Extras > Discs removes them."
+             : $"Added by you: the folder {pack.Folder} in the texture packs folder. To remove it, delete that folder.") +
             "\n\n" + (on ? "On: the game uses it." : "Off: the game leaves it out.") +
             "\n\nA (or drag it) to move it up or down the list.";
 
@@ -1061,6 +1065,7 @@ sealed class MainWindow : Window
         void Fill()
         {
             string? keep = board.Selected is { Parent: { } parent } kept && (parent == list || parent == downloads) ? kept.Label : null;
+            if (!GameRunning() && XboxTextures.MoveToPacks(userData)) XboxPackLast();  // from their old folder
             list.Children.Clear();
             downloads.Children.Clear();
             packDownloadRow = null;
@@ -1270,11 +1275,14 @@ sealed class MainWindow : Window
                     ps2Bar.Value = Math.Min(p.done, ps2Bar.Maximum);
                     ps2Status.Text = p.name.Length > 0 ? $"Taking the Xbox textures {p.done + 1}/{p.total}: {p.name}" : "Copying";
                 });
+                bool hadXbox = TexturePacks.List(userData).Any(i => XboxTextures.IsPack(i.Folder));
                 await Task.Run(() =>
                 {
                     using var image = Ps2Cutscenes.OpenImage(file);
                     XboxTextures.Copy(image, disc, userData, (d, t, n) => ((IProgress<(int, int, string)>)textureReport).Report((d, t, n)));
                 });
+                if (!hadXbox) XboxPackLast();
+                refreshPacks?.Invoke();
                 var soundReport = new Progress<(int done, int total, string name)>(p =>
                 {
                     ps2Bar.Maximum = Math.Max(1, p.total);
@@ -1296,6 +1304,16 @@ sealed class MainWindow : Window
             await Dialogs.Message(this, $"Copied {result.Copied} of the {result.Expected} cutscenes on that disc: the others play as movies.");
     }
 
+    // The Xbox textures go last among the packs when they arrive (copied from a disc, or moved from their old folder), where
+    // the game used to load them; after that the player's order stands.
+    void XboxPackLast()
+    {
+        var packs = TexturePacks.List(userData);
+        if (packs.FirstOrDefault(i => XboxTextures.IsPack(i.Folder)) is not { } xbox || packs[^1] == xbox) return;
+        try { TexturePacks.Reorder(userData, packs.Where(i => i != xbox).Select(i => i.Folder).Append(xbox.Folder).ToList()); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
     async Task RemovePs2Cutscenes()
     {
         if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the cutscenes while it runs."); return; }
@@ -1303,6 +1321,7 @@ sealed class MainWindow : Window
         XboxTextures.Remove(userData);
         XboxAudio.Remove(userData);
         RefreshPs2();
+        refreshPacks?.Invoke();
     }
 
     async Task Launch()

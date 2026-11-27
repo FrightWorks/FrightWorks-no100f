@@ -70,7 +70,8 @@ uses.
 **Texture packs.** **Extras > Textures** lists every pack in `UserData\texture_packs`: the ones the launcher downloads
 and any pack folder you put there yourself (**Open the texture packs folder**). Higher in the list wins. Left/right
 switch a pack off or on; A picks it up to move it (up/down, then A to put it down, B to put it back), or drag it by its
-name with the mouse. X removes a downloaded pack; the launcher never deletes a folder you added. To keep the order it
+name with the mouse. The textures from your own Xbox disc are a pack here too ([PS2 and Xbox extras](ps2-xbox-extras.md)).
+X removes a downloaded pack; the launcher never deletes a folder you added. To keep the order it
 numbers the folders (`10-`, `20-`, ...). Your own `texture_replacements` folder and mods still win over every pack.
 
 ## Controllers and keyboard

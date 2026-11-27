@@ -159,6 +159,23 @@ static class LauncherLayoutTests
             TexturePacks.Reorder(userData, TexturePacks.List(userData).Select(i => i.Folder).Reverse().ToList());
             var many = TexturePacks.List(userData).Select(i => i.Folder).ToList();
             Check(many.Count == 12 && many[0] == "010-extra7" && many[11] == "120-Mine", "Twelve packs weren't numbered in three digits: " + string.Join(",", many));
+            // The Xbox textures from their old folder become a pack, last (999-xbox), named as such; a second move does nothing.
+            string legacy = XboxTextures.LegacyDir(userData);
+            Directory.CreateDirectory(legacy);
+            File.WriteAllText(Path.Combine(legacy, "tex1_8x8_0123456789abcdef_14.png"), "x");
+            Check(XboxTextures.Dir(userData) == legacy && XboxTextures.Count(userData) == 1, "The Xbox textures' old folder isn't found");
+            Check(XboxTextures.MoveToPacks(userData) && !Directory.Exists(legacy) && !XboxTextures.MoveToPacks(userData), "The Xbox textures weren't moved into the packs once");
+            var withXbox = TexturePacks.List(userData);
+            Check(withXbox.Count == 13 && withXbox.Count(i => i.Name == "Xbox textures") == 1 && withXbox.Single(i => i.Name == "Xbox textures").Folder == "999-xbox" &&
+                  XboxTextures.Count(userData) == 1, "The moved Xbox textures aren't the pack 999-xbox: " + Names());
+            TexturePacks.Reorder(userData, withXbox.Select(i => i.Folder).Reverse().ToList());
+            Check(XboxTextures.Dir(userData).EndsWith(Path.DirectorySeparatorChar + "010-xbox") && TexturePacks.List(userData)[0].Name == "Xbox textures",
+                  "A renumbered Xbox pack isn't found: " + Names());
+            XboxTextures.Remove(userData);
+            Check(!TexturePacks.List(userData).Any(i => i.Name == "Xbox textures") && XboxTextures.Count(userData) == 0, "Removing the Xbox textures left the pack");
+            var now = TexturePacks.List(userData);
+            TexturePacks.Reorder(userData, many.Select(m => now.Single(i => TexturePacks.BaseName(i.Folder) == TexturePacks.BaseName(m)).Folder).ToList());
+            Check(TexturePacks.List(userData).Select(i => i.Folder).SequenceEqual(many), "The packs' order wasn't put back: " + Names());
             if (OperatingSystem.IsWindows())
             {
                 // A file in use stops a folder rename on Windows (the game running): nothing may stay half renamed.

@@ -109,8 +109,9 @@ typedef struct {
   bool pauseOnFocusLost;
   bool allowTextureReplacements;
   bool allowTextureDumps;
-  // A texture folder indexed after all the others (the player's Xbox textures), so every other folder wins. With
-  // extraTexturesOnly it is the only folder indexed (the HD pack and the user's own are off). Null for none.
+  // A texture folder indexed after all the others (the player's Xbox textures where they were before 2026-11-27), so every
+  // other folder wins. With extraTexturesOnly only the Xbox textures are indexed: this folder and the texture pack named
+  // <NN>-xbox (the HD packs and the user's own are off). Null for none.
   const char* extraTexturePath;
   bool extraTexturesOnly;
   // Redraw the game's font sheets at a high resolution as they load (lib/gfx/sharp_font.hpp), ahead of the built-in

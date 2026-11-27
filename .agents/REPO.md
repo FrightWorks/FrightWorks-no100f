@@ -396,7 +396,7 @@ To build old source there, set only the paths that differ with `git restore --so
   The installer's program folder is deleted on uninstall.
 - `[paths] saves_dir` overrides the saves folder.
 - The shipped HD pack and `button_icons` sit in `data\` beside the exe in both modes: Aurora's second texture root, after the user's own.
-  The player's Xbox textures (`<UserData>\xbox\textures`, `launcher/XboxTextures.cs`) come last (`extraTexturePath`), and alone with HD textures off.
+  The player's Xbox textures (`launcher/XboxTextures.cs`) are a texture pack, `<UserData>\texture_packs\<NN>-xbox`, in the player's order (a new copy goes last); Aurora knows it by its name (`is_xbox_pack`) and keeps only it with HD textures off. Before 2026-11-27 they were `<UserData>\xbox\textures`: the launcher moves that folder into the packs (last) when Extras > Textures fills, and the game still reads it there, after every folder (`extraTexturePath`).
 - The first installed start offers to import from a folder directly inside Documents whose `Config.toml` is this game's, or from old zip folders (also Extras > import; `launcher/DataImport.cs`, `DataPaths.cs`, `runtime_config.h`).
 - Old saves are converted by `old_save_convert.h`, called from `card_gc.cpp` before `CARDInit`, with a backup at `Saves\MemoryCard-old\<same path>.bak` (CTest `recomp_old_save_convert_tests`).
 - F2 also copies the shot to the clipboard; clicking an F2/F3 popup that names a file opens Explorer on it.

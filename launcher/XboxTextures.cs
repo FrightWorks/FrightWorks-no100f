@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
+using System.Text.RegularExpressions;
 using FrightWorks.ModPatches;
 
 namespace FrightWorks;
@@ -9,13 +10,50 @@ namespace FrightWorks;
 // mostly has CMPR (DXT1: 4x4 blocks of two colours, on/off alpha) and RGB5A3 (3-bit alpha). Each level's texture
 // dictionaries (RWTX) carry the same asset IDs on both discs, so this pairs them up, decodes the Xbox texture and writes
 // it as a Dolphin-style replacement named after the GameCube texture (tex1_WxH_hash[_tlut]_fmt.png, the name the
-// game's texture replacement looks for) into <UserData>/xbox/textures. The game indexes that folder after the HD pack
-// (wiicompiled/runtime/src/main.cpp), so the HD pack wins where it has a texture.
+// game's texture replacement looks for) into a texture pack, <UserData>/texture_packs/<NN>-xbox: Extras > Textures lists it
+// with the other packs, the player puts it where they want (a new copy goes last, as the game used to load them) and the
+// game knows it by its name (texture_replacement.cpp: with HD textures off it is the only pack used). Before 2026-11-27
+// the folder was <UserData>/xbox/textures: MoveToPacks moves it, and the game still reads it there (last).
 // The copies are the player's disc data, like the extracted disc: never commit, share or ship them.
 // No window code here, so tools/hip-patch-tests can run it.
 static class XboxTextures
 {
-    public static string Dir(string userData) => Path.Combine(userData, "xbox", "textures");
+    public static string LegacyDir(string userData) => Path.Combine(userData, "xbox", "textures");
+    static string NewDir(string userData) => Path.Combine(userData, "texture_packs", "999-xbox");
+
+    // Where they are: their pack (whatever number the player's order gave it), else the old folder, else where a new copy goes.
+    public static string Dir(string userData) =>
+        PackFolder(userData) ?? (Directory.Exists(LegacyDir(userData)) ? LegacyDir(userData) : NewDir(userData));
+
+    static readonly Regex PackName = new(@"^~*(\d+-)?xbox$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    public static bool IsPack(string folder) => PackName.IsMatch(folder);
+
+    static string? PackFolder(string userData)
+    {
+        var packs = Path.Combine(userData, "texture_packs");
+        try
+        {
+            return Directory.Exists(packs)
+                ? Directory.EnumerateDirectories(packs).Where(d => IsPack(Path.GetFileName(d))).OrderBy(d => d, StringComparer.Ordinal).FirstOrDefault()
+                : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    // Moves the textures from the old folder into the packs (as 999-xbox, last). True: moved; false: nothing to move, a pack
+    // already there, or it couldn't (a file in use).
+    public static bool MoveToPacks(string userData)
+    {
+        var legacy = LegacyDir(userData);
+        if (!Directory.Exists(legacy) || PackFolder(userData) != null) return false;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(NewDir(userData))!);
+            Directory.Move(legacy, NewDir(userData));
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
 
     public static int Count(string userData)
     {
@@ -23,7 +61,11 @@ static class XboxTextures
         catch (Exception) { return 0; }
     }
 
-    public static void Remove(string userData) => TryDelete(Dir(userData));
+    public static void Remove(string userData)
+    {
+        if (PackFolder(userData) is { } pack) TryDelete(pack);
+        TryDelete(LegacyDir(userData));
+    }
 
     // Writes the textures; on any problem the folder is left as it was. progress: (levels done, levels to do, name).
     // Returns how many were written.
@@ -37,7 +79,8 @@ static class XboxTextures
         var gcLevels = Directory.EnumerateFiles(gcFiles, "*.hip", new EnumerationOptions { RecurseSubdirectories = true, MatchCasing = MatchCasing.CaseInsensitive })
                                 .Where(p => xboxLevels.ContainsKey(Path.GetFileName(p))).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToList();
         var dir = Dir(userData);
-        var staging = dir + ".new";
+        // Staged outside texture_packs, where a half-written folder would show as a pack.
+        var staging = Path.Combine(userData, "xbox-textures.new");
         TryDelete(staging);
         Directory.CreateDirectory(staging);
         var written = new HashSet<string>(StringComparer.Ordinal);
