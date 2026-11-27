@@ -130,6 +130,56 @@ static class LauncherLayoutTests
         }
     }
 
+    // Texture pack folders: the game's order is the names' order; Reorder numbers them 10-, 20-, ... (three digits past
+    // nine), keeps a pack's "disabled" file and its known name, and puts every name back when a rename fails.
+    static void CheckPackOrder(string output)
+    {
+        string userData = Path.Combine(output, "packs-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string dir = TexturePacks.Dir(userData);
+            void Pack(string name, bool off = false)
+            {
+                Directory.CreateDirectory(Path.Combine(dir, name));
+                File.WriteAllText(Path.Combine(dir, name, "t.png"), "x");
+                if (off) File.WriteAllText(Path.Combine(dir, name, "disabled"), "");
+            }
+            string Names() => string.Join(",", TexturePacks.List(userData).Select(i => i.Folder));
+            Check(TexturePacks.List(userData).Count == 0, "A missing texture_packs folder listed packs");
+            Pack("50-scoobyhd"); Pack("40-menu", off: true); Pack("Mine"); Pack("~2-left");
+            var list = TexturePacks.List(userData);
+            Check(Names() == "40-menu,50-scoobyhd,Mine,~2-left", "Packs not in the game's (ordinal) order: " + Names());
+            Check(list[0].Known?.Name == "Menu pack" && !list[0].Enabled && list[1].Known?.Name == "Scooby-HD" && list[1].Enabled &&
+                  list[2].Known == null && list[2].Name == "Mine" && list[3].Name == "left", "Pack names, known packs or switches read wrong");
+            TexturePacks.Reorder(userData, new[] { "Mine", "50-scoobyhd", "~2-left", "40-menu" });
+            Check(Names() == "10-Mine,20-scoobyhd,30-left,40-menu", "Reorder gave " + Names());
+            list = TexturePacks.List(userData);
+            Check(list[1].Known?.Name == "Scooby-HD" && list[3].Known?.Name == "Menu pack" && !list[3].Enabled, "A renumbered pack lost its name or switch");
+            for (int i = 0; i < 8; i++) Pack($"extra{i}");
+            TexturePacks.Reorder(userData, TexturePacks.List(userData).Select(i => i.Folder).Reverse().ToList());
+            var many = TexturePacks.List(userData).Select(i => i.Folder).ToList();
+            Check(many.Count == 12 && many[0] == "010-extra7" && many[11] == "120-Mine", "Twelve packs weren't numbered in three digits: " + string.Join(",", many));
+            if (OperatingSystem.IsWindows())
+            {
+                // A file in use stops a folder rename on Windows (the game running): nothing may stay half renamed.
+                string before = Names();
+                using (File.Open(Path.Combine(dir, many[5], "t.png"), FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                    bool failed = false;
+                    try { TexturePacks.Reorder(userData, many.AsEnumerable().Reverse().ToList()); }
+                    catch (IOException) { failed = true; }
+                    catch (UnauthorizedAccessException) { failed = true; }
+                    Check(failed, "Reordering around a file in use didn't fail");
+                }
+                Check(Names() == before, "A failed reorder left names changed: " + Names());
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(userData, true); } catch (Exception) { }
+        }
+    }
+
     // Frame interpolation is Off and locked at 30 fps, changeable at 60; changing the frame rate saves it as off. Leaves
     // the config as it found it, and pictures of both states in the output folder.
     static void CheckInterpolationLock(MainWindow window, string fixture, string game, string config, string output)
@@ -265,6 +315,12 @@ static class LauncherLayoutTests
         Directory.CreateDirectory(Path.Combine(userData, "mods", "patch-mod"));
         File.WriteAllText(Path.Combine(userData, "mods", "patch-mod", "patch.json"), "{ \"format\": 9 }");
         Directory.CreateDirectory(Path.Combine(userData, "mods", "!patched"));
+        // Texture packs: two from the catalogue and one of the player's own with a long name.
+        foreach (var pack in new[] { "40-menu", "50-scoobyhd", "My own pack " + new string('P', 60) })
+        {
+            Directory.CreateDirectory(Path.Combine(userData, "texture_packs", pack));
+            File.WriteAllText(Path.Combine(userData, "texture_packs", pack, "t.png"), "x");
+        }
 
         AppBuilder.Configure<App>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                   .WithInterFont().SetupWithoutStarting();
@@ -289,6 +345,7 @@ static class LauncherLayoutTests
     {
         CheckMonitorLabels();
         CheckDocumentsImport(output);
+        CheckPackOrder(output);
 
         var window = new MainWindow(null, new DataPaths(fixture, game), enableServices: false) { Title = "Launcher layout regression checks" };
         window.Show();
@@ -514,6 +571,41 @@ static class LauncherLayoutTests
         Check(File.ReadAllText(config).Contains("unknown_setting = 42"), "Changing the holiday overwrote another setting");
         Pick(holidayBox, "By today's date");
         Check(new GameConfig(config).Get("game", "holiday") == "auto", "Going back to today's date wasn't saved");
+        window.CloseBoards();
+        Pump();
+
+        // ----- Textures with the mouse: a pack dragged by its name moves (the folders are renumbered); a click on its
+        // switch flips it -----
+        window.boards["extras"].SelectTab(1);
+        window.ShowBoard("extras");
+        Pump();
+        var extrasMenu = window.boards["extras"];
+        string PackFolders() => string.Join(",", TexturePacks.List(Path.GetDirectoryName(config)!).Select(i => i.Folder));
+        var packRows = extrasMenu.Rows.OfType<OrderRow>().ToList();
+        Check(packRows.Count == 3 && packRows[0].Label == "Menu pack", "The fixture's packs aren't listed");
+        var dragged = packRows[0];
+        var grab = dragged.TranslatePoint(new Point(60, dragged.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(grab);
+        window.MouseDown(grab, MouseButton.Left);
+        Pump();
+        for (int i = 1; i <= 6; i++)
+        {
+            window.MouseMove(grab + new Vector(0, i * MenuRow.RowHeight * 1.5 / 6));
+            Pump();
+        }
+        Check(dragged.Carrying && extrasMenu.Rows.OfType<OrderRow>().ToList().IndexOf(dragged) == 1, "Dragging a pack down a row didn't move it");
+        window.MouseUp(grab + new Vector(0, MenuRow.RowHeight * 1.5), MouseButton.Left);
+        for (int i = 0; i < 100 && !PackFolders().StartsWith("10-scoobyhd,20-menu,"); i++) { Thread.Sleep(10); Pump(); }
+        Check(PackFolders().StartsWith("10-scoobyhd,20-menu,30-My own pack"), "Dropping a dragged pack didn't renumber the folders: " + PackFolders());
+        Pump();
+        var own = extrasMenu.Rows.OfType<OrderRow>().Single(r => r.Label.StartsWith("My own pack"));
+        var toggle = own.TranslatePoint(new Point(own.Bounds.Width - 40, own.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(toggle);
+        window.MouseDown(toggle, MouseButton.Left);
+        window.MouseUp(toggle, MouseButton.Left);
+        Pump();
+        Check(File.Exists(Path.Combine(Path.GetDirectoryName(config)!, "texture_packs", own.Key, "disabled")), "A click on a pack's switch didn't switch it off");
+        window.boards["extras"].SelectTab(0);
         window.CloseBoards();
         Pump();
 

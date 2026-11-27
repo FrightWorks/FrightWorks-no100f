@@ -67,6 +67,12 @@ the right explains the selected setting, and the bottom row shows the buttons fo
 With more than one monitor, **Settings > Display > Fullscreen monitor** (or **F10** > Video) picks the one fullscreen
 uses.
 
+**Texture packs.** **Extras > Textures** lists every pack in `UserData\texture_packs`: the ones the launcher downloads
+and any pack folder you put there yourself (**Open the texture packs folder**). Higher in the list wins. Left/right
+switch a pack off or on; A picks it up to move it (up/down, then A to put it down, B to put it back), or drag it by its
+name with the mouse. X removes a downloaded pack; the launcher never deletes a folder you added. To keep the order it
+numbers the folders (`10-`, `20-`, ...). Your own `texture_replacements` folder and mods still win over every pack.
+
 ## Controllers and keyboard
 
 Gamepads work right away. Remap them in the launcher (**Settings > Controls**) or in game (**F10** > Controller, or Keyboard). Button

@@ -422,6 +422,76 @@ static class LauncherControllerTests
         Press(w, LauncherButtons.Back);
         Check(w.OpenMenu == null, "Back did not close Mods.");
 
+        // ----- Extras > Textures: every folder in texture_packs in the game's order with a switch each; A picks a pack up
+        // and moves it (the folders are renumbered), B puts it back; X removes a downloaded pack, never the player's own -----
+        string packsDir = TexturePacks.Dir(paths.UserData);
+        foreach (var f in new[] { "40-menu", "50-scoobyhd", "MyPack" })
+        {
+            Directory.CreateDirectory(Path.Combine(packsDir, f));
+            File.WriteAllText(Path.Combine(packsDir, f, "t.png"), "synthetic");
+        }
+        string Folders() => string.Join(",", TexturePacks.List(paths.UserData).Select(i => i.Folder));
+        var tex = w.boards["extras"];
+        tex.SelectTab(1);
+        w.ShowBoard("extras"); Pump();
+        List<OrderRow> PackRows() => tex.Rows.OfType<OrderRow>().ToList();
+        string Labels() => string.Join(",", PackRows().Select(r => r.Label));
+        OrderRow? Picked() => tex.Selected as OrderRow;
+        Check(Labels() == "Menu pack,Scooby-HD,MyPack", "The packs are not listed in the game's order: " + Labels());
+        Check(!tex.Rows.OfType<ActionRow>().Any(r => r.Label is "Menu pack" or "Scooby-HD"), "A downloaded pack is still offered for download.");
+        Check(Picked() == PackRows()[0], "Textures did not open on the first pack.");
+        Shot(w, "Textures-focus");
+        Press(w, LauncherButtons.Left);
+        Wait(() => Picked()?.IsAttachedToVisualTree() == true);
+        Check(File.Exists(Path.Combine(packsDir, "40-menu", "disabled")) && Picked() is { Label: "Menu pack", IsChecked: false },
+              "Left did not switch the pack off (or lost the selection).");
+        Press(w, LauncherButtons.Right);
+        Wait(() => Picked()?.IsAttachedToVisualTree() == true);
+        Check(!File.Exists(Path.Combine(packsDir, "40-menu", "disabled")) && Picked() is { IsChecked: true }, "Right did not switch the pack on.");
+        // Picked up, carried down, put back with B: nothing renamed, and nothing else reacts while it is carried.
+        Press(w, LauncherButtons.Confirm);
+        Check(Picked() is { Carrying: true }, "A did not pick the pack up.");
+        Press(w, LauncherButtons.Down);
+        Check(Labels() == "Scooby-HD,Menu pack,MyPack" && Picked()?.Label == "Menu pack", "Down did not carry the pack: " + Labels());
+        Shot(w, "Textures-carrying");
+        Press(w, LauncherButtons.Next);
+        Press(w, LauncherButtons.Right);
+        Check(tex.SelectedTab == 1 && Picked() is { Carrying: true, IsChecked: true }, "RB or Right acted on a carried pack.");
+        Press(w, LauncherButtons.Back);
+        Check(Picked() is { Carrying: false } && Labels() == "Menu pack,Scooby-HD,MyPack" && Folders() == "40-menu,50-scoobyhd,MyPack" && w.OpenMenu == tex,
+              "B did not put the pack back where it was (or closed the menu): " + Labels() + " / " + Folders());
+        // Carried to the bottom and put down: the folders get the new order's numbers, the selection stays on the pack.
+        Press(w, LauncherButtons.Confirm); Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Down);
+        Press(w, LauncherButtons.Confirm);
+        Wait(() => Folders() == "10-scoobyhd,20-MyPack,30-menu" && Picked()?.IsAttachedToVisualTree() == true);
+        Check(Folders() == "10-scoobyhd,20-MyPack,30-menu", "Putting the pack down didn't renumber the folders: " + Folders());
+        Check(Labels() == "Scooby-HD,MyPack,Menu pack" && Picked()?.Label == "Menu pack" && Picked()!.IsFocused, "The list or selection after a move is wrong: " + Labels());
+        // X: only a downloaded pack offers Remove; No keeps it, Yes deletes it and offers the download again.
+        tex.Select(PackRows().Single(r => r.Label == "MyPack")); Pump();
+        Check(Picked()!.ExtraLabel == null, "A pack the player added offers Remove.");
+        Press(w, LauncherButtons.Extra);
+        Check(w.navigation.Modal == null && Directory.Exists(Path.Combine(packsDir, "20-MyPack")), "X on the player's own pack did something.");
+        tex.Select(PackRows().Single(r => r.Label == "Scooby-HD")); Pump();
+        Press(w, LauncherButtons.Extra);
+        Check(w.navigation.Modal != null, "X on a downloaded pack did not ask first.");
+        Press(w, LauncherButtons.Back);
+        Wait(() => w.navigation.Modal == null);
+        Check(Directory.Exists(Path.Combine(packsDir, "10-scoobyhd")), "Answering No removed the pack.");
+        Press(w, LauncherButtons.Extra);
+        Click(w, w.navigation.Modal!, "Yes");
+        Wait(() => !Directory.Exists(Path.Combine(packsDir, "10-scoobyhd")) && tex.Rows.OfType<ActionRow>().Any(r => r.Label == "Scooby-HD"));
+        Check(!Directory.Exists(Path.Combine(packsDir, "10-scoobyhd")) && Labels() == "MyPack,Menu pack", "Yes did not remove the pack: " + Labels());
+        Check(tex.Rows.OfType<ActionRow>().Any(r => r.Label == "Scooby-HD" && r.Value == "604 MB"), "A removed pack isn't offered for download again.");
+        // A folder put there by hand shows up when Extras opens again.
+        Press(w, LauncherButtons.Back);
+        Directory.CreateDirectory(Path.Combine(packsDir, "Another"));
+        tex.SelectTab(1);
+        w.ShowBoard("extras"); Pump();
+        Check(Labels() == "MyPack,Menu pack,Another", "A pack folder added by hand didn't appear: " + Labels());
+        tex.SelectTab(0);
+        Press(w, LauncherButtons.Back);
+        Directory.Delete(packsDir, true);
+
         var question = Dialogs.YesNo(w, "Synthetic safe-focus question.");
         var modal = w.navigation.Modal!;
         Check(((PlankButton?)modal.FocusManager?.GetFocusedElement())?.Text == "No", "Question did not initially focus the safe answer.");

@@ -103,7 +103,7 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 - Saves or local builds.
 - The HD pack, or any picture made from the game's textures (no exceptions).
   Texture packs are an opt-in launcher download (maintainer, 2026-11-24): no build ships one, nothing is selected by default.
-  The launcher (`launcher/TexturePacks.cs`, Extras > Textures) puts a pack in `<UserData>/texture_packs/<NN-name>`; the game indexes those after the mods, lower folder name first (it wins), and skips one with a `disabled` file.
+  The launcher (`launcher/TexturePacks.cs`, Extras > Textures) puts a pack in `<UserData>/texture_packs/<NN-name>`; the game indexes every folder there after the mods, lower folder name first (it wins), and skips one with a `disabled` file. The Textures page lists them all (folders the player added too) with a switch each, and keeps the player's order in the names: moving one renumbers them `10-`, `20-`, ... (`TexturePacks.Reorder`, through temporary `~N-` names, undone if a rename fails). A catalogue pack is known by the name after its number; the launcher only ever deletes catalogue packs.
   A pack texture that needs fixing is fixed by the game as it loads (the Smuggler's Cove sign: `add_original_alpha` in `texture_replacement.cpp`).
   The pack files are on archive.org, uploaded by the maintainer; the Creeper frames and menu art are in the private menu pack repo (`Loneranger419/no100f-menu-pack`).
   `tools/debug/get-hd-pack.py` fetches ScoobyHD into `texture_pack/` for the debug kit.

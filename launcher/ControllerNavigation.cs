@@ -109,6 +109,7 @@ sealed class ControllerNavigation : IDisposable
                 if (action == LauncherButtons.Back) Reset();
                 return;
             }
+            if (action == LauncherButtons.Extra) return;  // X is a menu row's second action; dialogs and the signs have none
             if (action == LauncherButtons.Back)
             {
                 var dropdown = Targets(window).OfType<ComboBox>().FirstOrDefault(c => c.IsDropDownOpen);

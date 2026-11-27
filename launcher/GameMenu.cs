@@ -23,7 +23,7 @@ namespace FrightWorks;
 // tools/make-button-icons.py), for the controller in use or the keyboard, whichever was used last.
 static class Prompts
 {
-    public enum Button { Confirm, Back, Previous, Next, Change, Move }
+    public enum Button { Confirm, Back, Previous, Next, Change, Move, Extra }
 
     static string? folder;
     static Gamepads.Kind kind = Gamepads.Kind.Xbox;
@@ -62,12 +62,12 @@ static class Prompts
         ? b switch
         {
             Button.Confirm => "south", Button.Back => "east", Button.Previous => "left_shoulder", Button.Next => "right_shoulder",
-            Button.Change => "dpad_horizontal", _ => "dpad_vertical",
+            Button.Change => "dpad_horizontal", Button.Extra => "west", _ => "dpad_vertical",
         }
         : b switch
         {
             Button.Confirm => "enter", Button.Back => "escape", Button.Previous => "q", Button.Next => "e",
-            Button.Change => "arrows_horizontal", _ => "arrows_vertical",
+            Button.Change => "arrows_horizontal", Button.Extra => "delete", _ => "arrows_vertical",
         };
 
     static Bitmap? Icon(Button b)
@@ -91,12 +91,13 @@ static class Prompts
             Button.Back => kind == Gamepads.Kind.PlayStation ? "Circle" : kind == Gamepads.Kind.Switch ? "A" : "B",
             Button.Previous => kind == Gamepads.Kind.PlayStation ? "L1" : kind == Gamepads.Kind.Switch ? "L" : "LB",
             Button.Next => kind == Gamepads.Kind.PlayStation ? "R1" : kind == Gamepads.Kind.Switch ? "R" : "RB",
+            Button.Extra => kind == Gamepads.Kind.PlayStation ? "Square" : kind == Gamepads.Kind.Switch ? "Y" : "X",
             Button.Change => "◂▸", _ => "▴▾",
         }
         : b switch
         {
             Button.Confirm => "Enter", Button.Back => "Esc", Button.Previous => "Q", Button.Next => "E",
-            Button.Change => "←→", _ => "↑↓",
+            Button.Change => "←→", Button.Extra => "Del", _ => "↑↓",
         };
 
     public static double Width(Button b, double height)
@@ -219,6 +220,28 @@ abstract class MenuRow : Control
     public virtual bool Changes => false;
     public virtual void Change(int direction) { }
     public virtual void Activate() { }
+    // X (Delete): a second action, when ExtraLabel is set.
+    public virtual string? ExtraLabel => null;
+    public virtual void Extra() { }
+    // A row in a mode of its own (a pack being moved) takes the actions first (true: used) and shows its own prompts.
+    // Busy: in that mode; Settle ends it (the selection is leaving it).
+    public virtual bool Handle(LauncherButtons action) => false;
+    public virtual IReadOnlyList<PromptBar.Item>? OwnPrompts => null;
+    public virtual bool Busy => false;
+    public virtual void Settle() { }
+
+    // An on / off switch at the right of the value area, with On or Off before it.
+    protected void DrawSwitch(DrawingContext g, bool on)
+    {
+        var v = ValueRect;
+        bool enabled = IsEffectivelyEnabled;
+        var track = new Rect(v.Right - 50, (v.Height - 24) / 2, 48, 24);
+        g.DrawGeometry(Brush(on && enabled ? Lime : Field), new Pen(Brush(on && enabled ? LimeDeep : Purple), 1.5), Rounded(track, 12));
+        double knob = on ? track.Right - 12 : track.X + 12;
+        g.DrawEllipse(Brush(on && enabled ? Ink : enabled ? CreamDim : WithAlpha(CreamDim, 90)), null, new Point(knob, track.Center.Y), 8, 8);
+        var text = MenuText.Make(on ? "On" : "Off", 15, TextColor(true));
+        g.DrawText(text, new Point(track.X - 12 - text.Width, Math.Round((v.Height - text.Height) / 2)));
+    }
 
     protected double ValueWidth => Math.Clamp(Bounds.Width * 0.46, 170, 360);
     protected Rect ValueRect => new(Bounds.Width - Pad - ValueWidth, 0, ValueWidth, Bounds.Height);
@@ -253,7 +276,8 @@ abstract class MenuRow : Control
         var at = e.GetPosition(top);
         if (at == lastPointer) return;
         lastPointer = at;
-        if (!selected && Focusable && IsEffectivelyEnabled) MenuScreen.Of(this)?.Select(this, scroll: false);
+        if (!selected && Focusable && IsEffectivelyEnabled && MenuScreen.Of(this) is { Selected.Busy: not true } screen)
+            screen.Select(this, scroll: false);
     }
 
     protected override void OnPointerEntered(PointerEventArgs e) { base.OnPointerEntered(e); InvalidateVisual(); }
@@ -434,17 +458,184 @@ sealed class ToggleRow : MenuRow
     public override void Change(int direction) { if (IsEffectivelyEnabled) IsChecked = direction > 0; }
     public override void Activate() { if (IsEffectivelyEnabled) IsChecked = isChecked != true; }
 
-    protected override void RenderValue(DrawingContext g)
+    protected override void RenderValue(DrawingContext g) => DrawSwitch(g, isChecked == true);
+}
+
+// A switch that can be moved up or down its list (the texture packs, whose order is their priority). Left / right switch
+// it, A picks it up, up / down carry it, A puts it down (Moved fires when its place changed), B puts it back. The mouse
+// drags it by its name; a click on the switch flips it. Its list is the OrderRows in its panel, kept next to each other.
+sealed class OrderRow : MenuRow
+{
+    bool on, carrying, dragging;
+    int startIndex;
+    Point? pressAt;
+    string? extraLabel;
+    Action? extraAction;
+    public event EventHandler? IsCheckedChanged;
+    public event EventHandler? Moved;
+
+    public OrderRow(string key, string label, string? details = null) : base(label, details) => Key = key;
+
+    public string Key { get; }
+
+    public bool IsChecked
     {
-        var v = ValueRect;
-        bool on = isChecked == true, enabled = IsEffectivelyEnabled;
-        var track = new Rect(v.Right - 50, (v.Height - 24) / 2, 48, 24);
-        g.DrawGeometry(Brush(on && enabled ? Lime : Field), new Pen(Brush(on && enabled ? LimeDeep : Purple), 1.5), Rounded(track, 12));
-        double knob = on ? track.Right - 12 : track.X + 12;
-        g.DrawEllipse(Brush(on && enabled ? Ink : enabled ? CreamDim : WithAlpha(CreamDim, 90)), null, new Point(knob, track.Center.Y), 8, 8);
-        var text = MenuText.Make(on ? "On" : "Off", 15, TextColor(true));
-        g.DrawText(text, new Point(track.X - 12 - text.Width, Math.Round((v.Height - text.Height) / 2)));
+        get => on;
+        set
+        {
+            if (on == value) return;
+            on = value;
+            ValueChanged();
+            IsCheckedChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
+
+    // X: a second action for this row (Remove), or none.
+    public void SetExtra(string? label, Action? action)
+    {
+        extraLabel = label;
+        extraAction = action;
+        ValueChanged();
+    }
+
+    List<OrderRow> Siblings => (Parent as Panel)?.Children.OfType<OrderRow>().ToList() ?? new List<OrderRow> { this };
+    public int Index => Siblings.IndexOf(this);
+    bool Movable => Siblings.Count > 1;
+    public bool Carrying => carrying;
+    public override bool Busy => carrying;
+
+    public override bool Changes => !carrying;
+    public override string? ConfirmLabel => Movable ? "Move" : "Switch";
+    public override string? ExtraLabel => carrying ? null : extraLabel;
+    public override void Extra() { if (!carrying) extraAction?.Invoke(); }
+    public override void Change(int direction) { if (IsEffectivelyEnabled && !carrying) IsChecked = direction > 0; }
+
+    public override void Activate()
+    {
+        if (!IsEffectivelyEnabled) return;
+        if (Movable) PickUp(); else IsChecked = !on;
+    }
+
+    public override void Settle() => PutDown(true);
+
+    void PickUp()
+    {
+        carrying = true;
+        startIndex = Index;
+        ValueChanged();
+    }
+
+    void PutDown(bool keep)
+    {
+        if (!carrying) return;
+        if (!keep)
+            while (Index != startIndex && Step(Index < startIndex ? 1 : -1)) { }
+        carrying = dragging = false;
+        pressAt = null;
+        ValueChanged();
+        if (keep && Index != startIndex) Moved?.Invoke(this, EventArgs.Empty);
+    }
+
+    // Swaps places with the next row up (-1) or down (1). The neighbour is the one taken out and put back, so this row
+    // stays in the tree and keeps its focus and the pointer.
+    bool Step(int direction)
+    {
+        if (Parent is not Panel panel) return false;
+        var rows = Siblings;
+        int to = rows.IndexOf(this) + direction;
+        if (to < 0 || to >= rows.Count) return false;
+        var other = rows[to];
+        int mine = panel.Children.IndexOf(this);
+        panel.Children.Remove(other);
+        panel.Children.Insert(mine, other);
+        this.BringIntoView();
+        ValueChanged();
+        return true;
+    }
+
+    public override bool Handle(LauncherButtons action)
+    {
+        if (!carrying) return false;
+        switch (action)
+        {
+            case LauncherButtons.Up: Step(-1); return true;
+            case LauncherButtons.Down: Step(1); return true;
+            case LauncherButtons.Confirm: PutDown(true); return true;
+            case LauncherButtons.Back: PutDown(false); return true;
+            case LauncherButtons.ScrollUp or LauncherButtons.ScrollDown: return false;
+            default: return true;  // nothing else while carrying: no switching, no page change
+        }
+    }
+
+    public override IReadOnlyList<PromptBar.Item>? OwnPrompts => carrying
+        ? new PromptBar.Item[]
+        {
+            new(new[] { Prompts.Button.Move }, "Move", null),
+            new(new[] { Prompts.Button.Confirm }, "Put down", () => PutDown(true)),
+            new(new[] { Prompts.Button.Back }, "Cancel", () => PutDown(false)),
+        }
+        : null;
+
+    // ----- The mouse: a click on the switch flips it; a press on the name and a move up or down drags the row -----
+    protected override void Click(Point at)
+    {
+        if (!carrying && ValueRect.Contains(at)) IsChecked = !on;
+    }
+
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+        var at = e.GetPosition(this);
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && !ValueRect.Contains(at) && Movable && IsEffectivelyEnabled)
+            pressAt = at;
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var at = e.GetPosition(this);
+        if (pressAt is not { } start)
+        {
+            Cursor = new Cursor(ValueRect.Contains(at) || !Movable ? StandardCursorType.Hand : StandardCursorType.SizeNorthSouth);
+            return;
+        }
+        if (!dragging)
+        {
+            if (Math.Abs(at.Y - start.Y) < 6) return;
+            if (!carrying) PickUp();
+            dragging = true;
+        }
+        if (at.Y < 0) Step(-1);
+        else if (at.Y > Bounds.Height) Step(1);
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        pressAt = null;
+        if (dragging) PutDown(true);
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        pressAt = null;
+        if (dragging) PutDown(true);
+    }
+
+    public override void Render(DrawingContext g)
+    {
+        base.Render(g);
+        if (!carrying) return;
+        var r = new Rect(Bounds.Size);
+        g.DrawGeometry(null, new Pen(Brush(Lime), 2), Rounded(r.Deflate(1), 9));
+        // Up and down marks before the value: this row moves.
+        double x = ValueRect.X + 14, y = r.Height / 2;
+        g.DrawGeometry(Brush(Lime), null, Polygon(new[] { new Point(x, y - 12), new Point(x - 6, y - 4), new Point(x + 6, y - 4) }));
+        g.DrawGeometry(Brush(Lime), null, Polygon(new[] { new Point(x, y + 12), new Point(x - 6, y + 4), new Point(x + 6, y + 4) }));
+    }
+
+    protected override void RenderValue(DrawingContext g) => DrawSwitch(g, on);
 }
 
 // Opens or does something: A or a click. Its value (a status, a key) shows on the right, before a small arrow.
@@ -597,6 +788,13 @@ sealed class MenuScreen : Panel
 
     internal static MenuScreen? Of(Control row) => row.FindAncestorOfType<MenuScreen>();
 
+    // A row still in a mode of its own (a pack picked up) is put down when the menu closes.
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty && !IsVisible) selected?.Settle();
+    }
+
     public ScrollViewer Scroller => scroller;
     public int SelectedTab { get; private set; }
     public int TabCount => pages.Count;
@@ -663,6 +861,7 @@ sealed class MenuScreen : Panel
 
     public void Select(MenuRow? row, bool focus = true, bool scroll = true)
     {
+        if (selected is { Busy: true } busy && busy != row) busy.Settle();
         if (selected != row)
         {
             if (selected != null) selected.Selected = false;
@@ -688,14 +887,16 @@ sealed class MenuScreen : Panel
     }
 
     // The details and the prompts for the selected row.
-    void Refresh()
+    internal void Refresh()
     {
         detailsTitle.Text = selected?.Label ?? (pages.Count > 0 && pages[SelectedTab].Name.Length > 0 ? pages[SelectedTab].Name : Title);
         detailsText.Text = selected?.Details ?? "";
         detailsText.IsVisible = !string.IsNullOrEmpty(detailsText.Text);
+        if (selected?.OwnPrompts is { } own) { prompts.Items = own; return; }
         var items = new List<PromptBar.Item>();
         if (selected is { Changes: true, IsEffectivelyEnabled: true }) items.Add(new(new[] { Prompts.Button.Change }, "Change", null));
         if (selected?.ConfirmLabel is { } confirm) items.Add(new(new[] { Prompts.Button.Confirm }, confirm, () => selected?.Activate()));
+        if (selected is { ExtraLabel: { } extra, IsEffectivelyEnabled: true }) items.Add(new(new[] { Prompts.Button.Extra }, extra, () => selected?.Extra()));
         items.Add(new(new[] { Prompts.Button.Back }, "Back", onClose));
         if (pages.Count > 1) items.Add(new(new[] { Prompts.Button.Previous, Prompts.Button.Next }, "Page", null));
         prompts.Items = items;
@@ -704,8 +905,10 @@ sealed class MenuScreen : Panel
     // A pad or key action. Back closes the menu.
     public void Handle(LauncherButtons action)
     {
+        if (selected != null && selected.Handle(action)) return;
         switch (action)
         {
+            case LauncherButtons.Extra: if (selected is { ExtraLabel: not null, IsEffectivelyEnabled: true }) selected.Extra(); return;
             case LauncherButtons.Back: onClose(); return;
             case LauncherButtons.Previous: Step(-1); return;
             case LauncherButtons.Next: Step(1); return;
@@ -740,6 +943,7 @@ sealed class MenuScreen : Panel
             Key.Up => LauncherButtons.Up, Key.Down => LauncherButtons.Down, Key.Left => LauncherButtons.Left, Key.Right => LauncherButtons.Right,
             Key.Enter or Key.Space => LauncherButtons.Confirm, Key.Escape or Key.Back => LauncherButtons.Back,
             Key.Q or Key.PageUp => LauncherButtons.Previous, Key.E or Key.PageDown => LauncherButtons.Next,
+            Key.Delete => LauncherButtons.Extra,
             _ => LauncherButtons.None,
         };
         if (action == LauncherButtons.None) return;

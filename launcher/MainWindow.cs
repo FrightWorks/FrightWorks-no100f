@@ -232,6 +232,7 @@ sealed class MainWindow : Window
     internal void ShowBoard(string id)
     {
         RefreshDisc();
+        if (id == "extras") refreshPacks?.Invoke();  // packs added or removed by hand in the folder meanwhile
         foreach (var (key, b) in boards) b.IsVisible = key == id;
         mainPrompts.IsVisible = false;
         scene.ActiveSign = id;
@@ -651,7 +652,7 @@ sealed class MainWindow : Window
         RefreshPs2();
 
         // Textures
-        BuildTexturePacks(textures);
+        BuildTexturePacks(board, textures);
 
         // Game
         card = Section(game, "Holidays");
@@ -1023,64 +1024,122 @@ sealed class MainWindow : Window
         if (error != null) await Dialogs.Message(this, "Downloading ffmpeg failed: " + error);
     }
 
-    // ----- HD texture packs (TexturePacks.cs): opt-in downloads, one at a time -----
+    // ----- Texture packs (TexturePacks.cs): every folder in texture_packs in the game's order (the first wins), each with a
+    // switch, movable to change the order; below them the catalogue's packs not downloaded yet. One download at a time. -----
     CancellationTokenSource? packCancel;
-    readonly List<Action> packRefresh = new();
+    TexturePacks.Pack? packDownloading;
+    string packProgress = "";
+    ActionRow? packDownloadRow;
+    readonly ThemedBar packBar = Bar();
+    Action? refreshPacks;
 
-    void BuildTexturePacks(StackPanel page)
+    void BuildTexturePacks(MenuScreen board, StackPanel page)
     {
-        foreach (var pack in TexturePacks.All)
-            Section(page, pack.Name, "By " + pack.Credit + ".").Children.Add(PackBlock(pack));
-        page.Children.Add(Indent(Footnote("Fans made these from the game's own textures, so they're a separate download. " +
-                                          "Your texture_replacements folder and mods win over them; Settings > HD textures turns them off. " +
-                                          "Changes apply at the next game start.")));
-    }
+        var list = new StackPanel();
+        var downloads = new StackPanel();
+        var packsDir = TexturePacks.Dir(userData);
+        packBar.Maximum = 1000;
+        Section(page, "Texture packs", "Higher in the list wins.");
+        page.Children.Add(list);
+        Section(page, "Downloads");
+        page.Children.Add(downloads);
+        Section(page, "Your own packs");
+        page.Children.Add(new ActionRow("Open the texture packs folder", () => OpenFolder(packsDir).Watch(), "Open",
+            "Put a pack's folder in here (its PNG or DDS textures anywhere inside it) and it joins the list above. " + packsDir));
+        page.Children.Add(new ActionRow("Refresh", () => Fill(), "Refresh", "Looks at the texture packs folder again."));
+        page.Children.Add(Indent(Footnote("Your texture_replacements folder and mods win over every pack; the Xbox textures (Extras > Discs) " +
+                                          "come after them. Settings > HD textures turns them all off. To keep this order the launcher numbers " +
+                                          "the pack folders (10-, 20-, ...). Changes apply at the next game start.")));
 
-    Control PackBlock(TexturePacks.Pack pack)
-    {
-        var status = Indent(Status());
-        bool filling = false;
-        var use = new ToggleRow("Use this pack", pack.About);
-        ActionRow download = null!, remove = null!, cancel = null!;
-        var bar = Bar();
-        bar.Maximum = 1000;
+        string Describe(TexturePacks.Installed pack, bool on) =>
+            (pack.Known != null ? $"{pack.Known.About} By {pack.Known.Credit}." : $"Added by you: the folder {pack.Folder} in the texture packs folder. To remove it, delete that folder.") +
+            "\n\n" + (on ? "On: the game uses it." : "Off: the game leaves it out.") +
+            "\n\nA (or drag it) to move it up or down the list.";
 
-        void Refresh()
+        // Rebuilt after every change; the selection stays on the same pack (by name: a moved pack gets a new folder name, a
+        // downloaded one moves from the downloads to the list).
+        void Fill()
         {
-            bool installed = TexturePacks.Installed(userData, pack), on = TexturePacks.Enabled(userData, pack);
-            bool mine = packCancel != null && cancel.IsVisible, busy = packCancel != null;
-            filling = true;
-            use.IsChecked = on;
-            filling = false;
-            use.IsVisible = installed && !mine;
-            remove.IsVisible = installed && !mine;
-            download.IsVisible = !installed && !mine;
-            download.IsEnabled = !busy;
-            if (mine) return;
-            status.Text = !installed ? "Not downloaded." : on ? "Downloaded: the game uses it." : "Downloaded, switched off.";
-            status.Foreground = Brush(installed && on ? Good : CreamDim);
+            string? keep = board.Selected is { Parent: { } parent } kept && (parent == list || parent == downloads) ? kept.Label : null;
+            list.Children.Clear();
+            downloads.Children.Clear();
+            packDownloadRow = null;
+            var installed = TexturePacks.List(userData);
+            if (installed.Count == 0)
+                list.Children.Add(Indent(Hint("No texture packs yet. Download one below, or put a pack's folder in the texture packs folder.")));
+            foreach (var pack in installed)
+            {
+                var row = new OrderRow(pack.Folder, pack.Name, Describe(pack, pack.Enabled)) { IsChecked = pack.Enabled };
+                row.IsCheckedChanged += (_, _) =>
+                {
+                    try { TexturePacks.SetEnabled(userData, pack.Folder, row.IsChecked); }
+                    catch (Exception e) { Dialogs.Message(this, $"Switching {pack.Name} failed: {e.Message}").Watch(); }
+                    Fill();
+                };
+                row.Moved += (_, _) => SaveOrder().Watch();
+                if (pack.Known is { } known) row.SetExtra("Remove", () => RemovePack(known).Watch());
+                list.Children.Add(row);
+            }
+            var missing = TexturePacks.All.Where(p => installed.All(i => i.Known != p)).ToList();
+            if (missing.Count == 0) downloads.Children.Add(Indent(Hint("Every pack listed here is downloaded.")));
+            foreach (var pack in missing)
+            {
+                bool mine = packDownloading == pack;
+                var row = new ActionRow(pack.Name, () => { if (packDownloading == pack) packCancel?.Cancel(); else Download(pack).Watch(); },
+                                        mine ? "Cancel" : "Download", $"{pack.About} By {pack.Credit}.")
+                {
+                    Value = mine ? packProgress : $"{pack.ApproxBytes >> 20} MB",
+                    IsEnabled = mine || packCancel == null,
+                };
+                downloads.Children.Add(row);
+                if (mine)
+                {
+                    packDownloadRow = row;
+                    downloads.Children.Add(packBar);
+                }
+            }
+            if (keep == null || !board.IsVisible) return;
+            var again = list.Children.Concat(downloads.Children).OfType<MenuRow>().FirstOrDefault(r => r.Label == keep);
+            Dispatcher.UIThread.Post(() => { if (again != null) board.Select(again); else board.SelectFirst(); }, DispatcherPriority.Loaded);
         }
 
-        async Task Download()
+        async Task SaveOrder()
+        {
+            var order = list.Children.OfType<OrderRow>().Select(r => r.Key).ToList();
+            if (GameRunning()) await Dialogs.Message(this, "Close the game first: it reads the texture packs while it runs.");
+            else
+                try { TexturePacks.Reorder(userData, order); }
+                catch (Exception e) { await Dialogs.Message(this, $"The packs couldn't be put in that order: {e.Message}"); }
+            Fill();
+        }
+
+        async Task RemovePack(TexturePacks.Pack pack)
+        {
+            if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the texture packs while it runs."); return; }
+            if (!await Dialogs.YesNo(this, $"Remove {pack.Name}? It can be downloaded again any time.")) return;
+            try { TexturePacks.Remove(userData, pack); }
+            catch (Exception e) { await Dialogs.Message(this, $"Removing {pack.Name} failed: {e.Message}"); }
+            Fill();
+        }
+
+        async Task Download(TexturePacks.Pack pack)
         {
             if (packCancel != null) return;
             packCancel = new CancellationTokenSource();
-            cancel.IsVisible = true;
-            bar.IsVisible = true;
-            bar.Value = 0;
-            status.Foreground = Brush(CreamDim);
-            status.Text = $"Downloading {pack.Name}...";
-            foreach (var r in packRefresh) r();
+            packDownloading = pack;
+            packProgress = "Starting";
+            packBar.Value = 0;
+            packBar.IsVisible = true;
+            Fill();
             var token = packCancel.Token;
             var report = new Progress<(long done, long total)>(p =>
             {
                 if (token.IsCancellationRequested) return;
-                bar.Value = p.total > 0 ? (int)(p.done * 1000 / p.total) : 0;
-                status.Text = p.total > 0 && p.done >= p.total ? $"Unpacking {pack.Name}..."
-                    : p.total > 0 ? $"Downloading {pack.Name}: {p.done >> 20} of {p.total >> 20} MB" : $"Downloading {pack.Name}: {p.done >> 20} MB";
+                packBar.Value = p.total > 0 ? (int)(p.done * 1000 / p.total) : 0;
+                packProgress = p.total > 0 && p.done >= p.total ? "Unpacking" : p.total > 0 ? $"{p.done >> 20} of {p.total >> 20} MB" : $"{p.done >> 20} MB";
+                if (packDownloadRow != null) packDownloadRow.Value = packProgress;
             });
             string? error = null;
-            bool cancelled = false;
             try
             {
                 await TexturePacks.Download(userData, pack, report, token);
@@ -1088,44 +1147,22 @@ sealed class MainWindow : Window
                 var c = new GameConfig(configPath);
                 if (c.Get("video", "texture_replacements") == "false") { c.Set("video", "texture_replacements", "true"); c.Save(); }
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { cancelled = true; }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             catch (Exception e) { error = e.Message; }
             finally
             {
                 packCancel.Dispose();
                 packCancel = null;
-                cancel.IsVisible = false;
-                bar.IsVisible = false;
+                packDownloading = null;
+                packBar.IsVisible = false;
             }
             if (!IsVisible) return;  // the launcher closed
-            foreach (var r in packRefresh) r();
-            if (cancelled) status.Text = "Download cancelled.";
+            Fill();
             if (error != null) await Dialogs.Message(this, $"Downloading {pack.Name} failed: {error}");
         }
 
-        download = new ActionRow($"Download (about {pack.ApproxBytes >> 20} MB)", () => Download().Watch(), "Download", pack.About);
-        remove = new ActionRow("Remove the pack", () => RemovePack().Watch(), "Remove", "Deletes the downloaded pack. It can be downloaded again any time.");
-        cancel = new ActionRow("Cancel the download", () => packCancel?.Cancel(), "Cancel") { IsVisible = false };
-
-        async Task RemovePack()
-        {
-            if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the pack while it runs."); return; }
-            if (!await Dialogs.YesNo(this, $"Remove {pack.Name}? It can be downloaded again any time.")) return;
-            try { TexturePacks.Remove(userData, pack); }
-            catch (Exception e) { await Dialogs.Message(this, $"Removing {pack.Name} failed: {e.Message}"); }
-            Refresh();
-        }
-
-        use.IsCheckedChanged += (_, _) =>
-        {
-            if (filling) return;
-            try { TexturePacks.SetEnabled(userData, pack, use.IsChecked == true); }
-            catch (Exception) { }
-            Refresh();
-        };
-        packRefresh.Add(Refresh);
-        Refresh();
-        return new StackPanel { Children = { status, use, download, remove, cancel, bar } };
+        refreshPacks = Fill;
+        Fill();
     }
 
     // ----- The disc and starting the game -----
