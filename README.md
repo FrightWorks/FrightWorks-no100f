@@ -9,6 +9,9 @@ which it split off from on October 31, 2026 (version numbers carry on from its v
 
 [![Discord](https://img.shields.io/discord/1574226034293735575?label=Discord&logo=discord)](https://discord.gg/DnE5QcpNUF)
 
+[![Download for Windows (installer)](docs/badges/download-windows.svg)](https://github.com/FrightWorks/FrightWorks-no100f/releases/latest/download/FrightWorks-win-Setup.exe)
+[![Download for Linux (AppImage)](docs/badges/download-linux.svg)](https://github.com/FrightWorks/FrightWorks-no100f/releases/latest/download/FrightWorks.AppImage)
+
 [![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/frightworks-no100f)
 
 > **Artists wanted:** the launcher needs new art in the style of the original show. [Details](docs/launcher-art.md).
