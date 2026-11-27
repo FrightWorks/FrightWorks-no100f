@@ -750,7 +750,7 @@ std::string FormatHostStackTrace(unsigned framesToSkip) {
     return out.str();
 #elif defined(RECOMP_HAS_POSIX_BACKTRACE)
     // Release builds export few symbols, so most frames name only their module: "module+0x..." is the offset to look
-    // up in that same build, which keeps its symbol table (llvm-symbolizer --obj=<FrightWorks Game> 0x...). Module
+    // up in that same build, which keeps its symbol table (llvm-symbolizer --obj=<FrightWorks-No100F-Game> 0x...). Module
     // file names only, no folders (those hold the player's user name).
     void* frames[64]{};
     const int captured = ::backtrace(frames, static_cast<int>(std::size(frames)));

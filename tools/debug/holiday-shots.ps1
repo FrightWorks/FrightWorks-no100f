@@ -18,7 +18,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'manual-session prepare failed (game running?)' }
         Add-Content -LiteralPath $cfg -Value "`n[game]`nholiday = `"$date`"" -Encoding utf8
         $log = Join-Path $repo "autotest\manual\hol-$level-$date.err.log"
-        Start-Process (Join-Path $repo 'Play\FrightWorks Game.exe') -WorkingDirectory (Join-Path $repo 'Play') `
+        Start-Process (Join-Path $repo 'Play\FrightWorks-No100F-Game.exe') -WorkingDirectory (Join-Path $repo 'Play') `
             -RedirectStandardError $log -RedirectStandardOutput ($log -replace 'err', 'out')
         Start-Sleep -Seconds $Wait
         & powershell -ExecutionPolicy Bypass -File $ms shot -Label "hol-$level-$date" | Select-Object -Last 1

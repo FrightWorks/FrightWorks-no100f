@@ -84,7 +84,7 @@ two buttons to get the game. The launcher and the game only talk to the Discord 
 Settings > Activity Privacy** decides who sees it; **Settings > Game > Show in my Discord status** in the launcher
 switches it off (`[discord] enabled = false` in `UserData\Config.toml`).
 Discord doesn't know FrightWorks as a game yet, so it doesn't offer to stream it by itself: to get that, add
-**FrightWorks Game** in Discord's **User Settings > Registered Games** while it's running.
+**FrightWorks-No100F-Game** in Discord's **User Settings > Registered Games** while it's running.
 
 ## Controllers and keyboard
 

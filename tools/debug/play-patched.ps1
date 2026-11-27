@@ -7,7 +7,7 @@
 #   ... play-patched.ps1 -CleanBuild           # after the game closes, rebuild Play\ without the patches
 #   ... play-patched.ps1 -HdTextures           # with the HD texture pack (texture_pack\ScoobyHD, fetched by get-hd-pack.py)
 #
-# Steps: git apply each tools\debug\patches\<name>.patch, build, start Play\FrightWorks Game.exe, wait for it to
+# Steps: git apply each tools\debug\patches\<name>.patch, build, start Play\FrightWorks-No100F-Game.exe, wait for it to
 # exit, then git apply -R the patches this run applied. A patch that was already applied is left as found. A patch whose
 # files were edited while the game ran no longer reverses cleanly: it is left applied and the script says so.
 # -HdTextures links texture_pack\ScoobyHD into Play\texture_replacements (if not staged there) and sets [video] texture_replacements =
@@ -33,7 +33,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path  # this file is to
 . (Join-Path $PSScriptRoot 'game-run.ps1')     # exclusive game-run slot while the game is open (a person is playing)
 . (Join-Path $PSScriptRoot 'config-lines.ps1')  # Set-ConfigLine
 $patchDir = Join-Path $PSScriptRoot 'patches'
-$exe = Join-Path $root 'Play\FrightWorks Game.exe'
+$exe = Join-Path $root 'Play\FrightWorks-No100F-Game.exe'
 # powershell -File passes "-Patch a,b" as one string
 $names = @($Patch | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 

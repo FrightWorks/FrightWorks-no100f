@@ -1,4 +1,4 @@
-# Puts the files the game ships besides the program into its folder (beside "FrightWorks Game.exe"): the button prompt
+# Puts the files the game ships besides the program into its folder (beside "FrightWorks-No100F-Game.exe"): the button prompt
 # icons in button_icons (tools\make-button-icons.py). They are program files: an installed game's folder is replaced on
 # every update. No build ships an HD texture pack (2026-11-24): the launcher downloads one when the player chooses it,
 # and an older build's staged copy (texture_replacements\ScoobyHD) is removed.

@@ -125,7 +125,7 @@ static class InstalledRemoval
     internal static bool AnyRunningFrom(string folder)
     {
         string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)) + Path.DirectorySeparatorChar;
-        foreach (var name in new[] { "FrightWorks", "FrightWorks Game" })
+        foreach (var name in new[] { "FrightWorks-No100F-Launcher", "FrightWorks-No100F-Game", "FrightWorks", "FrightWorks Game" })  // and the old names (up to 1.2.1)
             foreach (var p in Process.GetProcessesByName(name))
                 using (p)
                 {

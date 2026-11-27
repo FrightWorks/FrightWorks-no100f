@@ -5,7 +5,7 @@ namespace FrightWorks;
 // RecompLauncher's setup step (recomplauncher.json "prepare"; https://recomplauncher.com). It runs this exe with no window
 // after it has checked the player's disc image, again whenever the player picks another copy, and after every update
 // (the disc is unpacked again only for another image: <disc folder>.source records which one it came from):
-//   FrightWorks.exe --prepare --game=<image>
+//   FrightWorks-No100F-Launcher.exe --prepare --game=<image>
 // It does what this launcher's first start and disc choice do, so the game can start straight away without it:
 // - copies the saves, settings and controls of an installed FrightWorks into a fresh portable copy (DataImport.Installed),
 // - extracts the disc into this game's disc folder (DataPaths.Disc) and points [paths] dvd_root at it,

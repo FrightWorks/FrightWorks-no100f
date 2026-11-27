@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Puts the files the game ships besides the program into its folder (beside "FrightWorks Game.exe"): the button prompt
+"""Puts the files the game ships besides the program into its folder (beside "FrightWorks-No100F-Game.exe"): the button prompt
 icons in button_icons (tools/make-button-icons.py). They are program files: an installed game's folder is replaced on
 every update.
 
@@ -137,7 +137,7 @@ def stage(game_dir, required):
 
 def main(argv):
     parser = argparse.ArgumentParser(description="Stages the button icons into a game folder.")
-    parser.add_argument("--game-dir", required=True, help="the folder beside FrightWorks Game.exe")
+    parser.add_argument("--game-dir", required=True, help="the folder beside FrightWorks-No100F-Game.exe")
     parser.add_argument("--required", action="store_true", help="stop on anything missing instead of warning")
     args = parser.parse_args(argv)
     try:

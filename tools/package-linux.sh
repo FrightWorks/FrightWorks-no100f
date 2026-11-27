@@ -8,7 +8,7 @@
 #
 # --build first builds the game (tools/build-no100f-linux.sh) and the launcher (tools/build-launcher.sh); without it the
 #   Play/ and launcher/publish/ already there are packed.
-# The package holds the same program files as the Windows installer: the launcher on top ("FrightWorks"), the game and its
+# The package holds the same program files as the Windows installer: the launcher on top ("FrightWorks-No100F-Launcher"), the game and its
 # runtime files in data/ (no portable marker, no disc, saves or settings). Velopack puts it in an AppImage; the installed
 # game keeps the player's files outside it (launcher/DataPaths.cs: $XDG_DATA_HOME/WiiCompiled).
 # Into --feed (default dist/installer-linux): FrightWorks-linux.AppImage, FrightWorks-<ver>-linux-full.nupkg, a -delta.nupkg
@@ -45,10 +45,10 @@ if [[ $build -eq 1 ]]; then
     "$root/tools/build-no100f-linux.sh"
     "$root/tools/build-launcher.sh"
 fi
-launcher="$root/launcher/publish/FrightWorks"
+launcher="$root/launcher/publish/FrightWorks-No100F-Launcher"
 play="$root/Play"
 [[ -x "$launcher" ]] || { echo "No $launcher: run with --build." >&2; exit 1; }
-[[ -x "$play/FrightWorks Game" ]] || { echo "No $play/FrightWorks Game: run with --build." >&2; exit 1; }
+[[ -x "$play/FrightWorks-No100F-Game" ]] || { echo "No $play/FrightWorks-No100F-Game: run with --build." >&2; exit 1; }
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
 work="$(mktemp -d)"
@@ -58,15 +58,15 @@ trap 'rm -rf "$work"' EXIT
 # $XDG_DATA_HOME/WiiCompiled), no UserData, no zip README.
 stage="$work/FrightWorks"
 mkdir -p "$stage/data"
-install -m 755 "$launcher" "$stage/FrightWorks"
-install -m 755 "$play/FrightWorks Game" "$stage/data/"
+install -m 755 "$launcher" "$stage/FrightWorks-No100F-Launcher"
+install -m 755 "$play/FrightWorks-No100F-Game" "$stage/data/"
 for f in dsp_coef.bin cacert.pem initial_pipeline_cache.db; do
     [[ -f "$play/$f" ]] && install -m 644 "$play/$f" "$stage/data/"
 done
 # The game's own libraries: the build links libpng and zlib as shared libraries from its build folder (a RUNPATH there, so a
 # source build runs from Play/). A player's system may not have them or may have another version, so the ones the game was
 # built with go beside it and the game and they look there first ($ORIGIN). SDL3 and Dawn are linked statically.
-game="$stage/data/FrightWorks Game"
+game="$stage/data/FrightWorks-No100F-Game"
 runpath="$(patchelf --print-rpath "$game")"
 for lib in $(patchelf --print-needed "$game"); do
     IFS=: read -r -a dirs <<<"$runpath"
@@ -100,13 +100,13 @@ python3 "$root/tools/stage-assets.py" --game-dir "$stage/data" --required
 # What the game and the launcher load at run time must be on the system or beside the game: list anything ldd can't find (the
 # GPU stack, libvulkan and the drivers, is dlopen'd and never listed). Also say what glibc they need.
 missing=0
-for exe in "$stage/data/FrightWorks Game" "$stage/FrightWorks"; do
+for exe in "$stage/data/FrightWorks-No100F-Game" "$stage/FrightWorks-No100F-Launcher"; do
     if ldd "$exe" 2>&1 | grep -q 'not found'; then
         echo "Not found by ldd for $(basename "$exe"):" >&2; ldd "$exe" 2>&1 | grep 'not found' >&2; missing=1
     fi
 done
 [[ $missing -eq 0 ]] || { echo "The package needs libraries that are not on this machine." >&2; exit 1; }
-for f in "$stage/data/FrightWorks Game" "$stage/data/"*.so* "$stage/FrightWorks"; do
+for f in "$stage/data/FrightWorks-No100F-Game" "$stage/data/"*.so* "$stage/FrightWorks-No100F-Launcher"; do
     [[ -f "$f" ]] && echo "glibc needed by $(basename "$f"): $(objdump -T "$f" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1)"
 done
 
@@ -138,7 +138,7 @@ if [[ $download -eq 1 ]]; then
     "$vpk" download github --repoUrl "$repo_url" --channel linux --outputDir "$feed"
 fi
 
-"$vpk" pack --packId FrightWorks --packVersion "$version" --packDir "$stage" --mainExe FrightWorks --runtime linux-x64 \
+"$vpk" pack --packId FrightWorks --packVersion "$version" --packDir "$stage" --mainExe FrightWorks-No100F-Launcher --runtime linux-x64 \
     --packTitle FrightWorks --packAuthors Loneranger419 --icon "$work/frightworks.png" --categories Game \
     --outputDir "$feed"
 

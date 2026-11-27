@@ -36,7 +36,7 @@ try {
     }
     Remove-Item (Join-Path $play 'devmenu.txt'), (Join-Path $play 'devmenu.log') -ErrorAction SilentlyContinue
     $env:AUDIO_RAW_DUMP = $dump
-    Start-Process -FilePath (Join-Path $play 'FrightWorks Game.exe') -WorkingDirectory $play | Out-Null
+    Start-Process -FilePath (Join-Path $play 'FrightWorks-No100F-Game.exe') -WorkingDirectory $play | Out-Null
     # wait for the boot scene to load
     $t = [DateTime]::Now
     while (([DateTime]::Now - $t).TotalSeconds -lt 120) {

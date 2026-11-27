@@ -5,7 +5,7 @@ Version 1.2.1. Version numbers continue from Refrightened: its last release, 1.0
 
 Needs your own GameCube disc image: USA v1.01 (GIHE78, revision 1), .iso/.gcm/.ciso. No game data is included.
 
-1. Open "FrightWorks.exe".
+1. Open "FrightWorks-No100F-Launcher.exe".
 2. Press Play. The first time, it asks for your disc image (Extras).
 
 Settings: resolution, widescreen, 60 fps, anti-aliasing, HD textures, skip intro, frame interpolation

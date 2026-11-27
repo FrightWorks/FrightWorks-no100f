@@ -81,13 +81,13 @@ class CheckAssetsTests(unittest.TestCase):
     def test_data_folders_are_refused(self):
         self.write("Disc/DATA/readme.txt", b"x")
         self.write("wiicompiled/generated/f.cpp", b"x")
-        self.write("Play/FrightWorks Game.exe", b"MZ")
+        self.write("Play/FrightWorks-No100F-Game.exe", b"MZ")
         self.write("Play/portable.txt", b"")
         self.commit("folders")
         found = " ".join(self.problems())
         self.assertIn("Disc/DATA/readme.txt", found)
         self.assertIn("wiicompiled/generated/f.cpp", found)
-        self.assertIn("Play/FrightWorks Game.exe", found)
+        self.assertIn("Play/FrightWorks-No100F-Game.exe", found)
         self.assertNotIn("portable.txt", found)
 
     def test_archive_is_refused_even_when_renamed(self):

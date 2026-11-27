@@ -26,7 +26,7 @@ try {
     Enter-GameSlot $root 'iterate' -Shared:(-not $Capture)  # -Capture runs capture-window.ps1, which reuses this slot
     $userCfg = Set-RumbleOffForRun $cfg; $haveCfg = $true
     Set-ConfigLine $cfg 'audio' 'muted' 'muted = true' | Out-Null
-    $p = Start-Process (Join-Path $play 'FrightWorks Game.exe') -WorkingDirectory $play -RedirectStandardError $log -RedirectStandardOutput "$log.out" -PassThru
+    $p = Start-Process (Join-Path $play 'FrightWorks-No100F-Game.exe') -WorkingDirectory $play -RedirectStandardError $log -RedirectStandardOutput "$log.out" -PassThru
     $null = $p.WaitForExit($Seconds * 1000)
     $alive = -not $p.HasExited
     if ($alive -and $Capture) { & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'capture-window.ps1') -Seconds 1 -Out (Join-Path $root 'build-logs\boot.png') | Select -Last 1 }

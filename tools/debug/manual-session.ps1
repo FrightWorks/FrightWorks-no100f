@@ -54,7 +54,7 @@ Set-StrictMode -Version 3.0
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path  # this file is tools\debug\manual-session.ps1
 . (Join-Path $PSScriptRoot 'game-run.ps1')
 $play = Join-Path $root 'Play'
-$exe = Join-Path $play 'FrightWorks Game.exe'
+$exe = Join-Path $play 'FrightWorks-No100F-Game.exe'
 $outDir = Join-Path $root 'autotest\manual'
 $statePath = Join-Path $outDir 'session.json'
 $disc = Join-Path $root 'Disc\DATA'
@@ -160,7 +160,7 @@ function Stop-AutomationLeftovers {
 
 function Get-PlayGameProcesses {
     Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -match '^FrightWorks Game\.exe$|Scooby' -and $_.ExecutablePath -and (
+        $_.Name -match '^FrightWorks-No100F-Game\.exe$|Scooby' -and $_.ExecutablePath -and (
             $_.ExecutablePath -eq $exe -or
             ((Split-Path $_.ExecutablePath -Parent) -eq $play)
         )

@@ -51,8 +51,8 @@ int main() {
     Check("file url", "/home/nick", false, "file:///home/nick/x", "file://~/x");
     Check("root home ignored", "/", false, "/usr/lib/x", "/usr/lib/x");
     Check("empty home", "", false, "/home/nick/x", "/home/nick/x");
-    Check("deck", "/home/deck", false, "argv=/home/deck/Games/FrightWorks/data/FrightWorks Game",
-          "argv=~/Games/FrightWorks/data/FrightWorks Game");
+    Check("deck", "/home/deck", false, "argv=/home/deck/Games/FrightWorks/data/FrightWorks-No100F-Game",
+          "argv=~/Games/FrightWorks/data/FrightWorks-No100F-Game");
 
     // Windows
     Check("windows backslashes", "C:\\Users\\Nick", true,
@@ -68,8 +68,8 @@ int main() {
           "%USERPROFILE%\\x C:\\Users\\Jos\xC3\xA9s\\y");
 
     // Wine / Proton: the Windows build also sees the Linux home through Z: and in Unix form.
-    CheckWine("wine z backslashes", "/home/nick", "Z:\\home\\nick\\Games\\FrightWorks\\data\\FrightWorks Game.exe",
-              "~\\Games\\FrightWorks\\data\\FrightWorks Game.exe");
+    CheckWine("wine z backslashes", "/home/nick", "Z:\\home\\nick\\Games\\FrightWorks\\data\\FrightWorks-No100F-Game.exe",
+              "~\\Games\\FrightWorks\\data\\FrightWorks-No100F-Game.exe");
     CheckWine("wine z slashes", "/home/nick", "dvd_root=Z:/home/nick/Games/DATA", "dvd_root=~/Games/DATA");
     CheckWine("wine any case", "/home/nick", "z:\\HOME\\NICK\\x", "~\\x");
     CheckWine("wine unix form", "/home/nick", "HOME=/home/nick, /home/nick/x", "HOME=~, ~/x");

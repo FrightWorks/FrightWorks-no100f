@@ -187,7 +187,7 @@ Nothing runs the smoke test automatically, so the PR says what was run.
 - Renderer changes must preserve colour space, transparency, depth and capture behaviour.
 - Wait on log lines or files, not fixed sleeps, where you can.
 - Close only the test game.
-  On Linux use `pkill -x "FrightWorks Gam"`: the process name is cut to 15 characters, and `pkill -f` with the game's name also kills the calling shell.
+  On Linux use `pkill -f "[F]rightWorks-No100F-Game"`: the bracket keeps the pattern from matching the calling shell's own command line, and the process name is cut to 15 characters (`FrightWorks-No1`, the same for the launcher), so `pkill -x` can't tell the two apart.
 
 **Test runs**
 - Never test from your own `Play/`, which holds your game and settings.
@@ -215,14 +215,14 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1       # full bui
 powershell -ExecutionPolicy Bypass -File tools\build-launcher.ps1
 # Linux
 tools/build-no100f-linux.sh [path/to/game.iso]                          # full: CMake + .NET 10, translate, configure, compile, stage Play/
-tools/build-launcher.sh                                                 # launcher/publish/FrightWorks
+tools/build-launcher.sh                                                 # launcher/publish/FrightWorks-No100F-Launcher
 # Linux release package (AppImage via Velopack, built in an Ubuntu 22.04 container; details in docs/testing.md)
 powershell -ExecutionPolicy Bypass -File tools\package-linux-docker.ps1   # from the committed state of the branch -> dist\installer-linux
 # Linux, after native-only changes
 toolchain/CMake/bin/cmake --build wiicompiled/native-build-linux --target WiiCompiled --parallel "$(nproc)"
 ```
 
-- The Linux incremental build (the last command) does not copy into `Play/`: copy the built `WiiCompiled` there as `FrightWorks Game`.
+- The Linux incremental build (the last command) does not copy into `Play/`: copy the built `WiiCompiled` there as `FrightWorks-No100F-Game`.
 - F3 video recording and fullscreen monitor choice aren't on Linux yet.
 - The rest of the build facts are under "Facts worth knowing".
 
@@ -412,7 +412,7 @@ To build old source there, set only the paths that differ with `git restore --so
 - RecompLauncher installs and updates the release zip (and the Linux `.tar.gz`) from GitHub, so a RecompLauncher install is a portable copy.
   It reads `recomplauncher.json` at the top of the zip, which `package-scooby.ps1` copies there from the repo root; the Linux tarball gets it from `package-linux.sh`.
   Check it against https://recomplauncher.com/schema/recomplauncher.json after changing it (the docs show fields the schema refuses, such as `prepare.timeout`).
-- Its setup step runs `FrightWorks.exe --prepare --game=<image>` with no window (`launcher/Prepare.cs`): it extracts the disc into `data/Disc/DATA` and sets `dvd_root`, copies an installed game's saves and settings into a fresh copy, and fills the HDR keys.
+- Its setup step runs `FrightWorks-No100F-Launcher.exe --prepare --game=<image>` with no window (`launcher/Prepare.cs`): it extracts the disc into `data/Disc/DATA` and sets `dvd_root`, copies an installed game's saves and settings into a fresh copy, and fills the HDR keys.
   Texture packs are only ever downloaded from this launcher's Extras > Textures, never by the setup step (maintainer, 2026-11-25).
   It prints `progress <0..1> <text>` lines; exit 0 done, 1 error, 2 incomplete image, 3 wrong disc.
   RecompLauncher runs it again after every update: `data/Disc/DATA.source` records which image (path, size, date) the disc folder came from, and the same image with its files in place isn't unpacked again.
@@ -421,7 +421,7 @@ To build old source there, set only the paths that differ with `git restore --so
 - On Linux RecompLauncher should take the `.tar.gz` (portable, `Linux-x64` in the name), not `FrightWorks.AppImage`, which is the installed layout (its data in `~/.local/share/WiiCompiled`) and has no `recomplauncher.json`: still to confirm in RecompLauncher on Linux.
 - The game's exit codes in `exit_codes`: 0 is a normal quit; 3 is no usable disc folder on Linux and macOS (`GameFolder::kNoGameExitCode`), shown as its message instead of a crash report. Windows asks for the folder instead.
   Another code the game uses on purpose gets a message there too; a crash (1) stays unlisted so the player gets the crash report.
-- Play starts `data/FrightWorks Game` directly, not this launcher, so anything the launcher does before Play (patch mods are built when added, not only before Play) must also work without it.
+- Play starts `data/FrightWorks-No100F-Game` directly, not this launcher, so anything the launcher does before Play (patch mods are built when added, not only before Play) must also work without it.
 - The game reads `RECOMPLAUNCHER=1` and `RECOMPLAUNCHER_MODE` (`runtime_config.h`): under RecompLauncher it doesn't read pads in the background (its overlay uses them), and from its Big Picture mode a saved window opens borderless for that run only.
 - Its crash report takes the newest `.log` in `UserData/Logs`: the game mirrors the run's `console.log` to `Logs/latest.log`.
 - The settings it shows are listed in `recomplauncher.json` with the values F10 writes: a new or renamed setting changes it too.
@@ -450,7 +450,7 @@ A maintainer runs releases:
 
 1. Version PR: `<Version>` in `launcher/FrightWorks.Launcher.csproj` and the version line in `tools/package-README.txt`.
 2. After the merge, on a clean `main`: local tag `v<ver>` (the build ID is then just `<ver>`), then `tools/package-scooby.ps1 -Build`, then `-Zip` as a second call (`-Build` resets PATH), then `-Installer`.
-3. Smoke test: the zip has no game data, saves or settings, and has `recomplauncher.json` beside `FrightWorks.exe`; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
+3. Smoke test: the zip has no game data, saves or settings, and has `recomplauncher.json` beside `FrightWorks-No100F-Launcher.exe`; launcher `--shots` from the unzip; boot `h001` with HD and `i004`.
 4. `gh release create v<ver> --draft --target <full SHA>` (a short SHA gets HTTP 422) with `dist\FrightWorks-<ver>-Windows-x64.zip` (`-Zip` names it), every `dist\installer\*` and `dist\installer-linux\*` file (the Linux `.tar.gz` is the portable Linux build, which RecompLauncher uses too) and the notes.
    RecompLauncher picks a release file by the system and processor in its name when no catalog entry names it, hence `Windows-x64` (up to v1.2.0 the zip was `FrightWorks-<ver>.zip`); frightworks.dev finds the zip with the `zipPattern` in FrightWorks-site's `src/content/games/no100f.md` (`^FrightWorks-[0-9.]+(-Windows-x64)?\.zip$` takes both names).
    RecompLauncher's own catalog entry `frightworks-no100f` names `FrightWorks-win-Setup.exe` and `FrightWorks.AppImage`, so its players get the installed game until it's switched: after the first release with `recomplauncher.json`, a maintainer asks RecompLauncher (Messages in its developer hub) to list `FrightWorks-*-Windows-x64.zip` and `FrightWorks-*-Linux-x64.tar.gz` instead.

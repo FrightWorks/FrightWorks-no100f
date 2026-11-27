@@ -1,5 +1,5 @@
 # Builds the FrightWorks launcher (launcher\) with the portable .NET 10 SDK in toolchain\dotnet.
-# Output: launcher\publish\FrightWorks.exe (self-contained single file, no .NET install needed).
+# Output: launcher\publish\FrightWorks-No100F-Launcher.exe (self-contained single file, no .NET install needed).
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $dotnet = & (Join-Path $PSScriptRoot 'get-dotnet.ps1') | Select-Object -Last 1
@@ -7,4 +7,4 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; $env:DOTNET_NOLOGO = '1'; $env:DOTNET_RO
 & $dotnet publish (Join-Path $root 'launcher\FrightWorks.Launcher.csproj') -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -o (Join-Path $root 'launcher\publish')
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
-Write-Host "DONE: $root\launcher\publish\FrightWorks.exe"
+Write-Host "DONE: $root\launcher\publish\FrightWorks-No100F-Launcher.exe"

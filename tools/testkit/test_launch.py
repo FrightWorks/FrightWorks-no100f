@@ -255,7 +255,7 @@ class LinkTest(unittest.TestCase):
 class TestGameTest(FakeGameCase):
     def test_prepare_makes_an_own_copy_with_links_and_config(self):
         g = self.game(hd=True)
-        self.assertTrue((g.play / "FrightWorks Game.exe").is_file())
+        self.assertTrue((g.play / "FrightWorks-No100F-Game.exe").is_file())
         self.assertNotEqual(g.play.resolve(), self.src.resolve())
         self.assertTrue(launch.is_link(g.play / "button_icons"))
         self.assertTrue(launch.is_link(g.play / "texture_replacements" / "ScoobyHD"))

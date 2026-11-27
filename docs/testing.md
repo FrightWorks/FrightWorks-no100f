@@ -17,7 +17,7 @@ build downloads its own compiler, CMake and Ninja into `toolchain\` the first ti
 ```powershell
 # Build the launcher and use it to extract your disc image into Disc\DATA
 powershell -ExecutionPolicy Bypass -File tools\build-launcher.ps1
-& "launcher\publish\FrightWorks.exe" --extract "C:\path\to\game.iso" Disc\DATA
+& "launcher\publish\FrightWorks-No100F-Launcher.exe" --extract "C:\path\to\game.iso" Disc\DATA
 
 # First full build of the game (translates main.dol, then compiles) -> Play\
 powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1
@@ -39,7 +39,7 @@ when his hat leaves view, then repeat in Original 4:3. Do not change or load an 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools                  # full build
 powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -SkipTranslate   # faster: native code only
-& "Play\FrightWorks Game.exe"
+& "Play\FrightWorks-No100F-Game.exe"
 ```
 
 - Every build also puts the button prompt icons into `Play\button_icons`, beside the game like a release
@@ -76,7 +76,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   (the XDG Pictures and Videos folders, `~/Pictures` and `~/Videos` when xdg-user-dirs isn't set up). `[paths] saves_dir`
   in Config.toml moves the saves in either layout (the launcher's **Extras > Folders** sets it). To test the installed layout without an installer,
   copy `Play\`'s exe, DLLs, `dsp_coef.bin` and `button_icons` into a folder named `data`
-  (no `portable.txt`), with `FrightWorks.exe` beside it.
+  (no `portable.txt`), with `FrightWorks-No100F-Launcher.exe` beside it.
 - Packaging a release zip: `tools\package-scooby.ps1 -Build -Zip` → `dist\` (`-Build` also brings the pinned dependencies up to date). It also needs ImageMagick (`magick`) on
   PATH. No HD texture pack and no disc data go into the package.
 - **Installer** (Velopack): `tools\package-scooby.ps1 -Installer` → `dist\installer\`: `FrightWorks-win-Setup.exe`,
@@ -95,7 +95,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   dist\testfeed\FrightWorks-win-Setup.exe --silent       # installs only (--silent doesn't start the launcher)
   tools\package-scooby.ps1 -Installer -Version 1.0.5-test.2 -Feed dist\testfeed -NoDownload   # makes the delta too
   $env:FRIGHTWORKS_UPDATE_SOURCE = "$PWD\dist\testfeed"
-  & "$env:LOCALAPPDATA\FrightWorks\current\FrightWorks.exe"   # asks to update to test.2
+  & "$env:LOCALAPPDATA\FrightWorks\current\FrightWorks-No100F-Launcher.exe"   # asks to update to test.2
   ```
   Uninstall afterwards in Windows Settings > Apps (or `%LOCALAPPDATA%\FrightWorks\Update.exe --uninstall`); the data
   folders stay (delete `%LOCALAPPDATA%\FrightWorks-Data` and `Saved Games\FrightWorks` by hand for a clean slate).
@@ -459,9 +459,9 @@ Measured on one PC (2026-11-18): `i004` with two A presses, same build twice, id
 `recomplauncher.json` at the repo root tells [RecompLauncher](https://recomplauncher.com) how to set up, configure and start the game; the packaging copies it to the top of the zip and the Linux tarball (`.agents/REPO.md`, "RecompLauncher").
 After changing it:
 1. Check it against the schema, with any JSON Schema (draft 7) validator: https://recomplauncher.com/schema/recomplauncher.json.
-2. Try the setup step without RecompLauncher, from a packaged folder (`dist\FrightWorks`, or an unzipped release with the new `FrightWorks.exe` copied in), never from `Play\`, which it refuses:
+2. Try the setup step without RecompLauncher, from a packaged folder (`dist\FrightWorks`, or an unzipped release with the new `FrightWorks-No100F-Launcher.exe` copied in), never from `Play\`, which it refuses:
    ```powershell
-   .\FrightWorks.exe --prepare "--game=<your .iso>" | Out-String   # progress lines, then "progress 1 Ready to play"; $LASTEXITCODE 0
+   .\FrightWorks-No100F-Launcher.exe --prepare "--game=<your .iso>" | Out-String   # progress lines, then "progress 1 Ready to play"; $LASTEXITCODE 0
    ```
    It extracts the disc into `data\Disc\DATA` (disc data: keep the folder local) and sets `dvd_root`.
    On a PC with the installed game, a fresh folder also gets its saves and settings (`data\UserData\imported.txt` says from where).
@@ -572,7 +572,7 @@ useful:
   the graphics adapter and driver, and `[audio] output:` (SDL audio driver and device format). On a crash: the signal
   or exception, the game's CPU state, `crash_<reason>.txt` beside the log and a host stack trace (on Linux each frame
   is `module!symbol` plus `module+0x...`: look the offset up in the same build with `llvm-symbolizer
-  --obj="FrightWorks Game" 0x...`). A freeze leaves `[hang] no new frame for N s` with the game mode, the movie
+  --obj="FrightWorks-No100F-Game" 0x...`). A freeze leaves `[hang] no new frame for N s` with the game mode, the movie
   playing and the guest threads; each Bink movie logs `[movie] playing` and `[movie] closed`. The dev menu's `stall`
   and `crash` commands (`game-logic-debug` skill) make these happen on purpose. A run that ended normally finishes
   with `process transcript ended: <how>` (window closed, the game reset, an error it reported); a log without that line
@@ -583,7 +583,7 @@ useful:
   terminal (stderr) keeps the real paths.
 - **Logs**: `Play\UserData\Logs\<time>\console.log`; the newest one shows which level files load (`[dvdread] ...
   xNNN.HIP`). Runtime messages (`RT_LOGF`) go to stderr: launch with
-  `Start-Process "Play\FrightWorks Game.exe" -WorkingDirectory Play -RedirectStandardError err.txt`.
+  `Start-Process "Play\FrightWorks-No100F-Game.exe" -WorkingDirectory Play -RedirectStandardError err.txt`.
 - **Scripted input** (no controller needed): set `NO100F_INPUT_SCRIPT` before starting the game, e.g.
   `$env:NO100F_INPUT_SCRIPT = '10000:PLUS,12000:DOWN,13500:A'` = press Start at 10 s, D-pad down at 12 s, A at 13.5 s
   (ms after the game first reads input; optional third field = hold time in ms, default 150). Buttons: `A`, `B`,
@@ -600,10 +600,10 @@ useful:
   Don't pipe `manual-session start` into `Select-Object -First`: it kills the session. `texhunt\look.ps1 -Hd` refuses once `Play\` already has the HD pack; use `manual-session start -HdTextures`.
   `manual-session stop` kills anything started from `autotest\`.
   `NO100F_PASS_LOG=1` prints which staging buffer forced a frame split (bytes used of each), for the first splits.
-- **Launcher screenshots** without opening it: `& "launcher\publish\FrightWorks.exe" --shots <dir>` (Linux:
-  `launcher/publish/FrightWorks --shots <dir>`) draws every page to `<dir>\<Page>.png`. The window takes the size the
+- **Launcher screenshots** without opening it: `& "launcher\publish\FrightWorks-No100F-Launcher.exe" --shots <dir>` (Linux:
+  `launcher/publish/FrightWorks-No100F-Launcher --shots <dir>`) draws every page to `<dir>\<Page>.png`. The window takes the size the
   window manager gives it (a minimized window gives one 160x28 picture); for fixed sizes use the layout regression below.
-  With no game exe in `Play\` (a fresh worktree) it falls back to the real installed config: build the game first, or point it at a fake release folder (the launcher exe, `data\FrightWorks Game.exe` as any stub file, and `data\portable.txt`).
+  With no game exe in `Play\` (a fresh worktree) it falls back to the real installed config: build the game first, or point it at a fake release folder (the launcher exe, `data\FrightWorks-No100F-Game.exe` as any stub file, and `data\portable.txt`).
   `docs/launcher.png` is `Main.png` at 100% scaling, cropped to 1180x830 from x=8, y=31.
   A connected Xbox pad opens a modal layout question in the launcher unless `[controller] layout` is set. `vpk` keeps one Portable zip per output folder.
 - **Patch mods** (`docs/mod-patches.md`): `$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; dotnet run --project tools\hip-patch-tests` builds levels from made-up data and

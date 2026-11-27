@@ -64,7 +64,7 @@ class FindPlayTest(Tmp):
         self.assertEqual(at.find_play(self.root, system=NT), play)
 
     def test_play_without_sdl3_is_not_usable(self):
-        touch(self.root / "Play", "FrightWorks Game.exe", "libc++.dll")
+        touch(self.root / "Play", "FrightWorks-No100F-Game.exe", "libc++.dll")
         with self.assertRaises(at.SetupError):
             at.find_play(self.root, system=NT)
 
@@ -89,7 +89,7 @@ class FindPlayTest(Tmp):
 
     def test_linux_play_is_optional(self):
         self.assertIsNone(at.find_play(self.root, system=POSIX))
-        touch(self.root / "Play", "FrightWorks Game", "dsp_coef.bin")   # what the Linux build stages: no .so
+        touch(self.root / "Play", "FrightWorks-No100F-Game", "dsp_coef.bin")   # what the Linux build stages: no .so
         self.assertEqual(at.find_play(self.root, system=POSIX), self.root / "Play")   # used if there, not required
 
     def test_linux_argument_is_honoured(self):

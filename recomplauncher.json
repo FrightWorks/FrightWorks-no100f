@@ -14,7 +14,7 @@
     }
   ],
   "prepare": {
-    "program": ["FrightWorks.exe", "FrightWorks"],
+    "program": ["FrightWorks-No100F-Launcher.exe", "FrightWorks-No100F-Launcher"],
     "args": ["--prepare", "--game={input:game}"],
     "label": "Unpacking your disc and setting up the game",
     "done": ["{install}/data/Disc/DATA/sys/main.dol"],
@@ -30,7 +30,7 @@
     ]
   },
   "start": {
-    "program": ["data/FrightWorks Game.exe", "data/FrightWorks Game"]
+    "program": ["data/FrightWorks-No100F-Game.exe", "data/FrightWorks-No100F-Game", "data/FrightWorks Game.exe", "data/FrightWorks Game"]
   },
   "config": [
     {
