@@ -11,6 +11,8 @@
 #include "guest_interrupt_context.h"
 #include "ppc_runtime.h"
 #include "aurora_events.h"
+#include "no100f_discord_status.h"
+#include "no100f_progress.h"
 #include "no100f_game_state.h"
 #include "settings_overlay.h"
 #include "fiber_manager.h"
@@ -576,6 +578,8 @@ void AdvanceRetrace(CpuContext* ctx, Clock::time_point retraceStamp, bool servic
     LogGuestModulesOnce();
     LogSceneChanges();
     LogMovieChanges();
+    no100f_progress::Update();
+    no100f_discord_status::SampleGame();
 
     uint32_t preCb = 0;
     uint32_t postCb = 0;
