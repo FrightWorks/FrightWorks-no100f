@@ -8,6 +8,7 @@ FrightWorks continues [Scooby-Doo: Refrightened](https://github.com/josiahg2502-
 which it split off from on October 31, 2026 (version numbers carry on from its v1.0.2).
 
 [![Listed on PlayPorted](https://playported.com/badge.svg)](https://playported.com/ports/1163-scooby-doo-night-of-100-frights/)
+[![Discord](https://img.shields.io/discord/1574226034293735575?label=Discord&logo=discord)](https://discord.gg/DnE5QcpNUF)
 
 > **Artists wanted:** the launcher needs new art in the style of the original show. [Details](docs/launcher-art.md).
 
@@ -72,7 +73,7 @@ Or install it from [RecompLauncher](https://recomplauncher.com): it sets up your
 | **F1** | Opens this page |
 
 More in the [player's guide](docs/playing.md): file locations, updates, Linux, controllers, moving from an earlier
-version, developer tools.
+version, developer tools. Help, mods and news: the [FrightWorks Discord](https://discord.gg/DnE5QcpNUF).
 
 ![The launcher](docs/screenshots/launcher.gif)
 
