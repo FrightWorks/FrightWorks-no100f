@@ -635,12 +635,29 @@ static class LauncherControllerTests
               "Show all files did not list every file (or lost the selection).");
         Press(w, LauncherButtons.Left);
         Check(Entries(modal).Count == 2, "Switching Show all files off did not filter again.");
-        Choose(w, modal, "Drives and folders");
-        Check(Entries(modal).Any(r => r.Label == "Home") && Entries(modal).Any(r => Path.GetPathRoot((string)r.Tag!) == (string)r.Tag!),
-              "Drives and folders did not list the home folder and a drive.");
-        Shot(modal, "File-browser-places");
-        Press(w, LauncherButtons.Extra);
-        Check(w.navigation.Modal == modal && Screen(modal).Selected?.Label == "Home", "X on the drives list did something.");
+        // Every drive is a tab; the browser opened on the fixture's drive, and another drive's tab starts at its root (no Up
+        // a folder, X does nothing there). Back on the first tab, its folder is kept. Home jumps to its drive's tab.
+        var browserScreen = Screen(modal);
+        Check(browserScreen.TabCount == Math.Max(1, ControllerDialogs.Drives().Count), "The browser's tabs aren't one per drive.");
+        if (browserScreen.TabCount > 1)
+        {
+            int firstTab = browserScreen.SelectedTab;
+            bool forward = firstTab + 1 < browserScreen.TabCount;
+            Press(w, forward ? LauncherButtons.Next : LauncherButtons.Previous);
+            Check(browserScreen.SelectedTab != firstTab && !browserScreen.Rows.Any(r => r.Label == "Up a folder") &&
+                  Entries(modal).All(r => Path.GetDirectoryName((string)r.Tag!) == Path.GetPathRoot((string)r.Tag!)),
+                  "Another drive's tab did not start at its root.");
+            Shot(modal, "File-browser-drive");
+            int driveTab = browserScreen.SelectedTab;
+            Press(w, LauncherButtons.Extra);
+            Check(browserScreen.SelectedTab == driveTab && w.navigation.Modal == modal, "X at a drive's root did something.");
+            Press(w, forward ? LauncherButtons.Previous : LauncherButtons.Next);
+            Check(browserScreen.SelectedTab == firstTab && string.Join(",", Entries(modal).Select(r => r.Label)) == "Child,disc.ISO",
+                  "Going back to the first drive's tab lost its folder.");
+        }
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Choose(w, modal, "Home");
+        Check(Entries(modal).All(r => Path.GetDirectoryName((string)r.Tag!) == home), "Home did not open the home folder.");
         Choose(w, modal, "Type a path");
         var typing = w.navigation.Modal!;
         Check(typing != modal, "Type a path did not open the keyboard.");

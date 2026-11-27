@@ -145,9 +145,11 @@ static class ControllerDialogs
 
     static readonly string[] DiscExtensions = { ".iso", ".gcm", ".ciso" };
 
-    // The pad's file browser: a full-window menu like the launcher's others, in a borderless window over the launcher. A row
-    // per folder and file: A opens a folder or chooses the file, X goes up a folder, B cancels. The drives and the usual
-    // folders, a typed path and Show all files (or New folder) are rows at the end. Hidden and system folders are left out.
+    // The pad's file browser: a full-window menu like the launcher's others, in a borderless window over the launcher. Every
+    // drive is a tab (LB / RB): it opens on the drive of the starting folder, at that folder, and another drive's tab starts
+    // at its root (each tab then keeps its own folder). A row per folder and file: A opens a folder or chooses the file, X
+    // goes up a folder, B cancels. Your usual folders, a typed path and Show all files (or New folder) are rows at the end.
+    // Hidden and system folders are left out.
     internal static async Task<string?> Browse(Window owner, string title, string? start, bool folder, string[]? extensions = null, string? typeName = null)
     {
         extensions ??= DiscExtensions;
@@ -163,95 +165,137 @@ static class ControllerDialogs
             dialog.Position = owner.PointToScreen(default);
         }
         string heading = folder ? "Choose a folder" : extensions.SequenceEqual(DiscExtensions) ? "Choose a disc" : "Choose a file";
-        var screen = new MenuScreen(heading, () => dialog.Close()) { IsVisible = true, BackLabel = "Cancel" };
-        var page = screen.Body;
+        var screen = new MenuScreen(heading, () => dialog.Close()) { IsVisible = true, BackLabel = "Cancel", PageLabel = "Drive" };
         string instruction = title.TrimEnd('.') + ".";
-        string? current = Path.GetFullPath(start ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-        while (!Directory.Exists(current) && Directory.GetParent(current) is { } parent) current = parent.FullName;
-        if (!Directory.Exists(current)) current = null;  // the drives and folders
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string startPath = Path.GetFullPath(start ?? home);
+        while (!Directory.Exists(startPath) && Directory.GetParent(startPath) is { } parent) startPath = parent.FullName;
+        var tabs = Drives().Select(d => new BrowserTab(d.Root, d.Name, d.Label, d.About)).ToList();
+        string startRoot = Path.GetPathRoot(startPath) is { Length: > 0 } r ? r : startPath;
+        if (TabFor(startPath) is not int first)
+        {
+            // A folder on no listed drive (a network share): a tab of its own.
+            tabs.Insert(0, new BrowserTab(startRoot, Path.TrimEndingDirectorySeparator(startRoot), null, null));
+            first = 0;
+        }
+        if (Directory.Exists(startPath)) tabs[first].Current = startPath;
+        foreach (var tab in tabs) screen.AddTab(tab.Name, tab.Page);
         bool all = false;
-        string? answer = null;
+        string? answer = null, pendingSelect = null;
         dialog.Content = screen;
-        if (!Show(current, null)) Show(null, null);
+        screen.SelectTab(first);
+        Fill(first, null);
+        screen.TabChanged += i => { string? select = pendingSelect; pendingSelect = null; Fill(i, select); };
         dialog.Opened += (_, _) => Reselect(null);
         await Dialogs.ShowModal(dialog, owner);
         return answer;
 
-        // A folder's rows, or (path null) the drives and the usual folders. False: the folder couldn't be read (said).
-        bool Show(string? path, string? select)
+        // The tab of the drive holding `path` (the longest matching root), if any.
+        int? TabFor(string path)
         {
-            List<string> dirs = new(), files = new();
-            if (path != null)
+            int? best = null;
+            for (int i = 0; i < tabs.Count; i++)
+            {
+                string root = tabs[i].Root, prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+                bool under = Same(path, root) || path.StartsWith(prefix, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                if (under && (best == null || root.Length > tabs[best.Value].Root.Length)) best = i;
+            }
+            return best;
+        }
+
+        (List<string> Dirs, List<string> Files) Read(string path)
+        {
+            var dirs = Directory.EnumerateDirectories(path).Where(Shown).OrderBy(d => d, StringComparer.OrdinalIgnoreCase).ToList();
+            var files = folder ? new List<string>() : Directory.EnumerateFiles(path)
+                .Where(f => all || extensions.Contains(Path.GetExtension(f).ToLowerInvariant())).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+            return (dirs, files);
+        }
+
+        // A tab's page for its folder; a folder that's gone falls back to the drive's root, an unreadable drive says so.
+        void Fill(int i, string? select)
+        {
+            var tab = tabs[i];
+            foreach (string path in new[] { tab.Current, tab.Root }.Distinct())
             {
                 try
                 {
-                    path = Path.GetFullPath(path);
-                    dirs = Directory.EnumerateDirectories(path).Where(Shown).OrderBy(d => d, StringComparer.OrdinalIgnoreCase).ToList();
-                    if (!folder)
-                        files = Directory.EnumerateFiles(path).Where(f => all || extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+                    var (dirs, files) = Read(path);
+                    tab.Current = path;
+                    Build(i, dirs, files, select, null);
+                    return;
                 }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException)
+                catch (Exception e) when (Unreadable(e))
                 {
-                    Dialogs.Message(dialog.IsVisible ? dialog : owner, "Couldn't read the folder: " + e.Message).Watch();
-                    return false;
+                    if (path == tab.Root) Build(i, new(), new(), select, e.Message);
                 }
             }
-            current = path;
-            page.Children.Clear();
-            if (path == null) Places();
-            else
-            {
-                string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } n ? n : path;
-                string hint = path;
-                if (dirs.Count == 0 && files.Count == 0)
-                    hint += folder ? "\nNo folders in here." : "\nNo folders or " + typeName + " in here." + (all ? "" : " Show all files (below) lists every file.");
-                Heading(name, hint);
-                if (folder)
-                    page.Children.Add(new ActionRow("Use this folder", () => UseFolder().Watch(), "Choose", "Choose " + path + ".\n\n" + instruction));
-                string up = Directory.GetParent(path) is { } parent ? "Back to " + parent.FullName + "." : "Back to the drives and your folders.";
-                page.Children.Add(new ActionRow("Up a folder", Up, "Open", up + "\n\nX does this from any row.") { Value = ".." });
-                foreach (var d in dirs)
-                    page.Children.Add(new ActionRow(Path.GetFileName(d), () => Show(d, null), "Open", d) { Value = "Folder", Tag = d });
-                foreach (var f in files)
-                    page.Children.Add(new ActionRow(Path.GetFileName(f), () => Pick(f).Watch(), "Choose", f + "\n\n" + instruction)
-                                      { Value = Size(f), ValueColor = Skin.Cream, Tag = f });
-                Heading("Elsewhere");
-                page.Children.Add(new ActionRow("Drives and folders", () => Show(null, path), "Open", "Your drives, and your home, Desktop, Documents and Downloads folders."));
-                page.Children.Add(new ActionRow("Type a path", () => TypePath().Watch(), "Type", "Type the path of a folder" + (folder ? "" : " or a file") + "."));
-                if (folder) page.Children.Add(new ActionRow("New folder", () => NewFolder().Watch(), "Create", "Make a folder in " + path + "."));
-                else
-                {
-                    var showAll = new ToggleRow("Show all files", "Off: only " + typeName + " and folders. On: every file.") { IsChecked = all };
-                    showAll.IsCheckedChanged += (_, _) => { all = showAll.IsChecked == true; Show(current, "Show all files"); };
-                    page.Children.Add(showAll);
-                }
-            }
-            screen.ScreenExtra = path == null ? null : ("Up a folder", Up);
-            if (dialog.IsVisible) Reselect(select);
-            return true;
         }
 
-        void Places()
+        // Opens a folder: on its drive's tab (switching to it), with `select` (a path or a label) selected.
+        bool Open(string path, string? select)
         {
-            Heading("Your folders");
-            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            try
+            {
+                path = Path.GetFullPath(path);
+                var (dirs, files) = Read(path);
+                int i = TabFor(path) ?? screen.SelectedTab;
+                tabs[i].Current = path;
+                if (i == screen.SelectedTab) Build(i, dirs, files, select, null);
+                else { pendingSelect = select; screen.SelectTab(i); }
+                return true;
+            }
+            catch (Exception e) when (Unreadable(e))
+            {
+                Dialogs.Message(dialog.IsVisible ? dialog : owner, "Couldn't read the folder: " + e.Message).Watch();
+                return false;
+            }
+        }
+
+        void Build(int i, List<string> dirs, List<string> files, string? select, string? error)
+        {
+            var tab = tabs[i];
+            var page = tab.Page;
+            string path = tab.Current;
+            bool atRoot = Same(path, tab.Root);
+            page.Children.Clear();
+            string name = atRoot ? tab.Label ?? tab.Root : Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) is { Length: > 0 } n ? n : path;
+            string hint = atRoot && tab.About != null ? path + "  ·  " + tab.About : path;
+            if (error != null) hint += "\nCouldn't read this drive: " + error;
+            else if (dirs.Count == 0 && files.Count == 0)
+                hint += folder ? "\nNo folders in here." : "\nNo folders or " + typeName + " in here." + (all ? "" : " Show all files (below) lists every file.");
+            Heading(page, name, hint);
+            if (folder && error == null)
+                page.Children.Add(new ActionRow("Use this folder", () => UseFolder().Watch(), "Choose", "Choose " + path + ".\n\n" + instruction));
+            if (Directory.GetParent(path) is { } up)
+                page.Children.Add(new ActionRow("Up a folder", Up, "Open", "Back to " + up.FullName + ".\n\nX does this from any row.") { Value = ".." });
+            foreach (var d in dirs)
+                page.Children.Add(new ActionRow(Path.GetFileName(d), () => Open(d, null), "Open", d) { Value = "Folder", Tag = d });
+            foreach (var f in files)
+                page.Children.Add(new ActionRow(Path.GetFileName(f), () => Pick(f).Watch(), "Choose", f + "\n\n" + instruction)
+                                  { Value = Size(f), ValueColor = Skin.Cream, Tag = f });
+            Heading(page, "Elsewhere");
             var seen = new List<string>();
-            foreach (var (name, place) in new[] { ("Home", home), ("Desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)),
+            foreach (var (place, at) in new[] { ("Home", home), ("Desktop", Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)),
                          ("Documents", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)), ("Downloads", Path.Combine(home, "Downloads")) })
             {
-                if (string.IsNullOrEmpty(place) || !Directory.Exists(place) || seen.Any(p => Same(p, place))) continue;
-                seen.Add(place);
-                page.Children.Add(new ActionRow(name, () => Show(place, null), "Open", place) { Tag = place });
+                if (string.IsNullOrEmpty(at) || !Directory.Exists(at) || seen.Any(p => Same(p, at))) continue;
+                seen.Add(at);
+                page.Children.Add(new ActionRow(place, () => Open(at, null), "Open", at));
             }
-            Heading("Drives");
-            foreach (var (drive, about) in Drives())
-                page.Children.Add(new ActionRow(drive, () => Show(drive, null), "Open", drive) { Value = about, Tag = drive });
-            Heading("Elsewhere");
             page.Children.Add(new ActionRow("Type a path", () => TypePath().Watch(), "Type", "Type the path of a folder" + (folder ? "" : " or a file") + "."));
+            if (folder && error == null) page.Children.Add(new ActionRow("New folder", () => NewFolder().Watch(), "Create", "Make a folder in " + path + "."));
+            else if (!folder)
+            {
+                var showAll = new ToggleRow("Show all files", "Off: only " + typeName + " and folders. On: every file.") { IsChecked = all };
+                showAll.IsCheckedChanged += (_, _) => { all = showAll.IsChecked == true; Fill(screen.SelectedTab, "Show all files"); };
+                page.Children.Add(showAll);
+            }
+            if (i != screen.SelectedTab) return;
+            screen.ScreenExtra = atRoot ? null : ("Up a folder", Up);
+            if (dialog.IsVisible) Reselect(select);
         }
 
-        void Heading(string text, string? hint = null)
+        static void Heading(StackPanel page, string text, string? hint = null)
         {
             var h = new MenuHeading(text, hint);
             if (page.Children.Count == 0) h.Margin = new Thickness(0, 0, 0, 2);
@@ -271,8 +315,8 @@ static class ControllerDialogs
 
         void Up()
         {
-            if (current == null) return;
-            Show(Directory.GetParent(current)?.FullName, current);
+            string current = tabs[screen.SelectedTab].Current;
+            if (Directory.GetParent(current) is { } up) Open(up.FullName, current);
         }
 
         async Task Pick(string file)
@@ -284,24 +328,25 @@ static class ControllerDialogs
 
         async Task UseFolder()
         {
-            if (current == null || !Directory.Exists(current)) { await Dialogs.Message(dialog, "The folder no longer exists."); return; }
+            string current = tabs[screen.SelectedTab].Current;
+            if (!Directory.Exists(current)) { await Dialogs.Message(dialog, "The folder no longer exists."); return; }
             answer = current;
             dialog.Close();
         }
 
         async Task TypePath()
         {
-            var typed = await Text(dialog, folder ? "Type a folder's path" : "Type a folder's or a file's path", current ?? "");
+            var typed = await Text(dialog, folder ? "Type a folder's path" : "Type a folder's or a file's path", tabs[screen.SelectedTab].Current);
             if (string.IsNullOrWhiteSpace(typed)) return;
             typed = typed.Trim().Trim('"');
             if (!folder && File.Exists(typed)) { await Pick(typed); return; }
             if (!Directory.Exists(typed)) { await Dialogs.Message(dialog, "There's no folder at " + typed + "."); return; }
-            Show(typed, null);
+            Open(typed, null);
         }
 
         async Task NewFolder()
         {
-            if (current == null) return;
+            string current = tabs[screen.SelectedTab].Current;
             var name = await Text(dialog, "New folder name", "");
             if (name == null) return;
             if (string.IsNullOrWhiteSpace(name) || name is "." or ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
@@ -310,11 +355,25 @@ static class ControllerDialogs
             try
             {
                 string made = Directory.CreateDirectory(Path.Combine(current, name)).FullName;
-                Show(current, made);
+                Open(current, made);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
             { await Dialogs.Message(dialog, "Couldn't create the folder: " + e.Message); }
         }
+    }
+
+    static bool Unreadable(Exception e) =>
+        e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException;
+
+    // One drive's tab in the browser: the folder it shows now.
+    sealed class BrowserTab(string root, string name, string? label, string? about)
+    {
+        public string Root { get; } = root;
+        public string Name { get; } = name;
+        public string? Label { get; } = label;
+        public string? About { get; } = about;
+        public StackPanel Page { get; } = MenuScreen.NewPage();
+        public string Current { get; set; } = root;
     }
 
     static bool Same(string a, string b) => string.Equals(Path.TrimEndingDirectorySeparator(a), Path.TrimEndingDirectorySeparator(b),
@@ -336,11 +395,11 @@ static class ControllerDialogs
     static string Size(long bytes) => bytes >= 1L << 30 ? (bytes / (double)(1L << 30)).ToString("0.0", CultureInfo.CurrentCulture) + " GB"
         : bytes >= 1L << 20 ? (bytes >> 20) + " MB" : Math.Max(1, bytes >> 10) + " KB";
 
-    // The drives to offer: every ready one on Windows; elsewhere / and the mounts under /media, /run/media and /mnt (not
-    // /proc, /sys and the like).
-    static List<(string Root, string About)> Drives()
+    // The drives to offer, as the browser's tabs: every ready one on Windows ("C:"); elsewhere / and the mounts under /media,
+    // /run/media and /mnt (not /proc, /sys and the like). Label: the volume's name, if it has one; About: its size.
+    internal static List<(string Root, string Name, string? Label, string About)> Drives()
     {
-        var list = new List<(string, string)>();
+        var list = new List<(string, string, string?, string)>();
         foreach (var d in DriveInfo.GetDrives())
         {
             string root = d.RootDirectory.FullName;
@@ -349,8 +408,9 @@ static class ControllerDialogs
             try
             {
                 if (!d.IsReady) continue;
-                string label = d.VolumeLabel is { Length: > 0 } v && v != root ? v + ", " : "";
-                list.Add((root, label + Size(d.TotalSize)));
+                string? label = d.VolumeLabel is { Length: > 0 } v && v != root ? v : null;
+                string name = OperatingSystem.IsWindows() ? root.TrimEnd('\\') : root == "/" ? "/" : Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
+                list.Add((root, name, label, Size(d.TotalSize)));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }

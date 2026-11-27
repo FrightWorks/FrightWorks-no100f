@@ -816,6 +816,9 @@ sealed class MenuScreen : Panel
     public (string Label, Action Run)? ScreenExtra { get => screenExtra; set { screenExtra = value; Refresh(); } }
     (string Label, Action Run)? screenExtra;
     public string BackLabel { get; init; } = "Back";
+    public string PageLabel { get; init; } = "Page";  // what LB / RB change, in the prompt bar
+    // Another tab was opened (LB / RB, a click on it, or SelectTab): after its page is shown and a row selected.
+    public event Action<int>? TabChanged;
 
     internal static MenuScreen? Of(Control row) => row.FindAncestorOfType<MenuScreen>();
 
@@ -863,6 +866,7 @@ sealed class MenuScreen : Panel
         scroller.Offset = default;  // a new page starts at its top
         Select(null, focus: false);
         if (IsVisible) { UpdateLayout(); SelectFirst(); }
+        TabChanged?.Invoke(index);
     }
 
     // LB / RB: the previous or next tab, without wrapping (at either end nothing happens).
@@ -930,7 +934,7 @@ sealed class MenuScreen : Panel
         if (selected is { ExtraLabel: { } extra, IsEffectivelyEnabled: true }) items.Add(new(new[] { Prompts.Button.Extra }, extra, () => selected?.Extra()));
         else if (screenExtra is { } screen) items.Add(new(new[] { Prompts.Button.Extra }, screen.Label, screen.Run));
         items.Add(new(new[] { Prompts.Button.Back }, BackLabel, onClose));
-        if (pages.Count > 1) items.Add(new(new[] { Prompts.Button.Previous, Prompts.Button.Next }, "Page", null));
+        if (pages.Count > 1) items.Add(new(new[] { Prompts.Button.Previous, Prompts.Button.Next }, PageLabel, null));
         prompts.Items = items;
     }
 
