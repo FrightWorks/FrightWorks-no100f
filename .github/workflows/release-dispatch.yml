@@ -1,18 +1,29 @@
 name: Release dispatch
 
-# When a release is published, rebuild https://frightworks.dev (version label, download buttons, zip and tarball
-# links) and refresh the download stats right away, instead of waiting for their polling (up to about an hour).
+# When a release is published:
+# - rebuild https://frightworks.dev (version label, download buttons, zip and tarball links) and refresh the download
+#   stats right away, instead of waiting for their polling (up to about an hour);
+# - post it in #releases on the FrightWorks Discord, pinging the "Pings: Night of 100 Frights" role.
 # Releases are made by hand as drafts with every file uploaded first, so "published" fires once all assets exist.
+# Pre-releases don't go to Discord.
 #
 # Needs the repo secret RELEASE_DISPATCH_TOKEN: a fine-grained token, resource owner FrightWorks, repositories
 # FrightWorks-site and download-stats only, permission Actions: read and write (to start their workflows; it can't
 # push code). It expires; when it does this workflow warns and the sites fall back to polling.
+#
+# And the repo secret DISCORD_RELEASES_WEBHOOK: the URL of the "FrightWorks Releases" webhook in #releases (Edit
+# Channel > Integrations > Webhooks). Without it the Discord post is skipped with a warning.
 
 on:
   release:
     types: [published]
   # Run by hand from the Actions tab, e.g. after renewing the token.
   workflow_dispatch:
+    inputs:
+      discord:
+        description: Also post the latest release to Discord (for a post that failed)
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -33,3 +44,31 @@ jobs:
           gh workflow run deploy.yml --repo FrightWorks/FrightWorks-site --ref main || { echo "::error::Couldn't start FrightWorks-site deploy.yml"; fail=1; }
           gh workflow run stats.yml --repo FrightWorks/download-stats --ref main || { echo "::error::Couldn't start download-stats stats.yml"; fail=1; }
           exit $fail
+
+  discord:
+    if: ${{ (github.event_name == 'release' && !github.event.release.prerelease) || inputs.discord }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read  # gh release view, for runs by hand
+    steps:
+      - name: Post to #releases
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+          ROLE_ID: '1574230121521479703'  # Pings: Night of 100 Frights
+          TAG: ${{ github.event.release.tag_name }}
+          URL: ${{ github.event.release.html_url }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "::warning::DISCORD_RELEASES_WEBHOOK isn't set; the release wasn't posted to Discord."
+            exit 0
+          fi
+          if [ -z "$TAG" ]; then  # run by hand: the latest release
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            URL=$(gh release view --repo "$GITHUB_REPOSITORY" --json url --jq .url)
+          fi
+          content=$(printf '<@&%s> **Night of 100 Frights %s** is out! 🎉\nRelease notes and downloads: %s\n\nThe installed game and the Linux AppImage offer the update next time you open the launcher. Using the zip or the `.tar.gz`? Extract the new one over the old folder.' "$ROLE_ID" "$TAG" "$URL")
+          jq -n --arg c "$content" --arg r "$ROLE_ID" '{content: $c, allowed_mentions: {roles: [$r]}}' \
+            | curl -fsS -o /dev/null -H 'Content-Type: application/json' -d @- "$WEBHOOK?wait=true"
+          echo "Posted $TAG to #releases."
