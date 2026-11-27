@@ -1,15 +1,15 @@
 name: Release dispatch
 
 # When a release is published:
-# - rebuild https://frightworks.dev (version label, download buttons, zip and tarball links) and refresh the download
-#   stats right away, instead of waiting for their polling (up to about an hour);
+# - rebuild https://frightworks.dev (version label, download buttons, zip and tarball links) right away, instead of
+#   waiting for its 3-hourly rebuild. The download stats need nothing: the web server collects them every 5 minutes;
 # - post it in #releases on the FrightWorks Discord, pinging the "Pings: Night of 100 Frights" role.
 # Releases are made by hand as drafts with every file uploaded first, so "published" fires once all assets exist.
 # Pre-releases don't go to Discord.
 #
-# Needs the repo secret RELEASE_DISPATCH_TOKEN: a fine-grained token, resource owner FrightWorks, repositories
-# FrightWorks-site and download-stats only, permission Actions: read and write (to start their workflows; it can't
-# push code). It expires; when it does this workflow warns and the sites fall back to polling.
+# Needs the repo secret RELEASE_DISPATCH_TOKEN: a fine-grained token, resource owner FrightWorks, repository
+# FrightWorks-site (download-stats no longer needs it), permission Actions: read and write (to start its workflow;
+# it can't push code). It expires; when it does this workflow warns and the site waits for its 3-hourly rebuild.
 #
 # And the repo secret DISCORD_RELEASES_WEBHOOK: the URL of the "FrightWorks Releases" webhook in #releases (Edit
 # Channel > Integrations > Webhooks). Without it the Discord post is skipped with a warning.
@@ -32,18 +32,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Start the site build and the stats run
+      - name: Start the site build
         env:
           GH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::RELEASE_DISPATCH_TOKEN isn't set; frightworks.dev and the stats pick up the release by polling (up to about an hour)."
+            echo "::warning::RELEASE_DISPATCH_TOKEN isn't set; frightworks.dev picks up the release with its 3-hourly rebuild."
             exit 0
           fi
-          fail=0
-          gh workflow run deploy.yml --repo FrightWorks/FrightWorks-site --ref main || { echo "::error::Couldn't start FrightWorks-site deploy.yml"; fail=1; }
-          gh workflow run stats.yml --repo FrightWorks/download-stats --ref main || { echo "::error::Couldn't start download-stats stats.yml"; fail=1; }
-          exit $fail
+          gh workflow run deploy.yml --repo FrightWorks/FrightWorks-site --ref main || { echo "::error::Couldn't start FrightWorks-site deploy.yml"; exit 1; }
 
   discord:
     if: ${{ (github.event_name == 'release' && !github.event.release.prerelease) || inputs.discord }}
