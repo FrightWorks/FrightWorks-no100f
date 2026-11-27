@@ -106,6 +106,8 @@ sealed class MansionScene : Control
         public double Light = 1, LightTo = 1, Curtain, CurtainTo, Figure, FigureTo, FigureUntil;
         public double Seed;
         public bool Curtains, Flame, Lit = true;
+        // Where the group's one set of curtains hangs: across all its panes (see GroupGlass).
+        public (double Y, double Left, double Right, double SmoothLeft, double SmoothRight)[] Glass = Array.Empty<(double, double, double, double, double)>();
     }
     sealed record Win(string Id, Group Group, Rect Box)
     {
@@ -222,6 +224,25 @@ sealed class MansionScene : Control
                 Id = sg.GetProperty("id").GetString()!,
                 Points = sg.GetProperty("points").EnumerateArray().Select(p => new Point(p[0].GetDouble(), p[1].GetDouble())).ToArray(),
             });
+        foreach (var g in groups.Values) g.Glass = GroupGlass(windows.Where(w => w.Group == g).Select(w => w.Glass).ToList());
+    }
+
+    // One set of curtains for a group, hung across all its panes (the bay window's three): at each row, from the left
+    // edge of its leftmost pane to the right edge of its rightmost one. A pane shorter than the others counts at its
+    // nearest row, so the drapes keep the outer panes' slant all the way up. The frames between the panes hide the
+    // cloth behind them.
+    static (double Y, double Left, double Right, double SmoothLeft, double SmoothRight)[] GroupGlass(List<(double Y, double Left, double Right, double SmoothLeft, double SmoothRight)[]> panes)
+    {
+        panes = panes.Where(p => p.Length > 0).ToList();
+        if (panes.Count <= 1) return panes.FirstOrDefault() ?? Array.Empty<(double, double, double, double, double)>();
+        double top = panes.Min(p => p[0].Y), bottom = panes.Max(p => p[^1].Y);
+        var rows = new List<(double, double, double, double, double)>();
+        for (double y = top; y <= bottom; y += 2)
+        {
+            var at = panes.Select(p => p.MinBy(r => Math.Abs(r.Y - y))).ToList();
+            rows.Add((y, at.Min(r => r.Left), at.Max(r => r.Right), at.Min(r => r.SmoothLeft), at.Max(r => r.SmoothRight)));
+        }
+        return rows.ToArray();
     }
 
     // ----- Screenshots (--shots): a fixed, busy moment -----
@@ -754,6 +775,11 @@ sealed class MansionScene : Control
         }
 
         foreach (var w in windows) DrawWindow(g, w, t);
+        foreach (var gr in groups.Values)
+            if (gr.Curtains && gr.Curtain > 0.01) DrawCurtains(g, gr, gr.Curtain, GroupLight(gr, t));
+        foreach (var w in windows)
+            if (Figure(w) is { } figure && w.Group.Figure > 0.01 && w.Group.Curtains && w.Group.Curtain > 0.01)
+                DrawFaded(g, figure, FigureRect(w), w.Group.Figure * w.Group.Curtain * 0.5 * GroupLight(w.Group, t));  // its shadow on the curtain
 
         var houseRect = new Rect(new Point((int)o.X, (int)o.Y), house!.Size);
         DrawLayer(g, house, houseRect.Position);
@@ -811,16 +837,15 @@ sealed class MansionScene : Control
         g.FillRectangle(Skin.Brush(Dark), b);
         if (light > 0.01)
             g.FillRectangle(Skin.Vertical(Skin.WithAlpha(WarmTop, (int)(255 * light)), Skin.WithAlpha(WarmBottom, (int)(255 * light))), b);
-        var figure = w.Id == "parlor" ? DogArt : w.Id == "tower" ? GhostArt : null;
-        double fig = gr.Figure;
-        if (figure != null && fig > 0.01) DrawFaded(g, figure, Map(w.Box), fig);
-        double curtain = gr.Curtain;
-        if (gr.Curtains && curtain > 0.01)
-        {
-            DrawCurtains(g, w, curtain, light);
-            if (figure != null && fig > 0.01) DrawFaded(g, figure, Map(w.Box), fig * curtain * 0.5 * light);  // its shadow on the curtain
-        }
+        if (Figure(w) is { } figure && gr.Figure > 0.01) DrawFaded(g, figure, FigureRect(w), gr.Figure);
     }
+
+    // The silhouettes: the dog in the bay window's middle pane, the Mastermind in the tower.
+    static Bitmap? Figure(Win w) => w.Id == "parlor" ? DogArt : w.Id == "tower" ? GhostArt : null;
+
+    // Where a silhouette is drawn: its window's box, the dog moved left and down (art px) so it sits in the clear middle
+    // of the pane and the sill hides its base.
+    Rect FigureRect(Win w) => Map(w.Id == "parlor" ? w.Box.Translate(new Vector(-22, 28)) : w.Box);
 
     static void DrawFaded(DrawingContext g, Bitmap art, Rect dest, double alpha)
     {
@@ -831,9 +856,9 @@ sealed class MansionScene : Control
     // Two drapes of muted plum fabric hung inside the window's glass, row by row, so they follow its arch and the slant
     // of a bay pane. Drawn partly open they're gathered at a tie-back a little below the middle; closed they meet. The
     // window's light shows through the cloth a little, and the folds run down with the glass.
-    void DrawCurtains(DrawingContext g, Win w, double amount, double light)
+    void DrawCurtains(DrawingContext g, Group gr, double amount, double light)
     {
-        var glass = w.Glass;
+        var glass = gr.Glass;
         if (glass.Length < 2) return;
         double top = glass[0].Y, height = Math.Max(1, glass[^1].Y - top);
         Color cloth = Lerp(Color.Parse("#22102A"), Color.Parse("#6A2E4E"), light);
@@ -863,8 +888,10 @@ sealed class MansionScene : Control
             var outline = outer.Concat(Enumerable.Reverse(inner)).ToArray();
             using (g.PushOpacity(0.9))
                 g.DrawGeometry(Skin.Brush(cloth), null, Skin.Polygon(outline));
-            // Folds at set shares of the drape's width, each with a faint lit edge beside it.
-            foreach (var share in new[] { 0.3, 0.58, 0.82 })
+            // Folds across the drape, about one every 14 art px at its widest, each with a faint lit edge beside it.
+            double widest = glass.Max(r => (r.SmoothRight - r.SmoothLeft) / 2) * amount;
+            int count = Math.Max(3, (int)Math.Round(widest / 14));
+            foreach (var share in Enumerable.Range(0, count).Select(i => (i + 0.6) / (count + 0.2)))
             {
                 var line = outer.Select((p, i) => new Point(p.X + (inner[i].X - p.X) * share, p.Y)).ToArray();
                 if (Math.Abs(inner[^1].X - outer[^1].X) * share < 2) continue;
