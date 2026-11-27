@@ -745,6 +745,10 @@ sealed class MansionScene : Control
     {
         double w = Skin.TextGeometry(text, em, new Rect(0, 0, 4000, 1000)).Bounds.Width;
         if (w > box.Width * 0.92) em *= box.Width * 0.92 / w;
+        // Centred on the letters themselves, not the font's line box (which leaves room below for descenders, so
+        // capitals would sit high on the plank).
+        var ink = Skin.TextGeometry(text, em, box).Bounds;
+        using var centred = g.PushTransform(Matrix.CreateTranslation(box.Center.X - ink.Center.X, box.Center.Y - ink.Center.Y));
         Skin.Text(g, text, em, box, fill, outline, outlineWidth);
     }
 
