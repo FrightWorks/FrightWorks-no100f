@@ -74,6 +74,18 @@ inline const Level* FindLevel(uint32_t scene) {
     return nullptr;
 }
 
+// "1st Floor, Part 2": the level's place among its area's levels (the table's order is the game's). An area with one
+// level (Cellars) is just its name.
+inline std::string AreaPart(const Level& level) {
+    int part = 0, parts = 0;
+    for (const Level& other : kLevels) {
+        if (std::string(other.area) != level.area) continue;
+        ++parts;
+        if (&other == &level) part = parts;
+    }
+    return parts > 1 ? std::string(level.area) + ", Part " + std::to_string(part) : std::string(level.area);
+}
+
 // Game modes (no100f_game_state.h): 2 title screen and its menus, 4 load game, 6 the Mystery Machine (save) menu,
 // 7 pause, 11 in play.
 inline constexpr uint32_t kModeTitle = 2, kModeLoad = 4, kModeSave = 6, kModePause = 7, kModeInPlay = 11;
@@ -114,9 +126,11 @@ inline Status Describe(const Snapshot& s) {
     std::string what;
     if (const Level* level = FindLevel(s.scene)) {
         where = level->name;
-        what = level->area;
-    } else if (s.scene == SceneId("H001") || s.scene == SceneId("H002")) {
-        where = "Exploring Mystic Manor";
+        what = AreaPart(*level);
+    } else if (s.scene == SceneId("H001")) {
+        where = "At the Mystery Machine";
+    } else if (s.scene == SceneId("H002")) {
+        where = "In the playground";
     } else if (s.scene == SceneId("H003")) {
         where = "In the Monster Gallery";
     } else if (s.scene == SceneId("S006")) {
@@ -127,7 +141,7 @@ inline Status Describe(const Snapshot& s) {
     if (s.mode == kModePause) {
         what = what.empty() ? "Paused" : what + " (paused)";
     } else if (s.mode == kModeSave) {
-        what = "At the Mystery Machine";
+        what = "Saving the game";
     } else if (s.snacksKnown) {
         const std::string snacks = SnackText(s.snacks);
         what = what.empty() ? snacks : what + " | " + snacks;

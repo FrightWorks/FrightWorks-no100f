@@ -43,21 +43,27 @@ int main() {
         }
         Require(FindLevel(0) == nullptr && FindLevel(SceneId("H001")) == nullptr, "no level for 0 or the hub");
 
-        Expect(Describe(InPlay("E004")), "On Edge in the Hedge!", "Hedge Maze | 1,240 Scooby Snacks", "level in play");
-        Expect(Describe(InPlay("I004")), "Mind Your Manors!", "1st Floor | 1,240 Scooby Snacks", "i004 is level 20");
-        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In", "Cliffs & Caves (paused)",
+        Expect(Describe(InPlay("E004")), "On Edge in the Hedge!", "Hedge Maze, Part 1 | 1,240 Scooby Snacks",
+               "level in play");
+        Expect(Describe(InPlay("I001")), "Clamor in the Manor!", "1st Floor, Part 1 | 1,240 Scooby Snacks", "i001");
+        Expect(Describe(InPlay("I004")), "Mind Your Manors!", "1st Floor, Part 2 | 1,240 Scooby Snacks", "i004");
+        Expect(Describe(InPlay("E008")), "Chills & Spills on Haunted Hill!", "Hedge Maze, Part 3 | 1,240 Scooby Snacks",
+               "third level of an area");
+        Expect(Describe(InPlay("B002")), "Who's Yella' in the Cellar?", "Cellars | 1,240 Scooby Snacks",
+               "an area with one level has no part");
+        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In", "Cliffs & Caves, Part 2 (paused)",
                "paused");
-        Expect(Describe(InPlay("G001", kModeSave)), "A Tight Spot for a Grave Plot!", "At the Mystery Machine",
-               "save menu");
-        Expect(Describe(InPlay("H001")), "Exploring Mystic Manor", "1,240 Scooby Snacks", "hub");
-        Expect(Describe(InPlay("H002", kModePause)), "Exploring Mystic Manor", "Paused", "hub paused");
+        Expect(Describe(InPlay("G001", kModeSave)), "A Tight Spot for a Grave Plot!", "Saving the game", "save menu");
+        Expect(Describe(InPlay("H001")), "At the Mystery Machine", "1,240 Scooby Snacks", "hub");
+        Expect(Describe(InPlay("H002")), "In the playground", "1,240 Scooby Snacks", "playground");
+        Expect(Describe(InPlay("H002", kModePause)), "In the playground", "Paused", "playground paused");
         Expect(Describe(InPlay("H003")), "In the Monster Gallery", "1,240 Scooby Snacks", "gallery");
         Expect(Describe(InPlay("S006")), "Watching the ending", "", "ending");
         Expect(Describe(InPlay("ZZZZ")), "", "", "unknown scene");
 
         Snapshot noSnacks = InPlay("F001");
         noSnacks.snacksKnown = false;
-        Expect(Describe(noSnacks), "Shock on the Dock!", "Fishing Village", "snacks unreadable");
+        Expect(Describe(noSnacks), "Shock on the Dock!", "Fishing Village, Part 1", "snacks unreadable");
 
         Snapshot menu = InPlay("H001", kModeTitle);
         Expect(Describe(menu), "In the main menu", "", "title");
