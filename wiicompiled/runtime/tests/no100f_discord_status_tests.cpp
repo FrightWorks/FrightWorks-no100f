@@ -43,15 +43,15 @@ int main() {
         }
         Require(FindLevel(0) == nullptr && FindLevel(SceneId("H001")) == nullptr, "no level for 0 or the hub");
 
-        Expect(Describe(InPlay("E004")), "On Edge in the Hedge!", "Hedge Maze, Part 1 | 1,240 Scooby Snacks",
+        Expect(Describe(InPlay("E004")), "On Edge in the Hedge!", "Part 1 | 1,240 Scooby Snacks",
                "level in play");
-        Expect(Describe(InPlay("I001")), "Clamor in the Manor!", "1st Floor, Part 1 | 1,240 Scooby Snacks", "i001");
-        Expect(Describe(InPlay("I004")), "Mind Your Manors!", "1st Floor, Part 2 | 1,240 Scooby Snacks", "i004");
-        Expect(Describe(InPlay("E008")), "Chills & Spills on Haunted Hill!", "Hedge Maze, Part 3 | 1,240 Scooby Snacks",
+        Expect(Describe(InPlay("I001")), "Clamor in the Manor!", "Part 1 | 1,240 Scooby Snacks", "i001");
+        Expect(Describe(InPlay("I004")), "Mind Your Manors!", "Part 2 | 1,240 Scooby Snacks", "i004");
+        Expect(Describe(InPlay("E008")), "Chills & Spills on Haunted Hill!", "Part 3 | 1,240 Scooby Snacks",
                "third level of an area");
-        Expect(Describe(InPlay("B002")), "Who's Yella' in the Cellar?", "Cellars | 1,240 Scooby Snacks",
+        Expect(Describe(InPlay("B002")), "Who's Yella' in the Cellar?", "1,240 Scooby Snacks",
                "an area with one level has no part");
-        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In", "Cliffs & Caves, Part 2 (paused)",
+        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In", "Part 2 (paused)",
                "paused");
         Expect(Describe(InPlay("G001", kModeSave)), "A Tight Spot for a Grave Plot!", "Saving the game", "save menu");
         Expect(Describe(InPlay("H001")), "At the Mystery Machine", "1,240 Scooby Snacks", "hub");
@@ -63,7 +63,7 @@ int main() {
 
         Snapshot noSnacks = InPlay("F001");
         noSnacks.snacksKnown = false;
-        Expect(Describe(noSnacks), "Shock on the Dock!", "Fishing Village, Part 1", "snacks unreadable");
+        Expect(Describe(noSnacks), "Shock on the Dock!", "Part 1", "snacks unreadable");
 
         Snapshot menu = InPlay("H001", kModeTitle);
         Expect(Describe(menu), "In the main menu", "", "title");

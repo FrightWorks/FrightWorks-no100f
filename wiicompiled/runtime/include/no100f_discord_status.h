@@ -27,7 +27,7 @@ constexpr uint32_t SceneId(const char (&name)[5]) {
 struct Level {
     uint32_t scenes[4];
     const char* name;
-    const char* area;
+    const char* area;  // the game's grouping, only to number the parts (not shown)
 };
 
 // The level table in main.dol (tools/debug/game/levels.md, from tools/debug/game/levels.py), less level 1 (the hub
@@ -74,8 +74,8 @@ inline const Level* FindLevel(uint32_t scene) {
     return nullptr;
 }
 
-// "1st Floor, Part 2": the level's place among its area's levels (the table's order is the game's). An area with one
-// level (Cellars) is just its name.
+// "Part 2": the level's place among its area's levels (the table's order is the game's). Empty for an area with one
+// level (Cellars).
 inline std::string AreaPart(const Level& level) {
     int part = 0, parts = 0;
     for (const Level& other : kLevels) {
@@ -83,7 +83,7 @@ inline std::string AreaPart(const Level& level) {
         ++parts;
         if (&other == &level) part = parts;
     }
-    return parts > 1 ? std::string(level.area) + ", Part " + std::to_string(part) : std::string(level.area);
+    return parts > 1 ? "Part " + std::to_string(part) : std::string{};
 }
 
 // Game modes (no100f_game_state.h): 2 title screen and its menus, 4 load game, 6 the Mystery Machine (save) menu,
