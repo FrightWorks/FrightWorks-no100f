@@ -21,9 +21,10 @@ instead of the movies' 640x448, and falls back to the movie for any it doesn't h
 ## Textures (Xbox)
 
 The GameCube compresses most textures (blocky CMPR, 1- or 3-bit transparency). The Xbox kept the same textures (a few
-at twice the size) without that, with full 8-bit transparency. They load after the HD pack: with HD textures on, they
-fill the textures the HD pack doesn't cover; with HD textures off, they replace every texture they can. Textures that
-are smaller or shaped differently on the Xbox are left out.
+at twice the size) without that, with full 8-bit transparency. They are a texture pack, **Xbox textures** in
+**Extras > Textures**: it starts at the bottom of the list, so the other packs win where they have a texture and the Xbox
+ones fill the rest, and you can move it or switch it off there. With HD textures off they are the only replacements.
+Textures that are smaller or shaped differently on the Xbox are left out.
 
 ## Sound (Xbox)
 
@@ -33,5 +34,5 @@ from the Xbox copy instead. 32 sounds that are a different recording on the Xbox
 
 ## Your disc data stays yours
 
-Everything copied comes from your own disc and stays on your PC (`UserData\ps2\cutscenes`, `UserData\xbox\textures`,
+Everything copied comes from your own disc and stays on your PC (`UserData\ps2\cutscenes`, `UserData\texture_packs\<NN>-xbox`,
 `UserData\xbox\audio`). FrightWorks never ships or shares it, and the PS2 and Xbox versions themselves can't be played.

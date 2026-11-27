@@ -53,6 +53,15 @@ static class LauncherControllerTests
         top.Y >= -1 && top.Y + c.Bounds.Height <= menu.Scroller.Bounds.Height + 1;
     static void Wait(Func<bool> done) { for (int i = 0; i < 200 && !done(); i++) { Pump(); Thread.Sleep(10); } Pump(); }
     static PlankButton Button(Window w, string name) => w.GetVisualDescendants().OfType<PlankButton>().First(b => b.Text == name);
+    // The file browser: its menu, its folder and file rows (they carry their path), and picking a row with the pad.
+    static MenuScreen Screen(Window w) => w.GetVisualDescendants().OfType<MenuScreen>().First();
+    static List<MenuRow> Entries(Window w) => Screen(w).Rows.Where(r => r.Tag is string).ToList();
+    static void Choose(MainWindow owner, Window window, string label)
+    {
+        var screen = Screen(window);
+        screen.Select(screen.Rows.First(r => r.Label == label)); Pump();
+        Press(owner, LauncherButtons.Confirm);
+    }
     static void Click(MainWindow owner, Window window, string name)
     {
         Button(window, name).Focus(NavigationMethod.Directional);
@@ -251,6 +260,18 @@ static class LauncherControllerTests
         var rows = settings.Rows.ToList();
         Check(settings.SelectedTab == 0 && settings.Selected == rows[0] && rows[0].IsFocused, "Settings did not open on Display's first row.");
         Shot(w, "Display-focus");
+        // Settings > Display > Launcher window: applies at once and is saved; F11 switches fullscreen and back.
+        var windowRow = settings.Rows.OfType<ChoiceRow>().Single(r => r.Label == "Launcher window");
+        windowRow.SelectedIndex = 1; Pump();
+        Check(w.WindowState == WindowState.Maximized && new GameConfig(config).Get("launcher", "window") == "maximized", "Launcher window Maximized didn't apply or save: " + w.WindowState + " / " + new GameConfig(config).Get("launcher", "window"));
+        windowRow.SelectedIndex = 2; Pump();
+        Check(w.WindowState == WindowState.FullScreen && w.SavedWindowState() == WindowState.FullScreen, "Launcher window Borderless fullscreen didn't apply or save.");
+        w.SetLauncherWindow("\"windowed\""); Pump();
+        Check(w.WindowState == WindowState.Normal && windowRow.SelectedIndex == 0, "Going back to a window didn't show on the row.");
+        { var c1 = new GameConfig(config); c1.Remove("launcher", "window"); c1.Save(); }
+        Check(w.SavedWindowState() == WindowState.FullScreen, "With no [launcher] window the launcher isn't borderless fullscreen.");
+        { var c0 = new GameConfig(config); c0.Remove("launcher", "window"); c0.Save(); }
+        settings.Select(rows[0]); Pump();
         // Up / down pick a row and stop at the ends (as F10's).
         Press(w, LauncherButtons.Up);
         Check(settings.Selected == rows[0], "Up on the first row left it.");
@@ -402,7 +423,9 @@ static class LauncherControllerTests
         Check(modsBoard.Selected?.Label == "ModB", "Up after a switch did not go back to the previous mod.");
         // A mouse click on a mod's switch: it switches, and the selection follows to that mod.
         var clicked = Mod("ModA");
-        var at = clicked.TranslatePoint(new Point(clicked.Bounds.Width - 40, clicked.Bounds.Height / 2), w)!.Value;
+        // The middle of its value (On / Off between the arrows) flips it.
+        double valueMiddle = clicked.Bounds.Width - 14 - Math.Clamp(clicked.Bounds.Width * 0.46, 170, 360) / 2;
+        var at = clicked.TranslatePoint(new Point(valueMiddle, clicked.Bounds.Height / 2), w)!.Value;
         w.MouseMove(at); w.MouseDown(at, MouseButton.Left); w.MouseUp(at, MouseButton.Left);
         Wait(() => File.Exists(Path.Combine(paths.Mods, "ModA", "disabled")) && modsBoard.Selected?.IsAttachedToVisualTree() == true);
         Check(File.Exists(Path.Combine(paths.Mods, "ModA", "disabled")) && modsBoard.Selected?.Label == "ModA", "A mouse click on a mod didn't switch it and select it.");
@@ -411,16 +434,86 @@ static class LauncherControllerTests
         File.WriteAllText(Path.Combine(zips, "a.zip"), "x"); File.WriteAllText(Path.Combine(zips, "b.ISO"), "x"); File.WriteAllText(Path.Combine(zips, "c.txt"), "x");
         var zipPick = ControllerDialogs.PickPath(w, "Synthetic zip browser", zips, false, viaController: true, extensions: new[] { ".zip" }, typeName: "Mod zip");
         Pump(); var zipModal = w.navigation.Modal!;
-        Check(Find<ControllerList>(zipModal).ItemCount == 2, "Zip browser did not list only .zip files and folders.");
+        Check(Entries(zipModal).Count == 2, "Zip browser did not list only .zip files and folders.");
         Press(w, LauncherButtons.Back); Finish(zipPick);
         // The real row: pressed by the pad it opens the themed browser, not the OS picker.
         modsBoard.Select(modsBoard.Rows.OfType<ActionRow>().Single(r => r.Label == "Add a mod (zip)")); Pump();
         Press(w, LauncherButtons.Confirm);
-        Check(w.navigation.Modal is { } zipDialog && zipDialog.GetVisualDescendants().OfType<ControllerList>().Any(), "Add a mod (zip) with the pad did not open the themed browser.");
+        Check(w.navigation.Modal is { } zipDialog && zipDialog.GetVisualDescendants().OfType<MenuScreen>().Any(), "Add a mod (zip) with the pad did not open the themed browser.");
         Press(w, LauncherButtons.Back); Pump();
         Check(w.navigation.Modal == null && modsBoard.IsVisible, "Backing out of the mod browser left a dialog open or closed Mods.");
         Press(w, LauncherButtons.Back);
         Check(w.OpenMenu == null, "Back did not close Mods.");
+
+        // ----- Extras > Textures: every folder in texture_packs in the game's order with a switch each; A picks a pack up
+        // and moves it (the folders are renumbered), B puts it back; X removes a downloaded pack, never the player's own -----
+        string packsDir = TexturePacks.Dir(paths.UserData);
+        foreach (var f in new[] { "40-menu", "50-scoobyhd", "MyPack" })
+        {
+            Directory.CreateDirectory(Path.Combine(packsDir, f));
+            File.WriteAllText(Path.Combine(packsDir, f, "t.png"), "synthetic");
+        }
+        string Folders() => string.Join(",", TexturePacks.List(paths.UserData).Select(i => i.Folder));
+        var tex = w.boards["extras"];
+        tex.SelectTab(1);
+        w.ShowBoard("extras"); Pump();
+        List<OrderRow> PackRows() => tex.Rows.OfType<OrderRow>().ToList();
+        string Labels() => string.Join(",", PackRows().Select(r => r.Label));
+        OrderRow? Picked() => tex.Selected as OrderRow;
+        Check(Labels() == "Menu pack,Scooby-HD,MyPack", "The packs are not listed in the game's order: " + Labels());
+        Check(!tex.Rows.OfType<ActionRow>().Any(r => r.Label is "Menu pack" or "Scooby-HD"), "A downloaded pack is still offered for download.");
+        Check(Picked() == PackRows()[0], "Textures did not open on the first pack.");
+        Shot(w, "Textures-focus");
+        Press(w, LauncherButtons.Left);
+        Wait(() => Picked()?.IsAttachedToVisualTree() == true);
+        Check(File.Exists(Path.Combine(packsDir, "40-menu", "disabled")) && Picked() is { Label: "Menu pack", IsChecked: false },
+              "Left did not switch the pack off (or lost the selection).");
+        Press(w, LauncherButtons.Right);
+        Wait(() => Picked()?.IsAttachedToVisualTree() == true);
+        Check(!File.Exists(Path.Combine(packsDir, "40-menu", "disabled")) && Picked() is { IsChecked: true }, "Right did not switch the pack on.");
+        // Picked up, carried down, put back with B: nothing renamed, and nothing else reacts while it is carried.
+        Press(w, LauncherButtons.Confirm);
+        Check(Picked() is { Carrying: true }, "A did not pick the pack up.");
+        Press(w, LauncherButtons.Down);
+        Check(Labels() == "Scooby-HD,Menu pack,MyPack" && Picked()?.Label == "Menu pack", "Down did not carry the pack: " + Labels());
+        Shot(w, "Textures-carrying");
+        Press(w, LauncherButtons.Next);
+        Press(w, LauncherButtons.Right);
+        Check(tex.SelectedTab == 1 && Picked() is { Carrying: true, IsChecked: true }, "RB or Right acted on a carried pack.");
+        Press(w, LauncherButtons.Back);
+        Check(Picked() is { Carrying: false } && Labels() == "Menu pack,Scooby-HD,MyPack" && Folders() == "40-menu,50-scoobyhd,MyPack" && w.OpenMenu == tex,
+              "B did not put the pack back where it was (or closed the menu): " + Labels() + " / " + Folders());
+        // Carried to the bottom and put down: the folders get the new order's numbers, the selection stays on the pack.
+        Press(w, LauncherButtons.Confirm); Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Down);
+        Press(w, LauncherButtons.Confirm);
+        Wait(() => Folders() == "10-scoobyhd,20-MyPack,30-menu" && Picked()?.IsAttachedToVisualTree() == true);
+        Check(Folders() == "10-scoobyhd,20-MyPack,30-menu", "Putting the pack down didn't renumber the folders: " + Folders());
+        Check(Labels() == "Scooby-HD,MyPack,Menu pack" && Picked()?.Label == "Menu pack" && Picked()!.IsFocused, "The list or selection after a move is wrong: " + Labels());
+        // X: only a downloaded pack offers Remove; No keeps it, Yes deletes it and offers the download again.
+        tex.Select(PackRows().Single(r => r.Label == "MyPack")); Pump();
+        Check(Picked()!.ExtraLabel == null, "A pack the player added offers Remove.");
+        Press(w, LauncherButtons.Extra);
+        Check(w.navigation.Modal == null && Directory.Exists(Path.Combine(packsDir, "20-MyPack")), "X on the player's own pack did something.");
+        tex.Select(PackRows().Single(r => r.Label == "Scooby-HD")); Pump();
+        Press(w, LauncherButtons.Extra);
+        Check(w.navigation.Modal != null, "X on a downloaded pack did not ask first.");
+        Press(w, LauncherButtons.Back);
+        Wait(() => w.navigation.Modal == null);
+        Check(Directory.Exists(Path.Combine(packsDir, "10-scoobyhd")), "Answering No removed the pack.");
+        Press(w, LauncherButtons.Extra);
+        Click(w, w.navigation.Modal!, "Yes");
+        Wait(() => !Directory.Exists(Path.Combine(packsDir, "10-scoobyhd")) && tex.Rows.OfType<ActionRow>().Any(r => r.Label == "Scooby-HD"));
+        Check(!Directory.Exists(Path.Combine(packsDir, "10-scoobyhd")) && Labels() == "MyPack,Menu pack", "Yes did not remove the pack: " + Labels());
+        Check(tex.Rows.OfType<ActionRow>().Any(r => r.Label == "Scooby-HD" && r.Value == "604 MB"), "A removed pack isn't offered for download again.");
+        // A folder put there by hand shows up when Extras opens again.
+        Press(w, LauncherButtons.Back);
+        Directory.CreateDirectory(Path.Combine(packsDir, "Another"));
+        tex.SelectTab(1);
+        w.ShowBoard("extras"); Pump();
+        Check(Labels() == "MyPack,Menu pack,Another", "A pack folder added by hand didn't appear: " + Labels());
+        tex.SelectTab(0);
+        Press(w, LauncherButtons.Back);
+        Directory.Delete(packsDir, true);
 
         var question = Dialogs.YesNo(w, "Synthetic safe-focus question.");
         var modal = w.navigation.Modal!;
@@ -538,37 +631,74 @@ static class LauncherControllerTests
         Directory.CreateDirectory(Path.Combine(browser, "Child"));
         File.WriteAllText(Path.Combine(browser, "disc.ISO"), "synthetic non-game bytes");
         File.WriteAllText(Path.Combine(browser, "notes.txt"), "synthetic");
+        // The browser is a full-window menu: a row per folder and file, A opens or chooses, X goes up a folder, B cancels.
         var file = ControllerDialogs.PickPath(w, "Synthetic file browser", browser, false, viaController: true);
         modal = w.navigation.Modal!; Pump();
-        var list = Find<ControllerList>(modal);
-        Check(list.ItemCount == 2, "Disc filter did not include folders/uppercase ISO and exclude other files.");
+        Check(string.Join(",", Entries(modal).Select(r => r.Label)) == "Child,disc.ISO", "Disc filter did not include folders/uppercase ISO and exclude other files.");
+        Check(Screen(modal).Selected?.Label == "Child", "The browser did not open on the first folder.");
+        Check(Math.Abs(modal.Bounds.Width - w.Bounds.Width) < 1 && Math.Abs(modal.Bounds.Height - w.Bounds.Height) < 1, "The browser does not fill the launcher's window.");
         Shot(modal, "File-browser");
-        // No tabs in a dialog: the bumpers still move to the next control (how its toolbar is reached).
-        Press(w, LauncherButtons.Next);
-        Check(modal.FocusManager?.GetFocusedElement() is PlankButton, "RB in a dialog without tabs did not move to the next control.");
-        list.Focus(NavigationMethod.Directional); Pump();
-        Press(w, LauncherButtons.Down); Press(w, LauncherButtons.Confirm); Finish(file);
+        Press(w, LauncherButtons.Extra);
+        Check(Screen(modal).Selected?.Label == "browser" && Entries(modal).Any(r => r.Label == "browser"), "X did not go up a folder onto the one it came from.");
+        Press(w, LauncherButtons.Confirm);
+        Check(Screen(modal).Selected?.Label == "Child", "A on a folder did not open it.");
+        Choose(w, modal, "Show all files");
+        Check(string.Join(",", Entries(modal).Select(r => r.Label)) == "Child,disc.ISO,notes.txt" && Screen(modal).Selected?.Label == "Show all files",
+              "Show all files did not list every file (or lost the selection).");
+        Press(w, LauncherButtons.Left);
+        Check(Entries(modal).Count == 2, "Switching Show all files off did not filter again.");
+        // Every drive is a tab; the browser opened on the fixture's drive, and another drive's tab starts at its root (no Up
+        // a folder, X does nothing there). Back on the first tab, its folder is kept. Home jumps to its drive's tab.
+        var browserScreen = Screen(modal);
+        Check(browserScreen.TabCount == Math.Max(1, ControllerDialogs.Drives().Count), "The browser's tabs aren't one per drive.");
+        if (browserScreen.TabCount > 1)
+        {
+            int firstTab = browserScreen.SelectedTab;
+            bool forward = firstTab + 1 < browserScreen.TabCount;
+            Press(w, forward ? LauncherButtons.Next : LauncherButtons.Previous);
+            Check(browserScreen.SelectedTab != firstTab && !browserScreen.Rows.Any(r => r.Label == "Up a folder") &&
+                  Entries(modal).All(r => Path.GetDirectoryName((string)r.Tag!) == Path.GetPathRoot((string)r.Tag!)),
+                  "Another drive's tab did not start at its root.");
+            Shot(modal, "File-browser-drive");
+            int driveTab = browserScreen.SelectedTab;
+            Press(w, LauncherButtons.Extra);
+            Check(browserScreen.SelectedTab == driveTab && w.navigation.Modal == modal, "X at a drive's root did something.");
+            Press(w, forward ? LauncherButtons.Previous : LauncherButtons.Next);
+            Check(browserScreen.SelectedTab == firstTab && string.Join(",", Entries(modal).Select(r => r.Label)) == "Child,disc.ISO",
+                  "Going back to the first drive's tab lost its folder.");
+        }
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Choose(w, modal, "Home");
+        Check(Entries(modal).All(r => Path.GetDirectoryName((string)r.Tag!) == home), "Home did not open the home folder.");
+        Choose(w, modal, "Type a path");
+        var typing = w.navigation.Modal!;
+        Check(typing != modal, "Type a path did not open the keyboard.");
+        typing.GetVisualDescendants().OfType<ControllerTextBox>().First().Text = browser;
+        Click(w, typing, "Apply");
+        Wait(() => w.navigation.Modal == modal);
+        Check(Screen(modal).Selected?.Label == "Child", "A typed path did not open that folder.");
+        Choose(w, modal, "disc.ISO"); Finish(file);
         Check(file.Result == Path.Combine(browser, "disc.ISO"), "Managed file browser returned wrong path.");
         var folder = ControllerDialogs.PickPath(w, "Synthetic folder browser", browser, true, viaController: true);
         modal = w.navigation.Modal!; Pump();
         Press(w, LauncherButtons.Confirm);
-        Click(w, modal, "Use this folder"); Finish(folder);
+        Choose(w, modal, "Use this folder"); Finish(folder);
         Check(folder.Result == Path.Combine(browser, "Child"), "Managed folder browser did not descend/select.");
         file = ControllerDialogs.PickPath(w, "Synthetic cancelled browser", browser, false, viaController: true);
         Pump(); Press(w, LauncherButtons.Back); Finish(file);
         Check(file.Result == null && File.ReadAllText(config).Contains("unknown = 42"), "Cancelled browser changed settings.");
         folder = ControllerDialogs.PickPath(w, "Synthetic folder creation", browser, true, viaController: true); Pump();
         modal = w.navigation.Modal!;
-        Click(w, modal, "New folder");
+        Choose(w, modal, "New folder");
         var keyboard = w.navigation.Modal!;
         Click(w, keyboard, "1"); Click(w, keyboard, "Apply");
-        Check(Directory.Exists(Path.Combine(browser, "1")), "Controller folder creation failed.");
+        Wait(() => w.navigation.Modal == modal && Screen(modal).Selected?.Label == "1");
+        Check(Directory.Exists(Path.Combine(browser, "1")) && Screen(modal).Selected?.Label == "1", "Controller folder creation failed (or didn't select it).");
         Press(w, LauncherButtons.Back); Finish(folder);
         Check(folder.Result == null, "Cancelling the folder picker applied its path.");
         file = ControllerDialogs.PickPath(w, "Synthetic unreadable file", browser, false, viaController: true); Pump();
         modal = w.navigation.Modal!;
-        list = Find<ControllerList>(modal);
-        list.SelectedIndex = list.ItemCount - 1;
+        Screen(modal).Select(Entries(modal).Last()); Pump();
         File.Delete(Path.Combine(browser, "disc.ISO"));
         Press(w, LauncherButtons.Confirm);
         Check(w.navigation.Modal != modal && w.navigation.Modal != null, "Deleted selected file was not reported explicitly.");
@@ -633,7 +763,8 @@ static class LauncherControllerTests
             var exited = typeof(MainWindow).GetMethod("GameExited", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
             Finish((Task)exited.Invoke(w, new object[] { quick })!);
         }
-        Check(w.WindowState == WindowState.Normal, "Launcher stayed minimized after a clean game exit.");
+        Check(w.WindowState == w.SavedWindowState() && w.WindowState != WindowState.Minimized,
+              "Launcher didn't come back in its saved window mode after a clean game exit: " + w.WindowState);
         w.Close(); Pump(); Fault.Owner = null;
     }
 }

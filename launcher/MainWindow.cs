@@ -79,6 +79,8 @@ sealed class MainWindow : Window
         MinHeight = Math.Min(680, area.Height);
         Background = Brush(BoardBottom);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        // The saved mode, borderless fullscreen by default; not in the tests' windows or --shots, which need their size.
+        if (shotDir == null && enableServices) WindowState = SavedWindowState();
 
         scene = new MansionScene(enableServices && shotDir == null && MansionScene.AnimationsEnabled(), shotDir == null ? Environment.TickCount : 1);
         scene.SignClicked += id => OnSign(id).Watch();
@@ -106,6 +108,13 @@ sealed class MainWindow : Window
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape && boards.Values.Any(b => b.IsVisible)) { CloseBoards(); e.Handled = true; }
+            // F11 switches borderless fullscreen, as in the game; back to a window, or maximized if it was before.
+            else if (e.Key == Key.F11)
+            {
+                if (WindowState == WindowState.FullScreen) SetLauncherWindow(beforeFullScreen == WindowState.Maximized ? "\"maximized\"" : "\"windowed\"");
+                else SetLauncherWindow("\"fullscreen\"");
+                e.Handled = true;
+            }
         };
         // Connected controllers: shown on Settings > Controls; an Xbox pad asks for the layout once.
         padTimer.Tick += (_, _) => RefreshGamepads().Watch();
@@ -232,6 +241,7 @@ sealed class MainWindow : Window
     internal void ShowBoard(string id)
     {
         RefreshDisc();
+        if (id == "extras") refreshPacks?.Invoke();  // packs added or removed by hand in the folder meanwhile
         foreach (var (key, b) in boards) b.IsVisible = key == id;
         mainPrompts.IsVisible = false;
         scene.ActiveSign = id;
@@ -298,6 +308,39 @@ sealed class MainWindow : Window
 
     // Config values as the game reads them: numbers by value (F10 writes 8 or 0.75, a hand-edited file may say 8.0 or
     // 2.250), the rest as text without the quotes.
+    // ----- The launcher's own window: [launcher] window = "windowed", "maximized" or "fullscreen" (borderless, the default:
+    // the game's default too, so Play goes from one fullscreen to the other) -----
+    static readonly (string text, string raw)[] LauncherWindowModes =
+        { ("Window", "\"windowed\""), ("Maximized", "\"maximized\""), ("Borderless fullscreen", "\"fullscreen\"") };
+    ChoiceRow? launcherWindowRow;
+    bool showingLauncherWindow;  // the row is being set to match the window, not by the player
+    WindowState beforeFullScreen = WindowState.Normal;
+
+    static int LauncherWindowIndex(string? raw) =>
+        Array.FindIndex(LauncherWindowModes, m => raw != null && SameValue(m.raw, raw)) is var i and >= 0 ? i : 2;  // unset or unknown: fullscreen
+
+    static WindowState ToWindowState(int index) => index switch { 1 => WindowState.Maximized, 2 => WindowState.FullScreen, _ => WindowState.Normal };
+
+    internal WindowState SavedWindowState() => ToWindowState(LauncherWindowIndex(new GameConfig(configPath).Get("launcher", "window")));
+
+    // Applies a mode at once, saves it and shows it on Settings > Display.
+    internal void SetLauncherWindow(string raw)
+    {
+        int index = LauncherWindowIndex(raw);
+        var state = ToWindowState(index);
+        if (state == WindowState.FullScreen && WindowState != WindowState.FullScreen) beforeFullScreen = WindowState;
+        WindowState = state;
+        var c = new GameConfig(configPath);
+        c.Set("launcher", "window", LauncherWindowModes[index].raw);
+        c.Save();
+        if (launcherWindowRow != null && launcherWindowRow.SelectedIndex != index)
+        {
+            showingLauncherWindow = true;
+            try { launcherWindowRow.SelectedIndex = index; }
+            finally { showingLauncherWindow = false; }
+        }
+    }
+
     static bool SameValue(string a, string b)
     {
         a = a.Trim('"');
@@ -428,6 +471,17 @@ sealed class MainWindow : Window
 
         card = Section(display, "Startup");
         Row("Intro movies", "Whether the intro movies play when the game starts.", "skip_intro", new[] { ("Play them", "false"), ("Skip them", "true") }, "false");
+
+        card = Section(display, "Launcher");
+        launcherWindowRow = new ChoiceRow("Launcher window", "How this launcher shows: borderless fullscreen (the default), in a window, or maximized. " +
+                                                             "Changes at once, and it opens that way next time. F11 also switches fullscreen.");
+        foreach (var mode in LauncherWindowModes) launcherWindowRow.Items.Add(mode.text);
+        launcherWindowRow.SelectedIndex = LauncherWindowIndex(cfg.Get("launcher", "window"));
+        launcherWindowRow.SelectedIndexChanged += (_, _) =>
+        {
+            if (!showingLauncherWindow && launcherWindowRow.SelectedIndex >= 0) SetLauncherWindow(LauncherWindowModes[launcherWindowRow.SelectedIndex].raw);
+        };
+        card.Children.Add(launcherWindowRow);
         display.Children.Add(Indent(Footnote(SavedNote)));
 
         card = Section(graphics, "Picture");
@@ -651,7 +705,7 @@ sealed class MainWindow : Window
         RefreshPs2();
 
         // Textures
-        BuildTexturePacks(textures);
+        BuildTexturePacks(board, textures);
 
         // Game
         card = Section(game, "Holidays");
@@ -1023,64 +1077,127 @@ sealed class MainWindow : Window
         if (error != null) await Dialogs.Message(this, "Downloading ffmpeg failed: " + error);
     }
 
-    // ----- HD texture packs (TexturePacks.cs): opt-in downloads, one at a time -----
+    // ----- Texture packs (TexturePacks.cs): every folder in texture_packs in the game's order (the first wins), each with a
+    // switch, movable to change the order; below them the catalogue's packs not downloaded yet. One download at a time. -----
     CancellationTokenSource? packCancel;
-    readonly List<Action> packRefresh = new();
+    TexturePacks.Pack? packDownloading;
+    string packProgress = "";
+    ActionRow? packDownloadRow;
+    readonly ThemedBar packBar = Bar();
+    Action? refreshPacks;
 
-    void BuildTexturePacks(StackPanel page)
+    void BuildTexturePacks(MenuScreen board, StackPanel page)
     {
-        foreach (var pack in TexturePacks.All)
-            Section(page, pack.Name, "By " + pack.Credit + ".").Children.Add(PackBlock(pack));
-        page.Children.Add(Indent(Footnote("Fans made these from the game's own textures, so they're a separate download. " +
-                                          "Your texture_replacements folder and mods win over them; Settings > HD textures turns them off. " +
-                                          "Changes apply at the next game start.")));
-    }
+        var list = new StackPanel();
+        var downloads = new StackPanel();
+        var packsDir = TexturePacks.Dir(userData);
+        packBar.Maximum = 1000;
+        Section(page, "Texture packs", "Higher in the list wins.");
+        page.Children.Add(list);
+        Section(page, "Downloads");
+        page.Children.Add(downloads);
+        Section(page, "Your own packs");
+        page.Children.Add(new ActionRow("Open the texture packs folder", () => OpenFolder(packsDir).Watch(), "Open",
+            "Put a pack's folder in here (its PNG or DDS textures anywhere inside it) and it joins the list above. " + packsDir));
+        page.Children.Add(new ActionRow("Refresh", () => Fill(), "Refresh", "Looks at the texture packs folder again."));
+        page.Children.Add(Indent(Footnote("Your texture_replacements folder and mods win over every pack. Settings > HD textures turns them " +
+                                          "all off except the Xbox textures. To keep this order the launcher numbers the pack folders (10-, 20-, " +
+                                          "...). Changes apply at the next game start.")));
 
-    Control PackBlock(TexturePacks.Pack pack)
-    {
-        var status = Indent(Status());
-        bool filling = false;
-        var use = new ToggleRow("Use this pack", pack.About);
-        ActionRow download = null!, remove = null!, cancel = null!;
-        var bar = Bar();
-        bar.Maximum = 1000;
+        string Describe(TexturePacks.Installed pack, bool on) =>
+            (pack.Known != null ? $"{pack.Known.About} By {pack.Known.Credit}."
+             : XboxTextures.IsPack(pack.Folder) ? "The Xbox version's textures, taken from your own Xbox disc (Extras > Discs): the GameCube's textures " +
+                                                  "without its lossy compression. With Settings > HD textures off, the game uses only these. " +
+                                                  "Extras > Discs removes them."
+             : $"Added by you: the folder {pack.Folder} in the texture packs folder. To remove it, delete that folder.") +
+            "\n\n" + (on ? "On: the game uses it." : "Off: the game leaves it out.") +
+            "\n\nA (or drag it) to move it up or down the list.";
 
-        void Refresh()
+        // Rebuilt after every change; the selection stays on the same pack (by name: a moved pack gets a new folder name, a
+        // downloaded one moves from the downloads to the list).
+        void Fill()
         {
-            bool installed = TexturePacks.Installed(userData, pack), on = TexturePacks.Enabled(userData, pack);
-            bool mine = packCancel != null && cancel.IsVisible, busy = packCancel != null;
-            filling = true;
-            use.IsChecked = on;
-            filling = false;
-            use.IsVisible = installed && !mine;
-            remove.IsVisible = installed && !mine;
-            download.IsVisible = !installed && !mine;
-            download.IsEnabled = !busy;
-            if (mine) return;
-            status.Text = !installed ? "Not downloaded." : on ? "Downloaded: the game uses it." : "Downloaded, switched off.";
-            status.Foreground = Brush(installed && on ? Good : CreamDim);
+            string? keep = board.Selected is { Parent: { } parent } kept && (parent == list || parent == downloads) ? kept.Label : null;
+            if (!GameRunning() && XboxTextures.MoveToPacks(userData)) XboxPackLast();  // from their old folder
+            list.Children.Clear();
+            downloads.Children.Clear();
+            packDownloadRow = null;
+            var installed = TexturePacks.List(userData);
+            if (installed.Count == 0)
+                list.Children.Add(Indent(Hint("No texture packs yet. Download one below, or put a pack's folder in the texture packs folder.")));
+            foreach (var pack in installed)
+            {
+                var row = new OrderRow(pack.Folder, pack.Name, Describe(pack, pack.Enabled)) { IsChecked = pack.Enabled };
+                row.IsCheckedChanged += (_, _) =>
+                {
+                    try { TexturePacks.SetEnabled(userData, pack.Folder, row.IsChecked); }
+                    catch (Exception e) { Dialogs.Message(this, $"Switching {pack.Name} failed: {e.Message}").Watch(); }
+                    Fill();
+                };
+                row.Moved += (_, _) => SaveOrder().Watch();
+                if (pack.Known is { } known) row.SetExtra("Remove", () => RemovePack(known).Watch());
+                list.Children.Add(row);
+            }
+            var missing = TexturePacks.All.Where(p => installed.All(i => i.Known != p)).ToList();
+            if (missing.Count == 0) downloads.Children.Add(Indent(Hint("Every pack listed here is downloaded.")));
+            foreach (var pack in missing)
+            {
+                bool mine = packDownloading == pack;
+                var row = new ActionRow(pack.Name, () => { if (packDownloading == pack) packCancel?.Cancel(); else Download(pack).Watch(); },
+                                        mine ? "Cancel" : "Download", $"{pack.About} By {pack.Credit}.")
+                {
+                    Value = mine ? packProgress : $"{pack.ApproxBytes >> 20} MB",
+                    IsEnabled = mine || packCancel == null,
+                };
+                downloads.Children.Add(row);
+                if (mine)
+                {
+                    packDownloadRow = row;
+                    downloads.Children.Add(packBar);
+                }
+            }
+            if (keep == null || !board.IsVisible) return;
+            var again = list.Children.Concat(downloads.Children).OfType<MenuRow>().FirstOrDefault(r => r.Label == keep);
+            Dispatcher.UIThread.Post(() => { if (again != null) board.Select(again); else board.SelectFirst(); }, DispatcherPriority.Loaded);
         }
 
-        async Task Download()
+        async Task SaveOrder()
+        {
+            var order = list.Children.OfType<OrderRow>().Select(r => r.Key).ToList();
+            if (GameRunning()) await Dialogs.Message(this, "Close the game first: it reads the texture packs while it runs.");
+            else
+                try { TexturePacks.Reorder(userData, order); }
+                catch (Exception e) { await Dialogs.Message(this, $"The packs couldn't be put in that order: {e.Message}"); }
+            Fill();
+        }
+
+        async Task RemovePack(TexturePacks.Pack pack)
+        {
+            if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the texture packs while it runs."); return; }
+            if (!await Dialogs.YesNo(this, $"Remove {pack.Name}? It can be downloaded again any time.")) return;
+            try { TexturePacks.Remove(userData, pack); }
+            catch (Exception e) { await Dialogs.Message(this, $"Removing {pack.Name} failed: {e.Message}"); }
+            Fill();
+        }
+
+        async Task Download(TexturePacks.Pack pack)
         {
             if (packCancel != null) return;
             packCancel = new CancellationTokenSource();
-            cancel.IsVisible = true;
-            bar.IsVisible = true;
-            bar.Value = 0;
-            status.Foreground = Brush(CreamDim);
-            status.Text = $"Downloading {pack.Name}...";
-            foreach (var r in packRefresh) r();
+            packDownloading = pack;
+            packProgress = "Starting";
+            packBar.Value = 0;
+            packBar.IsVisible = true;
+            Fill();
             var token = packCancel.Token;
             var report = new Progress<(long done, long total)>(p =>
             {
                 if (token.IsCancellationRequested) return;
-                bar.Value = p.total > 0 ? (int)(p.done * 1000 / p.total) : 0;
-                status.Text = p.total > 0 && p.done >= p.total ? $"Unpacking {pack.Name}..."
-                    : p.total > 0 ? $"Downloading {pack.Name}: {p.done >> 20} of {p.total >> 20} MB" : $"Downloading {pack.Name}: {p.done >> 20} MB";
+                packBar.Value = p.total > 0 ? (int)(p.done * 1000 / p.total) : 0;
+                packProgress = p.total > 0 && p.done >= p.total ? "Unpacking" : p.total > 0 ? $"{p.done >> 20} of {p.total >> 20} MB" : $"{p.done >> 20} MB";
+                if (packDownloadRow != null) packDownloadRow.Value = packProgress;
             });
             string? error = null;
-            bool cancelled = false;
             try
             {
                 await TexturePacks.Download(userData, pack, report, token);
@@ -1088,44 +1205,22 @@ sealed class MainWindow : Window
                 var c = new GameConfig(configPath);
                 if (c.Get("video", "texture_replacements") == "false") { c.Set("video", "texture_replacements", "true"); c.Save(); }
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { cancelled = true; }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             catch (Exception e) { error = e.Message; }
             finally
             {
                 packCancel.Dispose();
                 packCancel = null;
-                cancel.IsVisible = false;
-                bar.IsVisible = false;
+                packDownloading = null;
+                packBar.IsVisible = false;
             }
             if (!IsVisible) return;  // the launcher closed
-            foreach (var r in packRefresh) r();
-            if (cancelled) status.Text = "Download cancelled.";
+            Fill();
             if (error != null) await Dialogs.Message(this, $"Downloading {pack.Name} failed: {error}");
         }
 
-        download = new ActionRow($"Download (about {pack.ApproxBytes >> 20} MB)", () => Download().Watch(), "Download", pack.About);
-        remove = new ActionRow("Remove the pack", () => RemovePack().Watch(), "Remove", "Deletes the downloaded pack. It can be downloaded again any time.");
-        cancel = new ActionRow("Cancel the download", () => packCancel?.Cancel(), "Cancel") { IsVisible = false };
-
-        async Task RemovePack()
-        {
-            if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the pack while it runs."); return; }
-            if (!await Dialogs.YesNo(this, $"Remove {pack.Name}? It can be downloaded again any time.")) return;
-            try { TexturePacks.Remove(userData, pack); }
-            catch (Exception e) { await Dialogs.Message(this, $"Removing {pack.Name} failed: {e.Message}"); }
-            Refresh();
-        }
-
-        use.IsCheckedChanged += (_, _) =>
-        {
-            if (filling) return;
-            try { TexturePacks.SetEnabled(userData, pack, use.IsChecked == true); }
-            catch (Exception) { }
-            Refresh();
-        };
-        packRefresh.Add(Refresh);
-        Refresh();
-        return new StackPanel { Children = { status, use, download, remove, cancel, bar } };
+        refreshPacks = Fill;
+        Fill();
     }
 
     // ----- The disc and starting the game -----
@@ -1233,11 +1328,14 @@ sealed class MainWindow : Window
                     ps2Bar.Value = Math.Min(p.done, ps2Bar.Maximum);
                     ps2Status.Text = p.name.Length > 0 ? $"Taking the Xbox textures {p.done + 1}/{p.total}: {p.name}" : "Copying";
                 });
+                bool hadXbox = TexturePacks.List(userData).Any(i => XboxTextures.IsPack(i.Folder));
                 await Task.Run(() =>
                 {
                     using var image = Ps2Cutscenes.OpenImage(file);
                     XboxTextures.Copy(image, disc, userData, (d, t, n) => ((IProgress<(int, int, string)>)textureReport).Report((d, t, n)));
                 });
+                if (!hadXbox) XboxPackLast();
+                refreshPacks?.Invoke();
                 var soundReport = new Progress<(int done, int total, string name)>(p =>
                 {
                     ps2Bar.Maximum = Math.Max(1, p.total);
@@ -1259,6 +1357,16 @@ sealed class MainWindow : Window
             await Dialogs.Message(this, $"Copied {result.Copied} of the {result.Expected} cutscenes on that disc: the others play as movies.");
     }
 
+    // The Xbox textures go last among the packs when they arrive (copied from a disc, or moved from their old folder), where
+    // the game used to load them; after that the player's order stands.
+    void XboxPackLast()
+    {
+        var packs = TexturePacks.List(userData);
+        if (packs.FirstOrDefault(i => XboxTextures.IsPack(i.Folder)) is not { } xbox || packs[^1] == xbox) return;
+        try { TexturePacks.Reorder(userData, packs.Where(i => i != xbox).Select(i => i.Folder).Append(xbox.Folder).ToList()); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
     async Task RemovePs2Cutscenes()
     {
         if (GameRunning()) { await Dialogs.Message(this, "Close the game first: it reads the cutscenes while it runs."); return; }
@@ -1266,6 +1374,7 @@ sealed class MainWindow : Window
         XboxTextures.Remove(userData);
         XboxAudio.Remove(userData);
         RefreshPs2();
+        refreshPacks?.Invoke();
     }
 
     async Task Launch()
@@ -1310,7 +1419,7 @@ sealed class MainWindow : Window
         // Always back, after a clean quit too: the pad can't reach a minimized launcher (navigation ignores it).
         if (IsVisible)
         {
-            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            if (WindowState == WindowState.Minimized) WindowState = SavedWindowState();
             Activate();
         }
         if (code == 0) return;

@@ -99,9 +99,10 @@ sealed class ControllerNavigation : IDisposable
         try
         {
             Prompts.UsedPad(owner.PadKind);
-            // An open menu (GameMenu.cs) has its own selection and handles every action itself, as F10 does. A pad Confirm
-            // marks Activating, so a file picker it opens is the controller-friendly one.
-            if (window == owner && owner.OpenMenu is { } menu)
+            // An open menu (GameMenu.cs) has its own selection and handles every action itself, as F10 does: the launcher's
+            // boards, or a dialog that is one menu (the file browser). A pad Confirm marks Activating, so a file picker it
+            // opens is the controller-friendly one.
+            if ((window == owner ? owner.OpenMenu : window.Content as MenuScreen) is { } menu)
             {
                 Activating = action == LauncherButtons.Confirm;
                 try { menu.Handle(action); }
@@ -109,6 +110,7 @@ sealed class ControllerNavigation : IDisposable
                 if (action == LauncherButtons.Back) Reset();
                 return;
             }
+            if (action == LauncherButtons.Extra) return;  // X is a menu row's second action; dialogs and the signs have none
             if (action == LauncherButtons.Back)
             {
                 var dropdown = Targets(window).OfType<ComboBox>().FirstOrDefault(c => c.IsDropDownOpen);

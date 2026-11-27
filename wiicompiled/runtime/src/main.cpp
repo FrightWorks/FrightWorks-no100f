@@ -1655,17 +1655,29 @@ int RuntimeMain(int argc, char** argv) {
         // once during aurora_initialize, so both knobs only take effect on the next launch.
         // Dumps name each unmatched texture the way its replacement would have to be named,
         // which is only useful while the index is live - hence the conjunction.
-        // The player's Xbox textures (<UserData>/xbox/textures, written by the launcher from their own Xbox disc:
-        // launcher/XboxTextures.cs) are the GameCube's textures without its lossy formats. They come after every other
-        // folder, so the HD pack wins where it has a texture; with the HD pack off they are the only replacements.
+        // The player's Xbox textures (written by the launcher from their own Xbox disc: launcher/XboxTextures.cs) are the
+        // GameCube's textures without its lossy formats. They are a texture pack, <UserData>/texture_packs/<NN>-xbox, in
+        // the order the player gave the packs; with HD textures off they are the only replacements (Aurora knows the pack
+        // by its name). Before 2026-11-27 they were <UserData>/xbox/textures: still read there, after every other folder.
         const bool hdTextures = RuntimeConfigFile::TextureReplacements(true);
         std::error_code xboxError;
         const auto xboxTextures = applicationDataDirectory / "xbox" / "textures";
-        const bool haveXboxTextures = std::filesystem::is_directory(xboxTextures, xboxError);
-        const std::string auroraXboxTexturesPath = haveXboxTextures ? RuntimeConfigFile::PathToUtf8(xboxTextures) : std::string();
-        auroraConfig.allowTextureReplacements = hdTextures || haveXboxTextures;
+        const bool haveOldXboxTextures = std::filesystem::is_directory(xboxTextures, xboxError);
+        bool haveXboxPack = false;
+        for (const auto& entry : std::filesystem::directory_iterator(applicationDataDirectory / "texture_packs", xboxError)) {
+            const auto u8 = entry.path().filename().u8string();
+            std::string name(u8.begin(), u8.end());
+            name.erase(0, std::min(name.find_first_not_of('~'), name.size()));
+            const size_t dash = name.find('-');
+            if (dash != std::string::npos && dash > 0 && name.find_first_not_of("0123456789") == dash) name.erase(0, dash + 1);
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::error_code ec;
+            if (name == "xbox" && entry.is_directory(ec) && !std::filesystem::exists(entry.path() / "disabled", ec)) haveXboxPack = true;
+        }
+        const std::string auroraXboxTexturesPath = haveOldXboxTextures ? RuntimeConfigFile::PathToUtf8(xboxTextures) : std::string();
+        auroraConfig.allowTextureReplacements = hdTextures || haveOldXboxTextures || haveXboxPack;
         auroraConfig.allowTextureDumps = hdTextures && RuntimeConfigFile::TextureDumps(false);
-        auroraConfig.extraTexturePath = haveXboxTextures ? auroraXboxTexturesPath.c_str() : nullptr;
+        auroraConfig.extraTexturePath = haveOldXboxTextures ? auroraXboxTexturesPath.c_str() : nullptr;
         auroraConfig.extraTexturesOnly = !hdTextures;
         // The game's font sheets redrawn sharp as they load, HD textures on or off ([video] sharp_font).
         auroraConfig.sharpFont = RuntimeConfigFile::SharpFont(true);

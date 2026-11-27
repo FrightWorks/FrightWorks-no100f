@@ -48,7 +48,10 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   `Play\texture_replacements\ScoobyHD` is removed (links the debug kit made are left alone).
 - **HD texture packs** are an opt-in download in the launcher (**Extras > Textures**, `launcher\TexturePacks.cs`):
   it downloads the pack, checks its hash, unpacks it (RAR through Windows' `tar.exe`, bsdtar, 7-Zip or unrar) into
-  `UserData\texture_packs\<NN-name>` (Scooby-HD is `50-scoobyhd`, the menu pack `40-menu`) and sets `[video] texture_replacements = true`.
+  `UserData\texture_packs\<NN-name>` (Scooby-HD comes as `50-scoobyhd`, the menu pack `40-menu`, then placed above the
+  first catalogue pack that comes after it) and sets `[video] texture_replacements = true`. The Textures page lists every
+  folder there, the player's own too, and renumbers them (`10-`, `20-`, ...) when one is moved; a pack is known by the
+  name after its number.
   The game indexes `UserData\texture_replacements` and mods first, then the packs, lower folder name first (it wins);
   a `disabled` file in a pack's folder skips it, and the log names each pack it uses (`Texture pack: 50-scoobyhd`).
   The game reads the folders once at start; with developer tools on, **Reload texture packs** in the dev menu's Textures
@@ -83,7 +86,7 @@ powershell -ExecutionPolicy Bypass -File tools\build-no100f.ps1 -SkipTools -Skip
   `dist\.vpk`. The installer puts the game in `%LOCALAPPDATA%\FrightWorks` (`current\` = the program, replaced on
   every update; the whole folder goes on uninstall) with Start menu and desktop shortcuts; the game's own data goes to
   the installed layout above.
-  The launcher asks to update on start (Update now / Not now / Skip this version; **Extras** has the `[launcher] check_updates` toggle); the zip's launcher only links to the release page.
+  The launcher asks to update on start (Update now / Not now / Skip this version; **Extras** has the `[launcher] check_updates` toggle; `[launcher] window` = `"fullscreen"` (borderless, the default), `"windowed"` or `"maximized"` is Settings > Display > Launcher window, F11 in the launcher; the test windows and `--shots` keep their size); the zip's launcher only links to the release page.
   The update log of an installed copy is `%LOCALAPPDATA%\velopack\velopack_FrightWorks.log`.
 - **Testing an update without GitHub** (a local feed): pack two versions into one folder, install the first, point the
   launcher at the folder.

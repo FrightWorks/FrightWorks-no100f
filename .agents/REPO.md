@@ -103,7 +103,7 @@ The goal is a clean remaster, not matching Dolphin: Dolphin and the disc's data 
 - Saves or local builds.
 - The HD pack, or any picture made from the game's textures (no exceptions).
   Texture packs are an opt-in launcher download (maintainer, 2026-11-24): no build ships one, nothing is selected by default.
-  The launcher (`launcher/TexturePacks.cs`, Extras > Textures) puts a pack in `<UserData>/texture_packs/<NN-name>`; the game indexes those after the mods, lower folder name first (it wins), and skips one with a `disabled` file.
+  The launcher (`launcher/TexturePacks.cs`, Extras > Textures) puts a pack in `<UserData>/texture_packs/<NN-name>`; the game indexes every folder there after the mods, lower folder name first (it wins), and skips one with a `disabled` file. The Textures page lists them all (folders the player added too) with a switch each, and keeps the player's order in the names: moving one renumbers them `10-`, `20-`, ... (`TexturePacks.Reorder`, through temporary `~N-` names, undone if a rename fails). A catalogue pack is known by the name after its number; the launcher only ever deletes catalogue packs.
   A pack texture that needs fixing is fixed by the game as it loads (the Smuggler's Cove sign: `add_original_alpha` in `texture_replacement.cpp`).
   The pack files are on archive.org, uploaded by the maintainer; the Creeper frames and menu art are in the private menu pack repo (`Loneranger419/no100f-menu-pack`).
   `tools/debug/get-hd-pack.py` fetches ScoobyHD into `texture_pack/` for the debug kit.
@@ -396,7 +396,7 @@ To build old source there, set only the paths that differ with `git restore --so
   The installer's program folder is deleted on uninstall.
 - `[paths] saves_dir` overrides the saves folder.
 - The shipped HD pack and `button_icons` sit in `data\` beside the exe in both modes: Aurora's second texture root, after the user's own.
-  The player's Xbox textures (`<UserData>\xbox\textures`, `launcher/XboxTextures.cs`) come last (`extraTexturePath`), and alone with HD textures off.
+  The player's Xbox textures (`launcher/XboxTextures.cs`) are a texture pack, `<UserData>\texture_packs\<NN>-xbox`, in the player's order (a new copy goes last); Aurora knows it by its name (`is_xbox_pack`) and keeps only it with HD textures off. Before 2026-11-27 they were `<UserData>\xbox\textures`: the launcher moves that folder into the packs (last) when Extras > Textures fills, and the game still reads it there, after every folder (`extraTexturePath`).
 - The first installed start offers to import from a folder directly inside Documents whose `Config.toml` is this game's, or from old zip folders (also Extras > import; `launcher/DataImport.cs`, `DataPaths.cs`, `runtime_config.h`).
 - Old saves are converted by `old_save_convert.h`, called from `card_gc.cpp` before `CARDInit`, with a backup at `Saves\MemoryCard-old\<same path>.bak` (CTest `recomp_old_save_convert_tests`).
 - F2 also copies the shot to the clipboard; clicking an F2/F3 popup that names a file opens Explorer on it.

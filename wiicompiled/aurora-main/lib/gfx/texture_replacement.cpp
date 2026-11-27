@@ -139,6 +139,19 @@ bool is_relative_to(const std::filesystem::path& path, const std::filesystem::pa
   return true;
 }
 
+// The player's Xbox textures as a texture pack: a folder named xbox after the launcher's number (<NN>-xbox, also ~N-xbox
+// while it renames; launcher/XboxTextures.cs).
+bool is_xbox_pack(const std::filesystem::path& folder) noexcept {
+  const auto u8 = folder.filename().u8string();
+  const std::string name(u8.begin(), u8.end());
+  size_t at = name.find_first_not_of('~');
+  if (at == std::string::npos) return false;
+  size_t digits = at;
+  while (digits < name.size() && name[digits] >= '0' && name[digits] <= '9') ++digits;
+  if (digits > at && digits < name.size() && name[digits] == '-') at = digits + 1;
+  return iequals_ascii(std::string_view(name).substr(at), "xbox");
+}
+
 bool is_sidecar_mip(std::string_view stem) noexcept {
   constexpr std::string_view tag = "_mip";
   size_t i = stem.size();
@@ -691,8 +704,9 @@ void build_index(bool buttonIcons = true) noexcept {
   // Texture packs the launcher downloaded when the player chose them: <UserData>/texture_packs/<NN-name> (skipped with
   // a "disabled" file), after the mods so anything of the user's wins. The launcher's folder names start with a
   // priority, and the lower name wins (indexed first). Then the game's own texture_replacements: no build ships a pack
-  // there any more (2026-11-24), only the debug kit links one in. The extra folder (the player's Xbox textures) comes
-  // last, or alone with extraTexturesOnly.
+  // there any more (2026-11-24), only the debug kit links one in. The player's Xbox textures are a pack (<NN>-xbox) where
+  // the player put it; with extraTexturesOnly (HD textures off) that pack is the only folder kept. The extra folder (where
+  // the Xbox textures were before 2026-11-27) comes last.
   const auto extraPath = g_config.extraTexturePath != nullptr ? fs_path_from_string(g_config.extraTexturePath)
                                                                : std::filesystem::path{};
   std::vector<std::filesystem::path> roots{s_replacementRoot};
@@ -720,16 +734,22 @@ void build_index(bool buttonIcons = true) noexcept {
   }
   // Downloaded packs, the game's own folder and the extra folder are "built in": the sharp font wins over them.
   std::vector<bool> builtInRoot(roots.size(), false);
+  std::vector<bool> xboxRoot(roots.size(), false);
   for (size_t i = firstPack; i < roots.size(); ++i) builtInRoot[i] = true;
+  for (size_t i = firstPack; i < firstPack + packs.size(); ++i) xboxRoot[i] = is_xbox_pack(roots[i]);
   if (g_config.extraTexturesOnly) {
-    roots.clear();
-    builtInRoot.clear();
+    std::vector<std::filesystem::path> kept;
+    for (size_t i = 0; i < roots.size(); ++i) {
+      if (xboxRoot[i]) kept.push_back(roots[i]);
+    }
+    roots = std::move(kept);
+    builtInRoot.assign(roots.size(), true);
+    xboxRoot.assign(roots.size(), true);
   }
-  size_t extraRoot = SIZE_MAX;
   if (!extraPath.empty() && std::filesystem::is_directory(extraPath, ec)) {
-    extraRoot = roots.size();
     roots.push_back(extraPath);
     builtInRoot.push_back(true);
+    xboxRoot.push_back(true);
   }
   ec.clear();
   for (size_t rootIndex = 0; rootIndex < roots.size(); ++rootIndex) {
@@ -769,12 +789,12 @@ void build_index(bool buttonIcons = true) noexcept {
     }
 
     s_replacementIndex.try_emplace(*parsed,
-                                   ReplacementIndexEntry{.path = path, .builtIn = builtIn, .xbox = rootIndex == extraRoot});
+                                   ReplacementIndexEntry{.path = path, .builtIn = builtIn, .xbox = xboxRoot[rootIndex]});
   }
   }
 
   Log.info("Indexed {} texture replacements from {} folder(s) ({})", s_replacementIndex.size(), roots.size(),
-           g_config.extraTexturesOnly ? "the extra folder alone"
+           g_config.extraTexturesOnly ? "the Xbox textures alone"
                                       : "texture_replacements + mods + texture packs + the game's own + the extra folder");
   if (!g_config.extraTexturesOnly) {
     for (const auto& pack : packs) {

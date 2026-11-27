@@ -6,6 +6,7 @@ enum LauncherButtons
     None = 0, Up = 1, Down = 2, Left = 4, Right = 8,
     Confirm = 16, Back = 32, Previous = 64, Next = 128,
     ScrollUp = 256, ScrollDown = 512,
+    Extra = 1024,  // West (Xbox X): a row's second action, as F10's X
 }
 
 readonly record struct ControllerSample(uint Id, LauncherButtons Buttons, bool CoarseHorizontal = false);
@@ -63,6 +64,7 @@ sealed class ControllerInput
         LauncherButtons result = 0;
         if ((buttons & (1u << 0)) != 0) result |= LauncherButtons.Confirm;
         if ((buttons & (1u << 1)) != 0) result |= LauncherButtons.Back;
+        if ((buttons & (1u << 2)) != 0) result |= LauncherButtons.Extra;
         if ((buttons & (1u << 9)) != 0) result |= LauncherButtons.Previous;
         if ((buttons & (1u << 10)) != 0) result |= LauncherButtons.Next;
         if ((buttons & (1u << 11)) != 0 || y < -16000) result |= LauncherButtons.Up;
