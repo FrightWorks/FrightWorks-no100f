@@ -582,17 +582,27 @@ sealed class MansionScene : Control
     // The lighthouse's turning light: a cone from the lamp, its length cos(angle) of the longest (mirrored to the left
     // when it points away from the house), dimmer on the far side where the tower hides part of it; and a flare on the
     // lamp that grows when the light faces the viewer. Both are behind the house and the front fog.
+    static double SmoothStep(double from, double to, double x)
+    {
+        double k = Math.Clamp((x - from) / (to - from), 0, 1);
+        return k * k * (3 - 2 * k);
+    }
+
     void DrawLighthouse(DrawingContext g, double t)
     {
         double angle = t / BeamTurn * Math.Tau, c = Math.Cos(angle), sn = Math.Sin(angle);
         var lamp = new Point(Lamp.X * backK, backTop + Lamp.Y * backK);
-        if (beam != null && Math.Abs(c) * beam.Size.Width >= 6)
+        // The beam fades between bright (swinging towards us, sn > 0) and dim (away) over the side-on stretch, and fades
+        // out as it comes end-on, at the front and at the back, where it would otherwise shrink to a stub and vanish.
+        double side = SmoothStep(-0.45, 0.45, sn), reach = SmoothStep(0.03, 0.35, Math.Abs(c));
+        double beamOpacity = (0.4 + 0.35 * side) * reach;
+        if (beam != null && beamOpacity > 0.004)
         {
-            double len = Math.Abs(c) * beam.Size.Width, bh = beam.Size.Height;
+            double len = Math.Max(1, Math.Abs(c) * beam.Size.Width), bh = beam.Size.Height;
             var src = new Rect(0, 0, beam.PixelSize.Width, beam.PixelSize.Height);
             var dest = new Rect(lamp.X, lamp.Y - bh / 2, len, bh);
             var mirror = c < 0 ? new Matrix(-1, 0, 0, 1, 2 * lamp.X, 0) : Matrix.Identity;
-            using (g.PushOpacity(sn >= 0 ? 0.75 : 0.45))
+            using (g.PushOpacity(beamOpacity))
             using (g.PushTransform(mirror))
                 g.DrawImage(beam, src, dest);
         }
