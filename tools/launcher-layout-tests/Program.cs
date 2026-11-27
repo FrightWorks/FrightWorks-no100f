@@ -320,6 +320,17 @@ static class LauncherLayoutTests
         window.CloseBoards();
         Pump();
 
+        // On the main screen the pointer moves the selected sign too (one lit sign, as with the pad).
+        foreach (var sign in new[] { "settings", "extras" })
+        {
+            window.MouseMove(window.scene.TranslatePoint(window.scene.SignCenter(sign)!.Value, window)!.Value);
+            Pump();
+            Check(window.scene.FocusedSign == sign, $"Moving the pointer over the {sign} sign didn't select it");
+        }
+        window.MouseMove(new Point(1, 1));
+        Pump();
+        Check(window.scene.FocusedSign == "extras", "Moving the pointer off the signs changed the selection");
+
         var settings = window.boards["settings"];
 
         void Validate(string name, int tab = 0, string? pageName = null)
@@ -444,6 +455,16 @@ static class LauncherLayoutTests
         Press(Key.Up, PhysicalKey.ArrowUp);
         Press(Key.Up, PhysicalKey.ArrowUp);
         Check(settings.Selected == displayRows[0], "Up past the first row didn't stop there");
+        // The pointer moves the selection, as the pad does, and the keys go on from there.
+        var hovered = displayRows[2];
+        window.MouseMove(hovered.TranslatePoint(new Point(40, hovered.Bounds.Height / 2), window)!.Value);
+        Pump();
+        Check(settings.Selected == hovered && hovered.IsFocused, "Moving the pointer over a row didn't select it");
+        Press(Key.Up, PhysicalKey.ArrowUp);
+        Check(settings.Selected == displayRows[1], "Up after the pointer didn't go on from the row under it");
+        window.MouseMove(new Point(1, 1));
+        Pump();
+        Check(settings.Selected == displayRows[1], "Moving the pointer off the rows changed the selection");
         foreach (var (row, type) in new (MenuRow, AutomationControlType)[]
                  { (displayRows[0], AutomationControlType.ComboBox), (window.autoLayout, AutomationControlType.CheckBox),
                    (Descendants(window.boards["mods"]).OfType<ActionRow>().First(), AutomationControlType.Button) })

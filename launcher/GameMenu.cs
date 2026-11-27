@@ -242,6 +242,20 @@ abstract class MenuRow : Control
     // A click: by default it does what A does.
     protected virtual void Click(Point at) => Activate();
 
+    // The pointer moves the selection, as the pad does (only when it really moves: a list scrolled by the pad under a
+    // resting pointer keeps the pad's row). No scrolling here: the row is already under the pointer.
+    static Point lastPointer = new(double.NaN, double.NaN);
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        if (TopLevel.GetTopLevel(this) is not { } top) return;
+        var at = e.GetPosition(top);
+        if (at == lastPointer) return;
+        lastPointer = at;
+        if (!selected && Focusable && IsEffectivelyEnabled) MenuScreen.Of(this)?.Select(this, scroll: false);
+    }
+
     protected override void OnPointerEntered(PointerEventArgs e) { base.OnPointerEntered(e); InvalidateVisual(); }
     protected override void OnPointerExited(PointerEventArgs e) { base.OnPointerExited(e); InvalidateVisual(); }
 
@@ -647,7 +661,7 @@ sealed class MenuScreen : Panel
         Select(rows.FirstOrDefault(InView) ?? rows.FirstOrDefault());
     }
 
-    public void Select(MenuRow? row, bool focus = true)
+    public void Select(MenuRow? row, bool focus = true, bool scroll = true)
     {
         if (selected != row)
         {
@@ -658,7 +672,7 @@ sealed class MenuScreen : Panel
         if (row != null && focus)
         {
             row.Focus(NavigationMethod.Directional);
-            row.BringIntoView();
+            if (scroll) row.BringIntoView();
         }
         Refresh();
     }
