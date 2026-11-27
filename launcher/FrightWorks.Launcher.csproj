@@ -36,6 +36,7 @@
     <EmbeddedResource Include="art\mansion.json" LogicalName="FrightWorks.mansion.json" />
     <EmbeddedResource Include="art\dog.png" LogicalName="FrightWorks.dog.png" />
     <EmbeddedResource Include="art\ghost.png" LogicalName="FrightWorks.ghost.png" />
+    <EmbeddedResource Include="art\background.png" LogicalName="FrightWorks.background.png" />
     <EmbeddedResource Include="frightworks.ico" LogicalName="FrightWorks.frightworks.ico" />
     <AvaloniaResource Include="fonts\LuckiestGuy-Regular.ttf" />
   </ItemGroup>

@@ -14,10 +14,11 @@ using Avalonia.Threading;
 
 namespace FrightWorks;
 
-// The launcher's main screen: a stormy night sky with lightning, the mansion (launcher/art, made by
-// tools/launcher-art/make_launcher_art.py) whose windows light up, draw their curtains and show the odd silhouette,
-// and the five signs that are the menu. The windows are holes in mansion.png: their insides are drawn first, then the
-// house on top. The signs are drawn over the ones painted in the picture (mansion.json holds both outlines).
+// The launcher's main screen: a painted night coast (background.png) with stars, a moon, clouds and lightning, the
+// mansion (launcher/art, made by tools/launcher-art/make_mansion_v2.py) whose windows light up, draw their curtains
+// and show the odd silhouette, and the five signs that are the menu. The windows are holes in mansion.png: their
+// insides are drawn first, then the house on top. The signs are drawn over the ones painted in the picture
+// (mansion.json holds both outlines).
 sealed class MansionScene : Control
 {
     public event Action<string>? SignClicked;
@@ -29,7 +30,31 @@ sealed class MansionScene : Control
     public string Status => status;
 
     static readonly Bitmap? HouseArt = Skin.LoadBitmap("mansion.png"), DogArt = Skin.LoadBitmap("dog.png"),
-        GhostArt = Skin.LoadBitmap("ghost.png");
+        GhostArt = Skin.LoadBitmap("ghost.png"), BackArt = Skin.LoadBitmap("background.png");
+    const int BackW = 1671, BackH = 941;
+    // Open sky in background.png: stars only above this share of its height, and never on the lighthouse.
+    const double StarSky = 0.55;
+    static readonly Rect Lighthouse = new(95, 370, 100, 275);
+
+    // For each column of mansion.png, the first row that isn't transparent (ArtH where there is none): the roofline
+    // the title is fitted above.
+    static readonly int[] HouseTop = Roofline(HouseArt);
+
+    static int[] Roofline(Bitmap? art)
+    {
+        var top = Enumerable.Repeat(ArtH, ArtW).ToArray();
+        if (art == null || art.PixelSize.Width != top.Length || art.Format is not { BitsPerPixel: 32 }) return top;
+        int w = art.PixelSize.Width, h = art.PixelSize.Height, stride = w * 4;
+        var px = new byte[stride * h];
+        var pin = GCHandle.Alloc(px, GCHandleType.Pinned);
+        try { art.CopyPixels(new PixelRect(0, 0, w, h), pin.AddrOfPinnedObject(), px.Length, stride); }
+        catch (Exception) { return top; }
+        finally { pin.Free(); }
+        for (int x = 0; x < w; x++)
+            for (int y = 0; y < h; y++)
+                if (px[y * stride + x * 4 + 3] > 32) { top[x] = y; break; }  // alpha is the 4th byte in RGBA and BGRA
+        return top;
+    }
 
     readonly bool animate;
     readonly Random rnd;
@@ -61,7 +86,7 @@ sealed class MansionScene : Control
     readonly Dictionary<string, Group> groups = new();
     readonly List<Sign> signs = new();
     readonly List<Cloud> clouds = new();
-    static readonly HashSet<string> CurtainGroups = new() { "parlor", "parlor_side", "dormer", "right_arch", "right_tower", "tower" };
+    static readonly HashSet<string> CurtainGroups = new() { "parlor", "parlor_side", "right_arch", "right_tower", "tower" };
 
     double s = 1;
     Point o;
@@ -99,8 +124,8 @@ sealed class MansionScene : Control
             g.Curtains = CurtainGroups.Contains(id);
         }
         // A lived-in start: most rooms lit, a couple dark, some curtains half drawn.
-        foreach (var id in new[] { "gable", "right_tower" }) Set(id, light: 0);
-        Set("dormer", curtain: 0.55);
+        foreach (var id in new[] { "attic", "right_tower" }) Set(id, light: 0);
+        Set("parlor_side", curtain: 0.55);
         Set("right_arch", curtain: 1);
         nextStrike = 3 + rnd.NextDouble() * 5;
         nextEvent = 1.5;
@@ -166,9 +191,9 @@ sealed class MansionScene : Control
         foreach (var g in groups.Values) { g.Light = g.LightTo = 1; g.Curtain = g.CurtainTo = 0; g.Figure = g.FigureTo = 0; }
         Set("parlor", figure: 1);
         Set("tower", figure: 1);
-        Set("dormer", curtain: 0.55);
+        Set("parlor_side", curtain: 0.55);
         Set("right_arch", curtain: 1);
-        Set("gable", light: 0);
+        Set("attic", light: 0);
         shift = 40 - clock.Elapsed.TotalSeconds;
         if (lightning)
         {
@@ -277,7 +302,8 @@ sealed class MansionScene : Control
     Point Map(double x, double y) => new(o.X + x * s, o.Y + y * s);
     Rect Map(Rect r) => new(o.X + r.X * s, o.Y + r.Y * s, r.Width * s, r.Height * s);
 
-    // The house fills the height, sits at the bottom and leans right, leaving the sky on the left for the title.
+    // The house fills nine tenths of the height, sits at the bottom and leans right, leaving the sky on the left for
+    // the title and the coast with its lighthouse.
     public Rect HouseRect => new(o.X, o.Y, ArtW * s, ArtH * s);
     public double SignsLeft => signs.Count == 0 ? W * 0.5 : signs.Min(sg => sg.Points.Min(p => p.X)) * s + o.X;
 
@@ -285,7 +311,7 @@ sealed class MansionScene : Control
     public void Place(Size size)
     {
         double w = Math.Max(1, size.Width), h = Math.Max(1, size.Height);
-        s = Math.Min(w * 0.99 / ArtW, (h - 6) / ArtH);
+        s = Math.Min(w * 0.99 / ArtW, (h - 6) / ArtH) * 0.9;
         o = new Point(Math.Round((w - ArtW * s) * 0.82), Math.Round(h - ArtH * s));
     }
 
@@ -329,25 +355,33 @@ sealed class MansionScene : Control
     {
         sky?.Dispose();
         double w = Math.Max(1, W), h = Math.Max(1, H);
+        // The painted coast covers the window, anchored bottom left so the lighthouse stays at the left edge.
+        double k = Math.Max(w / BackW, h / BackH), backTop = h - BackH * k;
         sky = Layer(w, h, g =>
         {
             var all = new Rect(0, 0, w, h);
-            g.FillRectangle(new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-                GradientStops =
+            if (BackArt != null) g.DrawImage(BackArt, new Rect(0, backTop, BackW * k, BackH * k));
+            else
+                g.FillRectangle(new LinearGradientBrush
                 {
-                    new GradientStop(Color.Parse("#05030B"), 0), new GradientStop(Color.Parse("#140C28"), 0.45),
-                    new GradientStop(Color.Parse("#2A1A45"), 0.8), new GradientStop(Color.Parse("#331F4E"), 1),
-                },
-            }, all);
+                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                    GradientStops =
+                    {
+                        new GradientStop(Color.Parse("#05030B"), 0), new GradientStop(Color.Parse("#140C28"), 0.45),
+                        new GradientStop(Color.Parse("#2A1A45"), 0.8), new GradientStop(Color.Parse("#331F4E"), 1),
+                    },
+                }, all);
+            // Stars in the open sky only: above the sea and the clifftop, and not on the lighthouse.
             var stars = new Random(7);
+            double skyBottom = Math.Max(0, backTop + BackH * StarSky * k);
             for (int i = 0; i < 160; i++)
             {
-                double x = stars.NextDouble() * w, y = Math.Pow(stars.NextDouble(), 1.6) * h * 0.75;
+                double x = stars.NextDouble() * w, y = Math.Pow(stars.NextDouble(), 1.6) * skyBottom;
                 double d = stars.NextDouble() < 0.15 ? 2.2 : 1.3;
-                g.DrawEllipse(Skin.Brush(Skin.Argb(60 + stars.Next(150), 235, 230, 255)), null, new Rect(x, y, d, d));
+                int alpha = 60 + stars.Next(150);
+                if (Lighthouse.Contains(new Point(x / k, (y - backTop) / k))) continue;
+                g.DrawEllipse(Skin.Brush(Skin.Argb(alpha, 235, 230, 255)), null, new Rect(x, y, d, d));
             }
             // The moon, above the right tower.
             var m = Map(1300, 105);
@@ -361,12 +395,6 @@ sealed class MansionScene : Control
             g.DrawEllipse(crater, null, new Rect(m.X - mr * 0.45, m.Y - mr * 0.35, mr * 0.42, mr * 0.42));
             g.DrawEllipse(crater, null, new Rect(m.X + mr * 0.2, m.Y + mr * 0.15, mr * 0.3, mr * 0.3));
             g.DrawEllipse(crater, null, new Rect(m.X - mr * 0.1, m.Y + mr * 0.45, mr * 0.22, mr * 0.22));
-            // Rolling hills along the bottom, behind the house.
-            var pts = new List<Point> { new(0, h) };
-            for (int i = 0; i <= 12; i++)
-                pts.Add(new Point(w * i / 12, h * (0.86 + 0.04 * Math.Sin(i * 1.7 + 0.5))));
-            pts.Add(new Point(w, h));
-            g.DrawGeometry(Skin.Brush(Color.Parse("#0C0816")), null, Skin.Curve(pts, 0.4, filled: true));
         });
     }
 
@@ -395,21 +423,48 @@ sealed class MansionScene : Control
         }
     }
 
-    // The title, top left in the sky: fitted to the space left of the chimney.
+    // The title, top left in the sky: as big as fits (46 at most) left of where the roofline comes down past it.
+    const double TitleX = 18, TitleY = 12;
+
     void BuildTitle()
     {
         title?.Dispose();
-        double room = Math.Max(160, o.X + 318 * s - 22);
-        double em = 46;
-        double w = Skin.TextGeometry("FRIGHTWORKS", em, new Rect(0, 0, 4000, 400), Skin.Align.Near).Bounds.Width;
-        if (w > room) em *= room / w;
-        double width = (int)room + 30, height = (int)(em * 2.3) + 10;
+        double TextWidth(double size) =>
+            Skin.TextGeometry("FRIGHTWORKS", size, new Rect(0, 0, 4000, 400), Skin.Align.Near).Bounds.Width + 8;
+        double em = 46, room = TitleRoom(em);
+        if (TextWidth(em) > room)
+        {
+            // Smaller text is shorter, so the roofline lets it run further right: the largest size that fits.
+            double lo = 14, hi = em;
+            for (int i = 0; i < 12; i++)
+            {
+                double mid = (lo + hi) / 2;
+                if (TextWidth(mid) <= TitleRoom(mid)) lo = mid; else hi = mid;
+            }
+            em = lo;
+            room = TitleRoom(em);
+        }
+        double sub = Skin.TextGeometry("Night of 100 Frights", em * 0.52, new Rect(0, 0, 4000, 400), Skin.Align.Near).Bounds.Width;
+        double width = (int)Math.Max(sub, TextWidth(em)) + 30, height = (int)(em * 2.3) + 10;
         title = Layer(width, height, g =>
         {
             // Layout boxes far wider than the text, as the old GDI+ drawing used.
             Skin.Text(g, "FRIGHTWORKS", em, new Rect(6, 0, 4000, em * 1.25), Skin.Lime, Skin.Ink, Math.Max(3, em * 0.16), Skin.Align.Near);
             Skin.Text(g, "Night of 100 Frights", em * 0.52, new Rect(8, em * 1.12, 4000, em * 0.8), Skin.Cream, Skin.Ink, Math.Max(2, em * 0.11), Skin.Align.Near);
         });
+    }
+
+    // How wide the title can be at a size: from its left edge to the first column where the house rises to within a
+    // few pixels of the title's bottom (the subtitle ends at about twice the size below the top).
+    double TitleRoom(double em)
+    {
+        double bottom = TitleY + em * 2 + 6;
+        for (double x = TitleX; x < W; x++)
+        {
+            int ax = (int)((x - o.X) / s);
+            if (ax >= 0 && ax < ArtW && o.Y + HouseTop[ax] * s < bottom) return x - TitleX - 8;
+        }
+        return Math.Max(0, W - TitleX - 8);
     }
 
     // ----- Signs -----
@@ -433,65 +488,26 @@ sealed class MansionScene : Control
         sg.Hit = Skin.Polygon(SignPoints(sg, 1));
     }
 
+    // The signs are the planks painted in mansion.png: only the label is drawn, centred on the plank's outline, in a
+    // dark brown that reads on the weathered wood. Hover and focus add the glow around the outline (OnRender) and a
+    // slightly warmer label.
+    static readonly Color Label = Color.Parse("#3A2412"), LabelLit = Color.Parse("#4E2C10");
+
     (RenderTargetBitmap, Point) RenderSign(Sign sg, bool lit)
     {
-        var pts = SignPoints(sg, lit ? 1.045 : 1);
+        var pts = SignPoints(sg, 1);
         double minX = pts.Min(p => p.X), minY = pts.Min(p => p.Y), maxX = pts.Max(p => p.X), maxY = pts.Max(p => p.Y);
-        int pad = (int)Math.Ceiling(6 * s) + 2;
-        var at = new Point(Math.Floor(minX) - pad, Math.Floor(minY) - pad);
-        double bw = Math.Max(1, Math.Ceiling(maxX - minX) + pad * 2), bh = Math.Max(1, Math.Ceiling(maxY - minY) + pad * 2);
+        var at = new Point(Math.Floor(minX), Math.Floor(minY));
+        double bw = Math.Max(1, Math.Ceiling(maxX - minX) + 1), bh = Math.Max(1, Math.Ceiling(maxY - minY) + 1);
         var bitmap = Layer(bw, bh, g =>
         {
             using var moved = g.PushTransform(Matrix.CreateTranslation(-at.X, -at.Y));
             var box = new Rect(minX, minY, maxX - minX, maxY - minY);
             bool play = sg.Id == "play";
-            double u = s * (lit ? 1.045 : 1);  // picture pixels to client pixels
-
-            var shape = Skin.Polygon(pts);
-            Color top = play ? Color.Parse("#DDF063") : Color.Parse("#7B4CBA");
-            Color bottom = play ? Color.Parse("#A3BE33") : Color.Parse("#4B2884");
-            if (lit) { top = Skin.Light(top, play ? 0.35f : 0.3f); bottom = Skin.Light(bottom, 0.3f); }
-            g.DrawGeometry(Skin.Vertical(top, bottom), null, shape);
-
-            // Wood grain and a couple of knots, the same every time for a sign.
-            var r = new Random(sg.Id.Length * 31 + sg.Id[0]);
-            using (g.PushGeometryClip(shape))
-            {
-                var grain = new Pen(Skin.Brush(Skin.Argb(play ? 55 : 70, 20, 8, 30)), Math.Max(1, 2.2 * u));
-                for (int i = 0; i < 6; i++)
-                {
-                    double y = box.Top + box.Height * (i + 0.5) / 6 + (r.NextDouble() * 6 - 3) * u;
-                    var line = new Point[8];
-                    for (int k = 0; k < line.Length; k++)
-                        line[k] = new Point(box.Left + box.Width * k / (line.Length - 1), y + (r.NextDouble() * 5 - 2.5) * u);
-                    g.DrawGeometry(null, grain, Skin.Curve(line, 0.5, filled: false));
-                }
-                for (int k = 0; k < 2; k++)
-                {
-                    double kx = box.Left + box.Width * (0.25 + r.NextDouble() * 0.5), ky = box.Top + box.Height * (0.25 + r.NextDouble() * 0.5);
-                    g.DrawEllipse(null, grain, new Rect(kx, ky, 18 * u, 7 * u));
-                }
-                g.DrawLine(new Pen(Skin.Brush(Skin.Argb(80, 255, 255, 255)), 3 * u),
-                           new Point(box.Left + 14 * u, box.Top + 7 * u), new Point(box.Right - 14 * u, box.Top + 6 * u));
-            }
-            g.DrawGeometry(null, new Pen(Skin.Brush(Skin.Ink), 6.5 * u, lineJoin: PenLineJoin.Round), shape);
-            double n = 4.5 * u;
-            foreach (var (nx, ny) in new[] { (box.Left + 17 * u, box.Top + 18 * u), (box.Left + 17 * u, box.Bottom - 18 * u), (box.Right - 17 * u, box.Top + 18 * u), (box.Right - 17 * u, box.Bottom - 18 * u) })
-                Skin.Nail(g, nx, ny, n);
-
-            double cy = box.Top + box.Height / 2;
-            if (play)
-            {
-                DrawPaw(g, box.Left + box.Width * 0.13, cy, 30 * u, Skin.Ink);
-                DrawPaw(g, box.Right - box.Width * 0.13, cy, 30 * u, Skin.Ink);
-                FitText(g, SignText[sg.Id], 92 * u, new Rect(box.Left + box.Width * 0.24, box.Top, box.Width * 0.52, box.Height), Skin.Ink, default, 0);
-            }
-            else
-            {
-                DrawIcon(g, sg.Id, box.Left + box.Width * 0.2, cy, u);
-                FitText(g, SignText.GetValueOrDefault(sg.Id, sg.Id), 54 * u, new Rect(box.Left + box.Width * 0.3, box.Top, box.Width * 0.62, box.Height),
-                        Skin.Cream, Skin.Ink, 6 * u);
-            }
+            // The outline is the plank grown by 6 picture pixels: the label goes inside the plank itself.
+            var plank = box.Deflate(6 * s);
+            FitText(g, SignText.GetValueOrDefault(sg.Id, sg.Id), (play ? 84 : 44) * s, plank.Deflate(new Thickness(plank.Width * 0.12, 0)),
+                    lit ? LabelLit : Label, default, 0);
         });
         return (bitmap, at);
     }
@@ -501,98 +517,6 @@ sealed class MansionScene : Control
         double w = Skin.TextGeometry(text, em, new Rect(0, 0, 4000, 1000)).Bounds.Width;
         if (w > box.Width * 0.92) em *= box.Width * 0.92 / w;
         Skin.Text(g, text, em, box, fill, outline, outlineWidth);
-    }
-
-    static void DrawPaw(DrawingContext g, double cx, double cy, double size, Color color)
-    {
-        var b = Skin.Brush(color);
-        double u = size / 30;
-        g.DrawEllipse(b, null, new Rect(cx - 15 * u, cy - 2 * u, 30 * u, 24 * u));
-        foreach (var (dx, dy, w, h) in new[] { (-21.0, -14.0, 11.0, 14.0), (-9.0, -26.0, 12.0, 15.0), (5.0, -26.0, 12.0, 15.0), (17.0, -14.0, 11.0, 14.0) })
-            g.DrawEllipse(b, null, new Rect(cx + dx * u - 1, cy + dy * u, w * u, h * u));
-    }
-
-    // The outline goes first and the cream over it, so half of the outline shows, as on the painted signs.
-    static void Outlined(DrawingContext g, Geometry shape, Pen ink, IBrush cream)
-    {
-        g.DrawGeometry(null, ink, shape);
-        g.DrawGeometry(cream, null, shape);
-    }
-
-    static void DrawIcon(DrawingContext g, string id, double cx, double cy, double u)
-    {
-        var cream = Skin.Brush(Skin.Cream);
-        var ink = new Pen(Skin.Brush(Skin.Ink), 4 * u, lineJoin: PenLineJoin.Round);
-        switch (id)
-        {
-            case "settings":
-            {
-                const int teeth = 8;
-                var pts = new List<Point>();
-                for (int i = 0; i < teeth * 2; i++)
-                {
-                    double a0 = Math.PI * 2 * i / (teeth * 2) - 0.12, a1 = a0 + 0.24;
-                    double rad = (i % 2 == 0 ? 25 : 18) * u;
-                    pts.Add(new Point(cx + Math.Cos(a0) * rad, cy + Math.Sin(a0) * rad));
-                    pts.Add(new Point(cx + Math.Cos(a1) * rad, cy + Math.Sin(a1) * rad));
-                }
-                Outlined(g, new GeometryGroup
-                {
-                    FillRule = FillRule.EvenOdd,
-                    Children = { Skin.Polygon(pts), new EllipseGeometry(new Rect(cx - 8 * u, cy - 8 * u, 16 * u, 16 * u)) },
-                }, ink, cream);
-                break;
-            }
-            case "mods":
-            {
-                // A jigsaw piece: a square with a knob on top and on the right.
-                Outlined(g, new GeometryGroup
-                {
-                    FillRule = FillRule.NonZero,
-                    Children =
-                    {
-                        new RectangleGeometry(new Rect(cx - 20 * u, cy - 12 * u, 34 * u, 34 * u)),
-                        new EllipseGeometry(new Rect(cx - 11 * u, cy - 27 * u, 17 * u, 18 * u)),
-                        new EllipseGeometry(new Rect(cx + 9 * u, cy - 4 * u, 18 * u, 17 * u)),
-                    },
-                }, ink, cream);
-                break;
-            }
-            case "extras":
-            {
-                var thick = new Pen(Skin.Brush(Skin.Ink), 13 * u, lineCap: PenLineCap.Round);
-                var handle = new Pen(cream, 7 * u, lineCap: PenLineCap.Round);
-                g.DrawLine(thick, new Point(cx + 9 * u, cy + 9 * u), new Point(cx + 22 * u, cy + 22 * u));
-                g.DrawLine(handle, new Point(cx + 9 * u, cy + 9 * u), new Point(cx + 22 * u, cy + 22 * u));
-                Outlined(g, new GeometryGroup
-                {
-                    FillRule = FillRule.EvenOdd,
-                    Children =
-                    {
-                        new EllipseGeometry(new Rect(cx - 21 * u, cy - 21 * u, 34 * u, 34 * u)),
-                        new EllipseGeometry(new Rect(cx - 13 * u, cy - 13 * u, 18 * u, 18 * u)),
-                    },
-                }, ink, cream);
-                break;
-            }
-            case "exit":
-            {
-                // A door frame with the door swung open.
-                Outlined(g, new GeometryGroup
-                {
-                    FillRule = FillRule.EvenOdd,
-                    Children =
-                    {
-                        new RectangleGeometry(new Rect(cx - 15 * u, cy - 24 * u, 30 * u, 48 * u)),
-                        new RectangleGeometry(new Rect(cx - 10 * u, cy - 19 * u, 20 * u, 43 * u)),
-                    },
-                }, ink, cream);
-                Outlined(g, Skin.Polygon(new[] { new Point(cx - 10 * u, cy - 19 * u), new Point(cx + 4 * u, cy - 14 * u), new Point(cx + 4 * u, cy + 27 * u), new Point(cx - 10 * u, cy + 24 * u) }),
-                         ink, cream);
-                g.DrawEllipse(Skin.Brush(Skin.Ink), null, new Rect(cx - 1 * u, cy + 1 * u, 4 * u, 4 * u));
-                break;
-            }
-        }
     }
 
     // ----- Painting -----
@@ -650,7 +574,7 @@ sealed class MansionScene : Control
                                Skin.Polygon(SignPoints(sg, 1.045)));
         }
 
-        DrawLayer(g, title!, new Point(18, 12));
+        DrawLayer(g, title!, new Point(TitleX, TitleY));
         DrawFooter(g);
     }
 

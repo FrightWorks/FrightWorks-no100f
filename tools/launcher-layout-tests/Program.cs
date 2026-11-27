@@ -392,6 +392,11 @@ static class LauncherLayoutTests
             window.Height = size.Height;
             Pump();
             Check(Math.Abs(window.ClientSize.Width - size.Width) < 1, $"window did not take {size}: {window.ClientSize}");
+            // The main screen at this size, for checking the art by eye (title, house, signs, background).
+            window.CloseBoards();
+            window.scene.Showcase(false);
+            Pump();
+            window.SaveShot(Path.Combine(output, $"{window.ClientSize.Width:0}x{window.ClientSize.Height:0}-main.png"));
             Validate("settings");
             Validate("settings", 1, "graphics");
             Validate("settings", 2, "controls");
