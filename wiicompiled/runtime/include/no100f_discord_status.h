@@ -14,6 +14,37 @@ namespace no100f_discord_status {
 inline constexpr const char* kLargeImage = "frightworks-no100f-icon";
 inline constexpr const char* kSmallImage = "frightworks-pfp";
 
+// The big picture in a level or the hub: a picture of its area on frightworks.dev (FrightWorks-site
+// public/discord/no100f/; Discord loads an https URL in place of an asset name). Released builds point at these
+// names, so the site keeps them; menus, movies and the ending keep the game's icon (kLargeImage).
+inline constexpr const char* kAreaPictureBase = "https://frightworks.dev/discord/no100f/";
+struct AreaPicture {
+    const char* area;
+    const char* file;
+};
+inline constexpr AreaPicture kAreaPictures[] = {
+    {"The Mystery Machine", "hub.jpg"},
+    {"Hedge Maze", "hedge-maze.jpg"},
+    {"Cliffs & Caves", "cliffs-caves.jpg"},
+    {"Cemetery", "cemetery.jpg"},
+    {"Fishing Village", "fishing-village.jpg"},
+    {"Lighthouse", "lighthouse.jpg"},
+    {"Shipwreck", "shipwreck.jpg"},
+    {"1st Floor", "first-floor.jpg"},
+    {"Attic & Balconies", "attic-balconies.jpg"},
+    {"Tower", "tower.jpg"},
+    {"Cellars", "cellars.jpg"},
+    {"Secret Passages", "secret-passages.jpg"},
+    {"Super Secret Lab", "super-secret-lab.jpg"},
+};
+
+// The area's picture URL, or the game's icon for an area without one.
+inline std::string AreaPictureFor(const std::string& area) {
+    for (const AreaPicture& picture : kAreaPictures)
+        if (area == picture.area) return std::string(kAreaPictureBase) + picture.file;
+    return kLargeImage;
+}
+
 // The name on top of the status card and in the short status ("Playing ..."), in place of the Discord app's own name
 // (human's call, 2026-11-27; the launcher sends the same).
 inline constexpr const char* kActivityName = "FrightWorks: Night of 100 Frights";
@@ -140,11 +171,12 @@ inline constexpr const char* kStudio = "FrightWorks";
 struct Status {
     std::string details;               // first line under the game's name
     std::string state;                 // second line
-    std::string largeText = kGameTitle;  // hover text on the big picture: the area
-    std::string smallText = kStudio;     // hover text on the small picture: tokens and the level's snacks
+    std::string largeImage = kLargeImage;  // the big picture: an asset name or an https URL (the area's picture)
+    std::string largeText = kGameTitle;    // hover text on the big picture: the area
+    std::string smallText = kStudio;       // hover text on the small picture: tokens and the level's snacks
     bool operator==(const Status& other) const {
-        return details == other.details && state == other.state && largeText == other.largeText &&
-               smallText == other.smallText;
+        return details == other.details && state == other.state && largeImage == other.largeImage &&
+               largeText == other.largeText && smallText == other.smallText;
     }
     bool operator!=(const Status& other) const { return !(*this == other); }
 };
@@ -185,6 +217,7 @@ inline Status Describe(const Snapshot& s) {
         return {};
     }
     if (const char* boss = BossText(s.scene)) status.details = boss;
+    status.largeImage = AreaPictureFor(status.largeText);
 
     // The second line is the completion and the snacks held: "30% complete | 1,240 Snacks", "Paused | ..." in pause.
     std::string what = s.percentKnown ? std::to_string(s.percent) + "% complete" : std::string{};
