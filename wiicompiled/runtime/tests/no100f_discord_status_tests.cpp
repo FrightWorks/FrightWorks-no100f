@@ -1,5 +1,7 @@
 #include "no100f_discord_status.h"
 
+#include "no100f_devmenu_progress.h"
+
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -47,8 +49,8 @@ int main() {
 
         Expect(Describe(InPlay("E004")), "On Edge in the Hedge!", "30% complete | 1,240 Snacks", "level in play");
         Expect(Describe(InPlay("I004")), "Mind Your Manors!", "30% complete | 1,240 Snacks", "i004");
-        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In", "30% complete | 1,240 Snacks",
-               "paused: still only the completion and the snacks");
+        Expect(Describe(InPlay("C005", kModePause)), "Misbehavin'? Cause a Cave In",
+               "Paused | 30% complete | 1,240 Snacks", "paused");
         Expect(Describe(InPlay("G001", kModeSave)), "A Tight Spot for a Grave Plot!", "30% complete | 1,240 Snacks",
                "save menu");
         Expect(Describe(InPlay("H001")), "At the Mystery Machine", "30% complete | 1,240 Snacks", "hub");
@@ -56,6 +58,45 @@ int main() {
         Expect(Describe(InPlay("H003")), "In the Monster Gallery", "30% complete | 1,240 Snacks", "gallery");
         Expect(Describe(InPlay("S006")), "Watching the ending", "", "ending");
         Expect(Describe(InPlay("ZZZZ")), "", "", "unknown scene");
+
+        // Boss rooms say who, the rest of the status stays.
+        Expect(Describe(InPlay("O008")), "Facing the Black Knight", "30% complete | 1,240 Snacks", "black knight");
+        Expect(Describe(InPlay("G009")), "Facing the Green Ghost", "30% complete | 1,240 Snacks", "green ghost");
+        Expect(Describe(InPlay("W028")), "Facing Redbeard", "30% complete | 1,240 Snacks", "redbeard");
+        Expect(Describe(InPlay("S005", kModePause)), "Facing the Mastermind", "Paused | 30% complete | 1,240 Snacks",
+               "mastermind, paused");
+        Expect(Describe(InPlay("O005")), "A Dark and Stormy Knight!", "30% complete | 1,240 Snacks",
+               "the boss's level before the boss room");
+        for (const Boss& boss : kBosses) {
+            const Level* level = FindLevel(boss.scene);
+            Require(level != nullptr, std::string(boss.text) + ": a level scene");
+            uint32_t last = 0;
+            for (uint32_t id : level->scenes)
+                if (id != 0) last = id;
+            Require(last == boss.scene, std::string(boss.text) + ": the level's last scene");
+        }
+
+        // Hover texts: the area on the big picture, the level's snacks and the tokens on the small one.
+        Snapshot hover = InPlay("E002");
+        Require(Describe(hover).largeText == "Hedge Maze", "area hover");
+        Require(Describe(hover).smallText == kStudio, "no stats known: the studio");
+        hover.tokensKnown = true;
+        hover.tokens = 12;
+        Require(Describe(hover).smallText == "12 of 21 Monster Tokens", "tokens only");
+        hover.levelSnacksKnown = true;
+        hover.levelSnacks = 45;
+        hover.levelSnackTotal = 371;
+        Require(Describe(hover).smallText == "45 of 371 Snacks in this level | 12 of 21 Monster Tokens", "both");
+        Require(Describe(InPlay("H002")).largeText == "The Mystery Machine", "hub area");
+        Require(Describe(InPlay("H001", kModeTitle)).largeText == kGameTitle, "menu: the game's title");
+        Require(Describe(InPlay("S006")).largeText == kGameTitle, "ending: the game's title");
+        Require(Describe(hover) != Describe(InPlay("E002")), "a hover change is a change");
+
+        // SnackAreaIndex matches the game's snack-area table (no100f_devmenu_progress.h), scene by scene.
+        for (uint32_t area = 0; area < no100f_devmenu::kSnackAreaScenes.size(); ++area)
+            for (uint32_t id : no100f_devmenu::kSnackAreaScenes[area])
+                if (id != 0) Require(SnackAreaIndex(id) == area, "snack area of scene " + std::to_string(id));
+        Require(SnackAreaIndex(0) == 0 && SnackAreaIndex(SceneId("S006")) == 0, "no area for 0 or the ending");
 
         Snapshot noPercent = InPlay("F001");
         noPercent.percentKnown = false;  // a new game before its first save
