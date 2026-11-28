@@ -4,6 +4,7 @@
 // DVD completion drain, so it runs from the scheduler like the EXI interrupt would.
 #include "hle_stubs.h"
 #include "memory.h"
+#include "no100f_speedrun.h"
 #include "old_save_convert.h"
 #include "runtime_config.h"
 #include "runtime_log.h"
@@ -12,6 +13,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <array>
 #include <filesystem>
 #include <string>
 
@@ -123,6 +125,17 @@ s32 FileResult(s32 chan, s32 r) {
     return (r == CARD_RESULT_NOCARD && CARDProbe(chan)) ? CARD_RESULT_NOFILE : r;
 }
 
+// Each open file's name by its file number, so a read or write can tell the speedrun timer which save it was
+// (no100f_speedrun.h: play time per save).
+std::array<std::string, 128> g_fileNames;
+void NoteFileName(const CARDFileInfo& fi, const std::string& name) {
+    if (fi.fileNo >= 0 && static_cast<size_t>(fi.fileNo) < g_fileNames.size()) g_fileNames[static_cast<size_t>(fi.fileNo)] = name;
+}
+const std::string& FileName(const CARDFileInfo& fi) {
+    static const std::string none;
+    return fi.fileNo >= 0 && static_cast<size_t>(fi.fileNo) < g_fileNames.size() ? g_fileNames[static_cast<size_t>(fi.fileNo)] : none;
+}
+
 void WriteS32(uint32_t g, s32 v) { if (g) Memory::Write32(g, static_cast<uint32_t>(v)); }
 
 // SDK async contract: an error at issue time is returned and no callback runs; otherwise READY is returned
@@ -205,6 +218,7 @@ extern "C" int32_t CARDOpen_Gc(int32_t chan, uint32_t fileName, uint32_t fileInf
     EnsureCardInit();
     CARDFileInfo fi{};
     const s32 r = Trace(("CARDOpen " + GuestString(fileName)).c_str(), FileResult(chan, CARDOpen(chan, GuestString(fileName).c_str(), &fi)));
+    if (r >= 0) NoteFileName(fi, GuestString(fileName));
     if (r >= 0 && fileInfo) StoreFileInfo(fileInfo, fi);
     return r;
 }
@@ -223,6 +237,7 @@ extern "C" int32_t CARDCreateAsync_Gc(int32_t chan, uint32_t fileName, uint32_t 
     EnsureCardInit();
     CARDFileInfo fi{};
     const s32 r = Trace(("CARDCreate " + GuestString(fileName)).c_str(), CARDCreate(chan, GuestString(fileName).c_str(), size, &fi));
+    if (r >= 0) NoteFileName(fi, GuestString(fileName));
     if (r >= 0 && fileInfo) StoreFileInfo(fileInfo, fi);
     return FinishAsync(chan, r, callback);
 }
@@ -234,6 +249,7 @@ extern "C" int32_t CARDReadAsync_Gc(uint32_t fileInfo, uint32_t addr, int32_t le
     void* buf = length > 0 ? Memory::GetPointer(addr, static_cast<uint32_t>(length)) : nullptr;
     const s32 r = buf ? CARDRead(&fi, buf, length, offset) : CARD_RESULT_FATAL_ERROR;
     if (r >= 0) GxNotifyGuestRamDmaWrite(addr, static_cast<uint32_t>(length));
+    if (r >= 0) no100f_speedrun::CardRead(FileName(fi), offset, length);
     StoreFileInfo(fileInfo, fi);
     return FinishAsync(fi.chan, r, callback);
 }
@@ -244,6 +260,7 @@ extern "C" int32_t CARDWriteAsync_Gc(uint32_t fileInfo, uint32_t addr, int32_t l
     CARDFileInfo fi = LoadFileInfo(fileInfo);
     const void* buf = length > 0 ? Memory::GetPointer(addr, static_cast<uint32_t>(length)) : nullptr;
     const s32 r = buf ? CARDWrite(&fi, buf, length, offset) : CARD_RESULT_FATAL_ERROR;
+    if (r >= 0) no100f_speedrun::CardWritten(FileName(fi), length);
     StoreFileInfo(fileInfo, fi);
     return FinishAsync(fi.chan, r, callback);
 }
@@ -297,6 +314,7 @@ extern "C" int32_t CARDCreate_Gc(int32_t chan, uint32_t fileName, uint32_t size,
     EnsureCardInit();
     CARDFileInfo fi{};
     const s32 r = Trace(("CARDCreate " + GuestString(fileName)).c_str(), CARDCreate(chan, GuestString(fileName).c_str(), size, &fi));
+    if (r >= 0) NoteFileName(fi, GuestString(fileName));
     if (r >= 0 && fileInfo) StoreFileInfo(fileInfo, fi);
     return r;
 }
@@ -308,6 +326,7 @@ extern "C" int32_t CARDRead_Gc(uint32_t fileInfo, uint32_t addr, int32_t length,
     void* buf = length > 0 ? Memory::GetPointer(addr, static_cast<uint32_t>(length)) : nullptr;
     const s32 r = Trace("CARDRead", buf ? CARDRead(&fi, buf, length, offset) : CARD_RESULT_FATAL_ERROR);
     if (r >= 0) GxNotifyGuestRamDmaWrite(addr, static_cast<uint32_t>(length));
+    if (r >= 0) no100f_speedrun::CardRead(FileName(fi), offset, length);
     StoreFileInfo(fileInfo, fi);
     return r;
 }

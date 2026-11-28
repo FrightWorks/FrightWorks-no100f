@@ -71,7 +71,7 @@ public:
             basicClientId_ = IsClientId(clientId) ? clientId : std::string{};
             basicActivity_ = {};
             basicActivity_.largeImageText = title;
-            basicActivity_.startTimestamp = UnixSeconds();
+            basicActivity_.startTimestamp = sessionStart_ = UnixSeconds();
             customClient_ = false;
             activity_ = basicActivity_;
             reconnect_ = true;
@@ -84,11 +84,12 @@ public:
         wake_.notify_all();
     }
 
-    // The host's own activity (what the game is doing). Keeps the start time set by Initialize.
+    // The host's own activity (what the game is doing). Without a start time of its own it keeps the one set by
+    // Initialize (the session's start).
     void SetBasicActivity(Activity activity) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            activity.startTimestamp = basicActivity_.startTimestamp;
+            if (activity.startTimestamp == 0) activity.startTimestamp = sessionStart_;
             basicActivity_ = std::move(activity);
             if (customClient_) {
                 return;
@@ -487,6 +488,7 @@ private:
     std::string basicClientId_;
     std::string clientId_;
     Activity basicActivity_;
+    int64_t sessionStart_ = 0;
     Activity activity_;
     std::optional<std::chrono::steady_clock::time_point> lastSend_;
 
