@@ -14,6 +14,7 @@ extern "C" uint8_t* aurora_load_png_rgba(const char* path, uint32_t* width, uint
 #include "no100f_devmenu.h"
 #include "no100f_game_state.h"
 #include "no100f_recorder.h"
+#include "no100f_speedrun.h"
 #include "memory.h"
 #include "audio_backend.h"
 #include "aurora_events.h"
@@ -139,6 +140,20 @@ std::string g_fullscreenMonitor = RuntimeConfigFile::FullscreenDisplay();
 bool g_skipUnreadyPipelines = RuntimeConfigFile::SkipUnreadyPipelines(true);
 bool g_disableCopyFilter = RuntimeConfigFile::DisableCopyFilter(true);
 bool g_showFps = RuntimeConfigFile::ShowFps(false);  // off unless turned on
+// F10 > Speedrun (no100f_speedrun.h).
+bool g_speedrunOverlay = RuntimeConfigFile::SpeedrunOverlay();
+int g_speedrunCategory = no100f_speedrun::CategoryIndex(RuntimeConfigFile::SpeedrunCategory());
+int g_speedrunSplits = RuntimeConfigFile::SpeedrunSplits();
+bool g_speedrunLoadless = RuntimeConfigFile::SpeedrunLoadless();
+bool g_speedrunSaveRuns = RuntimeConfigFile::SpeedrunSaveRuns();
+constexpr std::array<const char*, 4> kSpeedrunCornerIds = {"top-left", "top-right", "bottom-left", "bottom-right"};
+constexpr std::array<const char*, 4> kSpeedrunCornerNames = {"Top left", "Top right", "Bottom left", "Bottom right"};
+int g_speedrunCorner = [] {
+    const std::string corner = RuntimeConfigFile::SpeedrunCorner();
+    for (size_t i = 0; i < kSpeedrunCornerIds.size(); ++i)
+        if (corner == kSpeedrunCornerIds[i]) return static_cast<int>(i);
+    return 0;
+}();
 bool g_frameGraph = RuntimeConfigFile::FrameGraph(false);
 std::atomic<bool> g_vsync{RuntimeConfigFile::VSync(false)};
 #if defined(__APPLE__)
@@ -1605,6 +1620,65 @@ void DrawFpsOverlay() {
     ImGui::End();
 }
 
+// The speedrun overlay: the run's time (big), the time without loads, the last splits. Before a run: the category and
+// how it starts; the save's play time under it.
+void DrawSpeedrunOverlay() {
+    if (!g_speedrunOverlay || g_topBarVisible) return;  // hidden behind the F10 menu
+    using namespace OverlayTheme;
+    const no100f_speedrun::View view = no100f_speedrun::CurrentView(static_cast<size_t>(g_speedrunSplits));
+    const ImGuiIO& io = ImGui::GetIO();
+    constexpr float kMargin = 10.0f;
+    const bool right = g_speedrunCorner == 1 || g_speedrunCorner == 3;
+    const bool bottom = g_speedrunCorner >= 2;
+    ImGui::SetNextWindowPos(ImVec2(right ? io.DisplaySize.x - kMargin : kMargin, bottom ? io.DisplaySize.y - kMargin : kMargin),
+                            ImGuiCond_Always, ImVec2(right ? 1.0f : 0.0f, bottom ? 1.0f : 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.6f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f, 8.0f));
+    constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration |
+                                        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoInputs |
+                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav |
+                                        ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::Begin("Speedrun Overlay", nullptr, kFlags)) {
+        ImGui::PushFont(Small());
+        ImGui::TextColored(Vec(Colour::CreamDim), "%s", view.category.c_str());
+        ImGui::PopFont();
+        if (!view.lastSplits.empty() && ImGui::BeginTable("splits", 2)) {
+            ImGui::PushFont(Body());
+            for (const auto& split : view.lastSplits) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(split.name.c_str());
+                ImGui::TableNextColumn();
+                const std::string time = no100f_speedrun::FormatTime(split.realTime);
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetColumnWidth() -
+                                     ImGui::CalcTextSize(time.c_str()).x);
+                ImGui::TextUnformatted(time.c_str());
+            }
+            ImGui::PopFont();
+            ImGui::EndTable();
+        }
+        ImGui::PushFont(Row());
+        ImGui::SetWindowFontScale(2.0f);
+        const ImVec4 colour = view.finished ? Vec(Colour::Gold) : view.running ? Vec(Colour::Lime) : Vec(Colour::CreamDim);
+        ImGui::TextColored(colour, "%s", no100f_speedrun::FormatTime(view.realTime).c_str());
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PopFont();
+        ImGui::PushFont(Small());
+        if (g_speedrunLoadless && view.started) {
+            ImGui::TextColored(Vec(Colour::CreamDim), "Without loads %s",
+                               no100f_speedrun::FormatTime(view.withoutLoads).c_str());
+        }
+        if (!view.started) ImGui::TextColored(Vec(Colour::CreamDim), "Starts when you press New Game");
+        if (view.playKnown) {
+            ImGui::TextColored(Vec(Colour::CreamDim), "Play time on this save %s",
+                               no100f_speedrun::FormatClock(view.playSeconds).c_str());
+        }
+        ImGui::PopFont();
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
 void DrawShaderCompilationStatus() {
     const uint32_t queuedPipelines = aurora_get_queued_pipeline_count();
     if (queuedPipelines == 0) {
@@ -1796,19 +1870,19 @@ const char* LeftBumperLabel(const std::string& folder) {
 // The settings menu (F10), made for a controller: the page tabs across the top (LB / RB, Q / E, Page Up / Down or a
 // click change the page), the page's rows on the left (menu_rows.h), the selected row's details on the right, and the
 // buttons that do something at the bottom. It fills the window over the dimmed, paused game.
-enum class Page { Video, Audio, Controller, Keyboard, LanPlay, About };
+enum class Page { Video, Audio, Controller, Keyboard, LanPlay, Speedrun, About };
 struct PageItem {
     Page page;
     const char* label;
 };
 // LAN Play ({Page::LanPlay, "LAN Play"}) is hidden until network play is worked on; its page code stays.
-constexpr std::array<PageItem, 5> kPages = {{
+constexpr std::array<PageItem, 6> kPages = {{
     {Page::Video, "Video"}, {Page::Audio, "Audio"}, {Page::Controller, "Controller"}, {Page::Keyboard, "Keyboard"},
-    {Page::About, "About"},
+    {Page::Speedrun, "Speedrun"}, {Page::About, "About"},
 }};
 Page g_page = Page::Video;
 // Each page's selected row, so coming back to a page finds it where it was.
-std::array<int, 6> g_pageRows{};
+std::array<int, 7> g_pageRows{};
 
 void SetPage(Page page) {
     if (page == g_page && !g_hdrCalibrationOpen) return;
@@ -1828,6 +1902,67 @@ void StepPage(int direction) {
     while (index < count && kPages[index].page != g_page) ++index;
     if (index == count) index = 0;
     SetPage(kPages[((index + direction) % count + count) % count].page);
+}
+
+void DrawSpeedrunPage() {
+    namespace sr = no100f_speedrun;
+    MenuRows::Section("Speedrun timer");
+    if (MenuRows::Toggle("Speedrun overlay", &g_speedrunOverlay)) RuntimeConfigFile::SetSpeedrunOverlay(g_speedrunOverlay);
+    MenuRows::Describe("The run's time in a corner of the screen, with your last splits. As on speedrun.com, a run starts "
+                       "when you press New Game; a boss splits when its defeat movie starts. The timer runs whether the "
+                       "overlay shows or not.");
+    if (MenuRows::Choice("Category", &g_speedrunCategory, static_cast<int>(sr::kCategories.size()),
+                         [](int i) { return i < 0 ? "?" : sr::kCategories[static_cast<size_t>(i)].name; })) {
+        RuntimeConfigFile::SetSpeedrunCategory(sr::kCategories[static_cast<size_t>(g_speedrunCategory)].id);
+        sr::SetNextCategory(g_speedrunCategory);
+    }
+    static std::string categoryText;
+    categoryText = std::string(sr::kCategories[static_cast<size_t>(g_speedrunCategory)].rules) +
+                   " The categories are speedrun.com's. A change counts from the next New Game. Warping out of a boss "
+                   "before its movie (allowed in All Bosses and Reverse Boss Order) skips its split.";
+    MenuRows::Describe(categoryText.c_str());
+    if (MenuRows::SliderInt("Splits shown", &g_speedrunSplits, 0, 8, 1, "%d")) {
+        RuntimeConfigFile::SetSpeedrunSplits(g_speedrunSplits);
+    }
+    MenuRows::Describe("How many of the last splits the overlay lists above the time.");
+    if (MenuRows::Toggle("Time without loads", &g_speedrunLoadless)) RuntimeConfigFile::SetSpeedrunLoadless(g_speedrunLoadless);
+    MenuRows::Describe("A second, smaller time under the run's time, less the loading between scenes. speedrun.com times "
+                       "runs in real time; this one is for comparing your own runs.");
+    int corner = g_speedrunCorner;
+    if (MenuRows::Choice("Corner", &corner, kSpeedrunCornerNames.data(), static_cast<int>(kSpeedrunCornerNames.size()))) {
+        g_speedrunCorner = corner;
+        RuntimeConfigFile::SetSpeedrunCorner(kSpeedrunCornerIds[static_cast<size_t>(corner)]);
+    }
+    MenuRows::Describe("Where on the screen the overlay goes.");
+    if (MenuRows::Toggle("Save each run", &g_speedrunSaveRuns)) RuntimeConfigFile::SetSpeedrunSaveRuns(g_speedrunSaveRuns);
+    MenuRows::Describe("When a run ends, its splits go to the Speedruns folder beside your saves: a spreadsheet (CSV) and "
+                       "a LiveSplit splits file, both named by the date and the category.");
+    if (MenuRows::Action("Open the Speedruns folder")) {
+        const std::string folder = sr::RunsFolder();
+        if (!SDL_OpenURL(sr::FileUrl(folder).c_str())) ShowNotice("Couldn't open " + folder);
+    }
+    MenuRows::Describe("Opens the folder with your saved runs.");
+
+    const sr::View view = sr::CurrentView(1);
+    MenuRows::Section(view.finished ? "Last run" : "This run");
+    if (!view.started) {
+        MenuRows::Note("No run yet: it starts when you press New Game on the title screen.");
+    } else {
+        MenuRows::Info("Category", view.category.c_str());
+        MenuRows::Info(view.finished ? "Time" : "Time so far", sr::FormatTime(view.realTime).c_str());
+        MenuRows::Info("Without loads", sr::FormatTime(view.withoutLoads).c_str());
+        if (!view.lastSplits.empty()) {
+            const auto& split = view.lastSplits.back();
+            MenuRows::Info(("Last split: " + split.name).c_str(), sr::FormatTime(split.realTime).c_str());
+        }
+        if (!view.lastRunFile.empty()) MenuRows::Note(("Saved as " + view.lastRunFile).c_str());
+    }
+
+    MenuRows::Section("Play time");
+    const std::string played = view.playKnown ? sr::FormatPlayTime(view.playSeconds) : "Load a save or start a new game";
+    MenuRows::Info("On this save", played.c_str());
+    MenuRows::Note("Counted while you play or pause, not during loads or movies, and kept when you save. Saves from before "
+                   "this version start at 0. Your Discord status shows it too.");
 }
 
 void DrawAboutPage() {
@@ -1888,6 +2023,7 @@ void DrawPage(Page page) {
     case Page::Controller: DrawControllerSettings(); break;
     case Page::Keyboard: DrawKeyboardSettings(); break;
     case Page::LanPlay: DrawLanPlaySettings(); break;
+    case Page::Speedrun: DrawSpeedrunPage(); break;
     case Page::About: DrawAboutPage(); break;
     }
 }
@@ -2936,6 +3072,7 @@ void Draw() noexcept {
     DrawShaderCompilationStatus();
     NetplayUi::Draw();
     DrawFpsOverlay();
+    DrawSpeedrunOverlay();
     if (no100f_devmenu::Enabled()) {
         no100f_recorder::Update();
     }

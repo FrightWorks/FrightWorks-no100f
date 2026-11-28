@@ -79,7 +79,8 @@ numbers the folders (`10-`, `20-`, ...). Your own `texture_replacements` folder 
 
 **Discord.** With the Discord desktop app running, your Discord status shows the launcher, or in the game the level
 you're in (or the boss you're facing), your completion (live, the same percentage the load screen shows for a save) and
-Snacks, whether you're paused, the main menu or the credits, and how long you've played. In a level or at the Mystery
+Snacks, whether you're paused, the main menu or the credits, and the save's play time (see below; in the menus, how long
+the game has been open). In a level or at the Mystery
 Machine the big picture is a painting of the area, and hovering over it names the area; hovering over the small one
 shows the level's Snacks found and your Monster Tokens. Friends also see two buttons to
 get the game (Discord doesn't show you your own buttons), and clicking either picture opens the game's page. On Linux,
@@ -88,6 +89,20 @@ Settings > Activity Privacy** decides who sees it; **Settings > Game > Show in m
 switches it off (`[discord] enabled = false` in `UserData\Config.toml`).
 Discord doesn't know FrightWorks as a game yet, so it doesn't offer to stream it by itself: to get that, add
 **FrightWorks-No100F-Game** in Discord's **User Settings > Registered Games** while it's running.
+
+**Play time and the speedrun timer.** The game keeps each save's play time: it counts while you play or pause (the
+Mystery Machine save menu too), not during loads, movies or the title menus, and it's kept when you save, in
+`FrightWorks\play-time.ini` in your saves folder. Saves from before this version start at 0. **F10 > Speedrun** shows it,
+and so does your Discord status.
+
+The same page has a speedrun timer, with speedrun.com's categories for the game (Any%, All Bosses, 100%, All Monster
+Tokens, Reverse Boss Order, Warpless, No Levels Early, Cheat%). As on speedrun.com, a run starts when you press New Game.
+A boss splits when its defeat movie starts (warping out of a fight before the movie, which All Bosses and Reverse Boss
+Order allow, skips its split), All Monster Tokens and 100% also split on each Monster Token, and the run ends when the
+category's goal is reached: for Any%, when the Mastermind's defeat movie starts, a moment after the electrocution that
+speedrun.com times to. **Speedrun overlay** shows the run's time in a corner, with the last splits and the time without
+loads under it. When a run ends, its splits go to `Speedruns` in your saves folder, as a spreadsheet (CSV) and a
+LiveSplit splits file to compare your next runs against. speedrun.com still times runs from your video.
 
 ## Controllers and keyboard
 

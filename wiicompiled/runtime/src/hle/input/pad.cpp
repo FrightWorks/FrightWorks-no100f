@@ -9,6 +9,7 @@
 #include "runtime_config.h"
 #include "runtime_log.h"
 #include "no100f_devmenu.h"
+#include "no100f_speedrun.h"
 #include "settings_overlay.h"
 
 #include <aurora/aurora.h>
@@ -291,6 +292,13 @@ extern "C" uint32_t PAD__Read_HLE(uint32_t statusPtr)
         statuses[0].err = PAD_ERR_NONE;
         statuses[0].button |= scripted;
         if (scripted) { static int n = 0; if (n++ < 5) RT_LOGF(RT_TAG_OS, "[pad] PADRead scripted buttons 0x%04X\n", scripted); }
+    }
+
+    {
+        uint16_t buttons = 0;  // New Game's press starts the speedrun timer
+        for (const auto& status : statuses)
+            if (status.err == PAD_ERR_NONE) buttons |= status.button;
+        no100f_speedrun::PadButtons(buttons);
     }
 
     try {

@@ -528,6 +528,11 @@ target_include_directories(no100f_discord_status_tests PRIVATE "${CMAKE_CURRENT_
 target_compile_features(no100f_discord_status_tests PRIVATE cxx_std_17)
 add_test(NAME no100f_discord_status_tests COMMAND no100f_discord_status_tests)
 
+add_executable(no100f_speedrun_tests "${CMAKE_CURRENT_LIST_DIR}/tests/no100f_speedrun_tests.cpp")
+target_include_directories(no100f_speedrun_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
+target_compile_features(no100f_speedrun_tests PRIVATE cxx_std_17)
+add_test(NAME no100f_speedrun_tests COMMAND no100f_speedrun_tests)
+
 add_executable(discord_activity_json_tests "${CMAKE_CURRENT_LIST_DIR}/tests/discord_activity_json_tests.cpp")
 target_include_directories(discord_activity_json_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/include")
 target_compile_features(discord_activity_json_tests PRIVATE cxx_std_17)

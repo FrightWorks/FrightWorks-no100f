@@ -6,11 +6,13 @@
 #include "memory.h"
 #include "no100f_game_state.h"
 #include "no100f_progress.h"
+#include "no100f_speedrun.h"
 #include "ppc_runtime.h"
 #include "runtime_config.h"
 #include "runtime_log.h"
 
 #include <chrono>
+#include <ctime>
 
 namespace no100f_discord_status {
 
@@ -55,11 +57,22 @@ void SampleGame() {
     }
 
     const Status status = Describe(snapshot);
-    if (s_sent && status == s_last) {
+    // In a game, the timer shows the save's play time (no100f_speedrun.h): it starts that long ago. Loads and movies
+    // don't count, so it drifts from Discord's clock; it's sent again when it's 15 s out.
+    int64_t start = 0;
+    const bool inGame = snapshot.layoutVerified && (snapshot.mode == kModeInPlay || snapshot.mode == kModePause ||
+                                                    snapshot.mode == kModeSave);
+    if (const auto played = no100f_speedrun::PlaySeconds(); played && inGame) {
+        start = static_cast<int64_t>(std::time(nullptr)) - static_cast<int64_t>(*played);
+    }
+    static int64_t s_start = 0;
+    const bool startMoved = (start == 0) != (s_start == 0) || start - s_start > 15 || s_start - start > 15;
+    if (s_sent && status == s_last && !startMoved) {
         return;
     }
     s_sent = true;
     s_last = status;
+    s_start = start;
     DiscordPresence::Activity activity;
     activity.name = kActivityName;
     activity.details = status.details;
@@ -71,6 +84,7 @@ void SampleGame() {
     activity.smallImageText = status.smallText;
     activity.smallImageUrl = kGamePage;
     activity.buttons = {{{kButton1Label, kButton1Url}, {kButton2Label, kButton2Url}}};
+    activity.startTimestamp = start;
     DiscordPresence::SetBasicActivity(std::move(activity));
 }
 

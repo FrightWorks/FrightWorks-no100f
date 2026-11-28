@@ -104,6 +104,13 @@ struct RuntimeUserConfig {
     // used by the base product; a mod supplies its own ID through the
     // standard Dolphin /dev/dolphin interface.
     std::optional<std::string> discordClientId;
+    // NO100F [speedrun]: the speedrun overlay and its settings (F10 > Speedrun; no100f_speedrun.h).
+    std::optional<bool> speedrunOverlay;
+    std::optional<std::string> speedrunCategory;
+    std::optional<int32_t> speedrunSplits;
+    std::optional<bool> speedrunLoadless;
+    std::optional<std::string> speedrunCorner;
+    std::optional<bool> speedrunSaveRuns;
     std::optional<std::string> nandRoot;
     std::optional<std::string> dvdRoot;
     // [paths] saves_dir: where the saves go instead of the default (SavesDirectory).
@@ -654,6 +661,12 @@ inline RuntimeUserConfig ParseConfigDocument(const toml::value& document) {
     config.networkEnabled = FindConfigValue<bool>(document, "network", "enabled");
     config.discordPresenceEnabled = FindConfigValue<bool>(document, "discord", "enabled");
     config.discordClientId = FindConfigValue<std::string>(document, "discord", "client_id");
+    config.speedrunOverlay = FindConfigValue<bool>(document, "speedrun", "overlay");
+    config.speedrunCategory = FindConfigValue<std::string>(document, "speedrun", "category");
+    config.speedrunSplits = FindConfigInt(document, "speedrun", "splits");
+    config.speedrunLoadless = FindConfigValue<bool>(document, "speedrun", "loadless");
+    config.speedrunCorner = FindConfigValue<std::string>(document, "speedrun", "corner");
+    config.speedrunSaveRuns = FindConfigValue<bool>(document, "speedrun", "save_runs");
 
     config.nandRoot = FindConfigValue<std::string>(document, "paths", "nand_root");
     config.dvdRoot = FindConfigValue<std::string>(document, "paths", "dvd_root");
@@ -1332,6 +1345,40 @@ inline bool SetRecordAudio(bool value) {
 // notices too; off (default) = only the DEV stamp. The dev menu's toggle writes it.
 inline bool CaptureOverlay() {
     return Get().captureOverlay.value_or(false);
+}
+
+// [speedrun]: the speedrun overlay (F10 > Speedrun). category: an id from no100f_speedrun.h kCategories; splits: how
+// many of the last splits the overlay lists (0-8); corner: top-left, top-right, bottom-left or bottom-right; save_runs:
+// each finished run goes to Saves/Speedruns as CSV and LiveSplit splits.
+inline bool SpeedrunOverlay() { return Get().speedrunOverlay.value_or(false); }
+inline bool SetSpeedrunOverlay(bool value) {
+    Mutable().speedrunOverlay = value;
+    return WriteSetting("speedrun", "overlay", value ? "true" : "false");
+}
+inline std::string SpeedrunCategory() { return Get().speedrunCategory.value_or("any"); }
+inline bool SetSpeedrunCategory(const std::string& value) {
+    Mutable().speedrunCategory = value;
+    return WriteSetting("speedrun", "category", FormatString(value));
+}
+inline int SpeedrunSplits() { return std::clamp<int>(Get().speedrunSplits.value_or(3), 0, 8); }
+inline bool SetSpeedrunSplits(int value) {
+    Mutable().speedrunSplits = value;
+    return WriteSetting("speedrun", "splits", std::to_string(value));
+}
+inline bool SpeedrunLoadless() { return Get().speedrunLoadless.value_or(true); }
+inline bool SetSpeedrunLoadless(bool value) {
+    Mutable().speedrunLoadless = value;
+    return WriteSetting("speedrun", "loadless", value ? "true" : "false");
+}
+inline std::string SpeedrunCorner() { return Get().speedrunCorner.value_or("top-left"); }
+inline bool SetSpeedrunCorner(const std::string& value) {
+    Mutable().speedrunCorner = value;
+    return WriteSetting("speedrun", "corner", FormatString(value));
+}
+inline bool SpeedrunSaveRuns() { return Get().speedrunSaveRuns.value_or(true); }
+inline bool SetSpeedrunSaveRuns(bool value) {
+    Mutable().speedrunSaveRuns = value;
+    return WriteSetting("speedrun", "save_runs", value ? "true" : "false");
 }
 
 inline bool SetCaptureOverlay(bool value) {
