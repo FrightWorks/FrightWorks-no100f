@@ -1,5 +1,7 @@
 #include "discord_presence.h"
 
+#include "discord_activity_json.h"
+
 #include "runtime_log.h"
 
 #include <algorithm>
@@ -48,117 +50,12 @@ bool IsClientId(std::string_view value) {
            std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
 }
 
-std::string EscapeJson(std::string_view value) {
-    std::string escaped;
-    escaped.reserve(value.size());
-    for (const unsigned char ch : value) {
-        switch (ch) {
-        case '\\': escaped += "\\\\"; break;
-        case '\"': escaped += "\\\""; break;
-        case '\b': escaped += "\\b"; break;
-        case '\f': escaped += "\\f"; break;
-        case '\n': escaped += "\\n"; break;
-        case '\r': escaped += "\\r"; break;
-        case '\t': escaped += "\\t"; break;
-        default:
-            if (ch < 0x20) {
-                static constexpr char kHex[] = "0123456789abcdef";
-                escaped += "\\u00";
-                escaped += kHex[ch >> 4];
-                escaped += kHex[ch & 0x0f];
-            } else {
-                escaped += static_cast<char>(ch);
-            }
-        }
-    }
-    return escaped;
-}
-
-void AppendJsonString(std::ostringstream& output, bool& hasValue, std::string_view key, std::string_view value) {
-    if (value.empty()) {
-        return;
-    }
-    if (hasValue) {
-        output << ',';
-    }
-    output << '\"' << key << "\":\"" << EscapeJson(value) << '\"';
-    hasValue = true;
-}
-
 std::string BuildActivityPayload(const Activity& activity) {
-    std::ostringstream json;
-    json << "{\"cmd\":\"SET_ACTIVITY\",\"nonce\":\"wiicompiled\",\"args\":{\"pid\":";
 #if defined(_WIN32)
-    json << static_cast<unsigned long>(::GetCurrentProcessId());
+    return ActivityJson::Build(activity, static_cast<int64_t>(::GetCurrentProcessId()));
 #else
-    json << static_cast<long>(::getpid());
+    return ActivityJson::Build(activity, static_cast<int64_t>(::getpid()));
 #endif
-    json << ",\"activity\":{";
-    bool hasActivityField = false;
-    AppendJsonString(json, hasActivityField, "details", activity.details);
-    AppendJsonString(json, hasActivityField, "state", activity.state);
-    const auto appendSection = [&](std::string_view name, const auto& append) {
-        if (hasActivityField) {
-            json << ',';
-        }
-        json << '\"' << name << "\":{";
-        append();
-        json << '}';
-        hasActivityField = true;
-    };
-    const bool hasAssets = !activity.largeImageKey.empty() || !activity.largeImageText.empty() ||
-                           !activity.smallImageKey.empty() || !activity.smallImageText.empty();
-    if (hasAssets) {
-        appendSection("assets", [&] {
-            bool hasAsset = false;
-            AppendJsonString(json, hasAsset, "large_image", activity.largeImageKey);
-            AppendJsonString(json, hasAsset, "large_text", activity.largeImageText);
-            AppendJsonString(json, hasAsset, "small_image", activity.smallImageKey);
-            AppendJsonString(json, hasAsset, "small_text", activity.smallImageText);
-        });
-    }
-    if (activity.startTimestamp > 0 || activity.endTimestamp > 0) {
-        appendSection("timestamps", [&] {
-            if (activity.startTimestamp > 0) {
-                json << "\"start\":" << activity.startTimestamp;
-            }
-            if (activity.endTimestamp > 0) {
-                if (activity.startTimestamp > 0) {
-                    json << ',';
-                }
-                json << "\"end\":" << activity.endTimestamp;
-            }
-        });
-    }
-    if (activity.partySize > 0 && activity.partyMax > 0) {
-        appendSection("party", [&] {
-            json << "\"size\":[" << activity.partySize << ',' << activity.partyMax << ']';
-        });
-    }
-    bool hasButton = false;
-    for (const ActivityButton& button : activity.buttons) {
-        if (button.label.empty() || button.url.empty()) {
-            continue;
-        }
-        if (hasActivityField) {
-            json << ',';
-        }
-        json << (hasButton ? "{" : "\"buttons\":[{");
-        bool hasField = false;
-        AppendJsonString(json, hasField, "label", button.label);
-        AppendJsonString(json, hasField, "url", button.url);
-        json << '}';
-        hasButton = true;
-        hasActivityField = true;
-    }
-    if (hasButton) {
-        json << ']';
-    }
-    if (hasActivityField) {
-        json << ',';
-    }
-    json << "\"instance\":false}}}";
-    return json.str();
 }
 
 // The game thread and the guest only hand the wanted activity to a worker thread; the worker does all the pipe I/O
@@ -417,6 +314,7 @@ private:
             if (!::ReadFile(handle_, buffer.data(), requested, &read, nullptr) || read == 0) {
                 return false;
             }
+            ReportRefusals(buffer.data(), read);
         }
     }
 
@@ -426,6 +324,7 @@ private:
             handle_ = INVALID_HANDLE_VALUE;
         }
         connected_ = false;
+        answers_.clear();
     }
 
     HANDLE handle_ = INVALID_HANDLE_VALUE;
@@ -434,21 +333,23 @@ private:
         if (connected_) {
             return true;
         }
-        std::array<std::string, 5> roots{};
-        size_t rootCount = 0;
+        // Discord's socket sits in the runtime or temp folder, or under the runtime folder in a sandbox's own
+        // subfolder for Flatpak and Snap builds of Discord (and Vesktop's Flatpak).
+        std::vector<std::string> roots;
         if (const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR"); runtimeDir && *runtimeDir) {
-            roots[rootCount++] = runtimeDir;
+            const std::string runtime = runtimeDir;
+            roots.push_back(runtime);
+            roots.push_back(runtime + "/app/com.discordapp.Discord");
+            roots.push_back(runtime + "/snap.discord");
+            roots.push_back(runtime + "/.flatpak/dev.vencord.Vesktop/xdg-run");
         }
-        if (const char* tempDir = std::getenv("TMPDIR"); tempDir && *tempDir) {
-            roots[rootCount++] = tempDir;
+        for (const char* variable : {"TMPDIR", "TMP", "TEMP"}) {
+            if (const char* tempDir = std::getenv(variable); tempDir && *tempDir) {
+                roots.push_back(tempDir);
+            }
         }
-        if (const char* tempDir = std::getenv("TMP"); tempDir && *tempDir && rootCount < roots.size()) {
-            roots[rootCount++] = tempDir;
-        }
-        if (const char* tempDir = std::getenv("TEMP"); tempDir && *tempDir && rootCount < roots.size()) {
-            roots[rootCount++] = tempDir;
-        }
-        roots[rootCount++] = "/tmp";
+        roots.push_back("/tmp");
+        const size_t rootCount = roots.size();
         for (size_t rootIndex = 0; rootIndex < rootCount; ++rootIndex) {
             for (unsigned int index = 0; index < 10; ++index) {
                 const std::string path = roots[rootIndex] + "/discord-ipc-" + std::to_string(index);
@@ -507,6 +408,7 @@ private:
         for (;;) {
             const ssize_t read = ::recv(fd_, buffer.data(), buffer.size(), MSG_DONTWAIT);
             if (read > 0) {
+                ReportRefusals(buffer.data(), static_cast<size_t>(read));
                 continue;
             }
             return read < 0 && (errno == EAGAIN || errno == EWOULDBLOCK);
@@ -519,10 +421,37 @@ private:
             fd_ = -1;
         }
         connected_ = false;
+        answers_.clear();
     }
 
     int fd_ = -1;
 #endif
+
+    // Discord answers a refused SET_ACTIVITY with an ERROR event and the reason ("state" length must be at least 2
+    // characters long): log the first few, which would otherwise leave the status silently unchanged.
+    void ReportRefusals(const uint8_t* data, size_t size) {
+        answers_.append(reinterpret_cast<const char*>(data), size);
+        while (answers_.size() >= 8) {
+            uint32_t length = 0;
+            for (size_t i = 0; i < 4; ++i) {
+                length |= static_cast<uint32_t>(static_cast<uint8_t>(answers_[4 + i])) << (i * 8);
+            }
+            if (length > 1024 * 1024) {
+                answers_.clear();  // not a frame boundary: drop it and keep draining
+                return;
+            }
+            if (answers_.size() < 8 + size_t(length)) {
+                return;
+            }
+            const std::string_view json(answers_.data() + 8, length);
+            if (json.find("\"evt\":\"ERROR\"") != std::string_view::npos && refusalsLogged_ < 5) {
+                ++refusalsLogged_;
+                RT_LOG(RT_TAG_RUNTIME) << "Discord Rich Presence: Discord refused the status: "
+                                       << json.substr(0, 300) << std::endl;
+            }
+            answers_.erase(0, 8 + size_t(length));
+        }
+    }
 
     bool ReadReady() {
         std::array<uint8_t, 8> header{};
@@ -564,6 +493,8 @@ private:
     // The worker's alone.
     bool connected_ = false;
     std::optional<std::chrono::steady_clock::time_point> lastFailedConnectionAttempt_;
+    std::string answers_;      // Discord's answers not yet read to a frame's end (ReportRefusals)
+    int refusalsLogged_ = 0;
 };
 
 Client g_client;

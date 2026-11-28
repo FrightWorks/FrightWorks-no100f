@@ -18,9 +18,10 @@ sealed class DiscordPresence : IDisposable
 {
     // The "FrightWorks - No100F" Discord application; the game's default too (runtime_config.h).
     public const string ClientId = "1575956576467165184";
+    const string GamePage = "https://frightworks.dev/games/no100f/";  // also where clicking the pictures goes
     static readonly (string Label, string Url)[] Buttons =
     {
-        ("Get the Recomp", "https://frightworks.dev/games/no100f/"),
+        ("Get the Recomp", GamePage),
         ("Get it on RecompLauncher", "https://recomplauncher.com/game/frightworks-no100f"),
     };
     static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(10);  // Discord not running: look again this often
@@ -93,8 +94,7 @@ sealed class DiscordPresence : IDisposable
                 catch (Exception e) when (e is TimeoutException or IOException) { await pipe.DisposeAsync(); }
                 continue;
             }
-            foreach (var dir in new[] { Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR"), Environment.GetEnvironmentVariable("TMPDIR"),
-                                        Environment.GetEnvironmentVariable("TMP"), Environment.GetEnvironmentVariable("TEMP"), "/tmp" })
+            foreach (var dir in SocketFolders())
             {
                 if (string.IsNullOrEmpty(dir)) continue;
                 var path = Path.Combine(dir, "discord-ipc-" + i);
@@ -105,6 +105,23 @@ sealed class DiscordPresence : IDisposable
             }
         }
         return null;
+    }
+
+    // Discord's socket sits in the runtime or temp folder, or under the runtime folder in a sandbox's own subfolder for
+    // Flatpak and Snap builds of Discord and Vesktop's Flatpak (the game looks in the same places: discord_presence.cpp).
+    static string?[] SocketFolders()
+    {
+        var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+        bool hasRuntime = !string.IsNullOrEmpty(runtime);
+        return new[]
+        {
+            runtime,
+            hasRuntime ? Path.Combine(runtime!, "app", "com.discordapp.Discord") : null,
+            hasRuntime ? Path.Combine(runtime!, "snap.discord") : null,
+            hasRuntime ? Path.Combine(runtime!, ".flatpak", "dev.vencord.Vesktop", "xdg-run") : null,
+            Environment.GetEnvironmentVariable("TMPDIR"), Environment.GetEnvironmentVariable("TMP"),
+            Environment.GetEnvironmentVariable("TEMP"), "/tmp",
+        };
     }
 
     // Frame: opcode and length (little-endian uint32 each), then the JSON.
@@ -153,12 +170,15 @@ sealed class DiscordPresence : IDisposable
             json.WriteStartObject("args");
             json.WriteNumber("pid", pid);
             json.WriteStartObject("activity");
+            json.WriteString("name", "FrightWorks: Night of 100 Frights");  // the game's kActivityName
             json.WriteString("details", "In the launcher");
             json.WriteStartObject("assets");
             json.WriteString("large_image", "frightworks-no100f-icon");
             json.WriteString("large_text", "Night of 100 Frights");
+            json.WriteString("large_url", GamePage);
             json.WriteString("small_image", "frightworks-pfp");
             json.WriteString("small_text", "FrightWorks");
+            json.WriteString("small_url", GamePage);
             json.WriteEndObject();
             json.WriteStartObject("timestamps");
             json.WriteNumber("start", startedAt);

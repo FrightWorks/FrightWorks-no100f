@@ -17,13 +17,26 @@ struct ActivityButton {
     std::string url;
 };
 
+// What the status line says before the app's name: "Playing", "Listening to", "Watching", "Competing in".
+enum class ActivityType { Playing = 0, Listening = 2, Watching = 3, Competing = 5 };
+
+// Which text the short status (member list, DMs) shows after "Playing": the app's name, the state or the details.
+enum class StatusDisplay { Name = 0, State = 1, Details = 2 };
+
 struct Activity {
-    std::string details;
-    std::string state;
-    std::string largeImageKey;
+    std::string name;  // replaces the app's name on the status's top line; empty = the app's name
+    ActivityType type = ActivityType::Playing;
+    StatusDisplay statusDisplay = StatusDisplay::Name;
+    std::string details;     // at least 2 characters, or left out (Discord refuses the whole call otherwise)
+    std::string detailsUrl;  // clicking the details text opens this
+    std::string state;       // at least 2 characters, or left out
+    std::string stateUrl;
+    std::string largeImageKey;  // an Art Assets name, or an https URL (Discord fetches it through its image proxy)
     std::string largeImageText;
+    std::string largeImageUrl;  // clicking the picture opens this
     std::string smallImageKey;
     std::string smallImageText;
+    std::string smallImageUrl;
     int64_t startTimestamp = 0;
     int64_t endTimestamp = 0;
     uint32_t partySize = 0;

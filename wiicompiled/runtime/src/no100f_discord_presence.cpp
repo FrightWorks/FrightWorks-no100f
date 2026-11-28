@@ -40,9 +40,15 @@ void SampleGame() {
             Memory::TryRead32(scenePtr + No100fXboxLayout::kSceneIdOffset, snapshot.scene);
         }
         if (const no100f_progress::Progress progress = no100f_progress::Latest(); progress.valid) {
-            snapshot.snacksKnown = snapshot.percentKnown = true;
+            snapshot.snacksKnown = snapshot.percentKnown = snapshot.tokensKnown = true;
             snapshot.snacks = progress.snacks;
             snapshot.percent = progress.percent;
+            snapshot.tokens = progress.inputs.tokens;
+            if (const uint32_t area = SnackAreaIndex(snapshot.scene); progress.levelsKnown && area != 0) {
+                snapshot.levelSnacksKnown = true;
+                snapshot.levelSnacks = progress.levels[area].collected;
+                snapshot.levelSnackTotal = progress.levels[area].total;
+            }
         }
     } else {
         snapshot.layoutVerified = false;
@@ -55,12 +61,15 @@ void SampleGame() {
     s_sent = true;
     s_last = status;
     DiscordPresence::Activity activity;
+    activity.name = kActivityName;
     activity.details = status.details;
     activity.state = status.state;
     activity.largeImageKey = kLargeImage;
-    activity.largeImageText = "Night of 100 Frights";
+    activity.largeImageText = status.largeText;
+    activity.largeImageUrl = kGamePage;
     activity.smallImageKey = kSmallImage;
-    activity.smallImageText = "FrightWorks";
+    activity.smallImageText = status.smallText;
+    activity.smallImageUrl = kGamePage;
     activity.buttons = {{{kButton1Label, kButton1Url}, {kButton2Label, kButton2Url}}};
     DiscordPresence::SetBasicActivity(std::move(activity));
 }
