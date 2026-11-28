@@ -314,7 +314,10 @@ To build old source there, set only the paths that differ with `git restore --so
   The copy-clear colour stays at GXInit's white, so a draw-less frame shows white (#78).
   Suspect a clear for any "white frame" bug (the movie player's draw-less frames around each Bink movie showed white).
 - Some meshes are skinned on the CPU (the manor curtains): the game rewrites their vertex arrays into a buffer pool every frame, so addresses say nothing about identity.
-- Frame interpolation (#92) pairs draws across frames by an exact identity (it hashes the POS array contents, not addresses), then a stable identity, then nearest distance (`frame_interpolation.cpp`, `command_processor.cpp`).
+- Frame interpolation (#92) pairs draws across frames by an exact identity (it hashes the POS array contents, not addresses), then a stable identity, then the motion identity (pipeline and matrix topology, no textures), nearest distance first in each (`frame_interpolation.cpp`, `command_processor.cpp`).
+  A one-matrix draw still unpaired borrows the motion of a paired draw with the byte-identical position matrix and projection (its "matrix sibling"), and the normal motion only when the normals match too.
+  Scooby's shadow needs both: its ground draws sample an EFB copy that alternates between two textures every frame, and their vertex count changes when he's hit.
+  A draw left unpaired is drawn with the frame's end matrices in the in-between images, over geometry drawn with in-between ones.
   A pair moving more than 0.5 units in one frame with the camera still is a wrong pair.
   F3 recordings don't show interpolated frames.
 - Frame interpolation only runs at 60 fps: with `[video] fps60` off the game treats `frame_interpolation_fps` as 0 whatever the file says (`RuntimeConfigFile::FrameInterpolationFps`), and the launcher and F10 show the row as Off and locked.

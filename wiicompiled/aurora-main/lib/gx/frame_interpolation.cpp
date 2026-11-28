@@ -317,13 +317,20 @@ HashType stable_identity(const FrameInterpolationDrawIdentity& identity) noexcep
                           identity.matrixTopology);
 }
 
-// Motion vectors' last-resort pairing key. Textures are left out: for motion only the transform matters, and a draw
-// that samples a texture which changes from frame to frame (an EFB copy from a rotating pool, such as a shadow)
-// matches on neither of the identities above.
+// The last-resort pairing key, for motion vectors and frame interpolation alike. Textures are left out: only the
+// transform is interpolated, and a draw that samples a texture which changes from frame to frame matches on neither of
+// the identities above. Scooby's shadow is one: the game projects it onto the ground around him from an EFB copy that
+// alternates between two textures every frame, so it never paired, and the in-between images drew it with the frame's
+// end camera over ground drawn with the in-between one (it flickered whenever the camera moved).
 HashType motion_identity(const FrameInterpolationDrawIdentity& identity) noexcept {
   return combine_identity(identity.pipeline, identity.matrixTopology);
 }
 std::unordered_map<HashType, std::vector<size_t>> s_previousMotionTransformIndices;
+// Whether this frame's begin_frame_interpolation filled the map above (motion vectors or interpolation on then). The
+// target fps can change mid-frame, so the interpolation side asks this, not the setting.
+bool s_previousMotionIndicesBuilt = false;
+// This frame's draws by motion_identity that the exact and stable passes left unpaired (built at seal).
+std::unordered_map<HashType, std::vector<size_t>> s_currentMotionTransformIndices;
 // Previous-frame entries already given to a motion draw this frame (before and after a mid-frame split).
 std::vector<uint8_t> s_motionClaimed;
 
@@ -846,15 +853,19 @@ void begin_frame_interpolation() noexcept {
   clear_index_map_keep_nodes(s_previousTransformIndices, s_previousFrameTransforms.size());
   clear_index_map_keep_nodes(s_previousStableTransformIndices, s_previousFrameTransforms.size());
   const bool motionVectors = gfx::motion_vectors_active();
-  if (motionVectors) {
+  const bool motionIdentities = motionVectors || targetFps != 0;
+  s_previousMotionIndicesBuilt = motionIdentities;
+  if (motionIdentities) {
     clear_index_map_keep_nodes(s_previousMotionTransformIndices, s_previousFrameTransforms.size());
+  }
+  if (motionVectors) {
     s_motionClaimed.assign(s_previousFrameTransforms.size(), 0);
   }
   for (size_t i = 0; i < s_previousFrameTransforms.size(); ++i) {
     const auto& identity = s_previousFrameTransforms[i].identity;
     s_previousTransformIndices[identity.combined].push_back(i);
     s_previousStableTransformIndices[stable_identity(identity)].push_back(i);
-    if (motionVectors) {
+    if (motionIdentities) {
       s_previousMotionTransformIndices[motion_identity(identity)].push_back(i);
     }
   }
@@ -1565,6 +1576,17 @@ void finalize_frame_interpolation() noexcept {
   };
   matchGroups(s_currentTransformIndices, s_previousTransformIndices, false);
   matchGroups(s_currentStableTransformIndices, s_previousStableTransformIndices, true);
+  // Last, the leftovers by mesh and material without their textures (see motion_identity), nearest first with the
+  // move check: no ordered fallback, since nothing here says two draws are copies of one mesh.
+  if (eligible && s_previousMotionIndicesBuilt) {
+    clear_index_map_keep_nodes(s_currentMotionTransformIndices, s_currentFrameTransforms.size());
+    for (size_t index = 0; index < s_currentFrameTransforms.size(); ++index) {
+      if (!currentMatched[index]) {
+        s_currentMotionTransformIndices[motion_identity(s_currentFrameTransforms[index].identity)].push_back(index);
+      }
+    }
+    matchGroups(s_currentMotionTransformIndices, s_previousMotionTransformIndices, false);
+  }
 
   s_perspectiveMatches = static_cast<uint32_t>(std::count_if(
       currentToPrevious.begin(), currentToPrevious.end(),
@@ -1741,6 +1763,46 @@ void finalize_frame_interpolation() noexcept {
       runStart = runEnd;
     }
 
+    // Matrix siblings: a one-matrix draw nothing paired, whose position matrix and projection are byte for byte those
+    // of a paired one (same viewport), is in the same space, so it moves as that pair does. The ground the game
+    // redraws under Scooby with his shadow is rebuilt every frame in world space under the camera's matrix, the matrix
+    // of the level's own draws; when its vertex count changes (getting hit) no identity pairs it. Paired draws that
+    // share a matrix but came from different ones give no single answer, and then the draw keeps this frame's. The
+    // normal matrix is left out of the key: it rarely matches (it differs from the level's draws under the same
+    // camera), and it only lights the draw, so a draw whose normal differs from its sibling's keeps its own.
+    struct MatrixSibling {
+      size_t currentIndex;
+      size_t previousIndex;
+    };
+    constexpr size_t kAmbiguousSibling = SIZE_MAX - 1;
+    static std::unordered_map<HashType, MatrixSibling> matrixSiblings;
+    matrixSiblings.clear();
+    const auto matrix_sibling_key = [](const FrameTransformSnapshot& snapshot) noexcept {
+      const HashType key = xxh3_hash_s(&snapshot.position, sizeof(snapshot.position), snapshot.viewportIdentity);
+      return xxh3_hash_s(&snapshot.projection, sizeof(snapshot.projection), key);
+    };
+    if (eligible) {
+      for (size_t drawIndex = 0; drawIndex < s_currentFrameTransforms.size(); ++drawIndex) {
+        const size_t previousIndex = currentToPrevious[drawIndex];
+        const auto& current = s_currentFrameTransforms[drawIndex].transform;
+        if (previousIndex >= s_previousFrameTransforms.size() || current.indexedMatrices ||
+            s_previousFrameTransforms[previousIndex].transform.indexedMatrices) {
+          continue;
+        }
+        const auto [it, inserted] =
+            matrixSiblings.try_emplace(matrix_sibling_key(current), MatrixSibling{drawIndex, previousIndex});
+        auto& sibling = it->second;
+        if (!inserted && sibling.previousIndex != kAmbiguousSibling && sibling.previousIndex != previousIndex) {
+          const auto& a = s_previousFrameTransforms[sibling.previousIndex].transform;
+          const auto& b = s_previousFrameTransforms[previousIndex].transform;
+          if (std::memcmp(&a.position, &b.position, sizeof(a.position)) != 0 ||
+              std::memcmp(&a.projection, &b.projection, sizeof(a.projection)) != 0) {
+            sibling.previousIndex = kAmbiguousSibling;
+          }
+        }
+      }
+    }
+
     for (const auto& task : s_pendingUniformInterpolations) {
       if (task.currentTransformIndex >= preparedTransformState.size() ||
           preparedTransformState[task.currentTransformIndex] != 0) {
@@ -1780,13 +1842,29 @@ void finalize_frame_interpolation() noexcept {
         prepared.indexedValid = allSlotsValid;
       } else {
         const size_t previousTransformIndex = currentToPrevious[task.currentTransformIndex];
-        if (previousTransformIndex >= s_previousFrameTransforms.size()) {
+        if (previousTransformIndex < s_previousFrameTransforms.size()) {
+          const auto& previous = s_previousFrameTransforms[previousTransformIndex].transform;
+          prepared.previousProjectionEntry = previousTransformIndex;
+          prepared.nonIndexedPairOffset = appendPreparedPair(
+              previous.position, current.position, previous.normal, current.normal, false);
           continue;
         }
-        const auto& previous = s_previousFrameTransforms[previousTransformIndex].transform;
-        prepared.previousProjectionEntry = previousTransformIndex;
-        prepared.nonIndexedPairOffset = appendPreparedPair(
-            previous.position, current.position, previous.normal, current.normal, false);
+        const auto sibling = matrixSiblings.find(matrix_sibling_key(current));
+        if (sibling == matrixSiblings.end() || sibling->second.previousIndex >= s_previousFrameTransforms.size()) {
+          continue;
+        }
+        const auto& siblingCurrent = s_currentFrameTransforms[sibling->second.currentIndex].transform;
+        if (siblingCurrent.viewportIdentity != current.viewportIdentity ||
+            std::memcmp(&siblingCurrent.position, &current.position, sizeof(current.position)) != 0 ||
+            std::memcmp(&siblingCurrent.projection, &current.projection, sizeof(current.projection)) != 0) {
+          continue; // a hash collision, not a sibling
+        }
+        const auto& previous = s_previousFrameTransforms[sibling->second.previousIndex].transform;
+        const bool sameNormal = std::memcmp(&siblingCurrent.normal, &current.normal, sizeof(current.normal)) == 0;
+        prepared.previousProjectionEntry = sibling->second.previousIndex;
+        prepared.nonIndexedPairOffset = appendPreparedPair(previous.position, current.position,
+                                                           sameNormal ? previous.normal : current.normal,
+                                                           current.normal, false);
       }
     }
 
@@ -2207,17 +2285,26 @@ std::array<gfx::Range, MaxInterpolatedFrames> record_interpolation_draw(
   ++s_perspectiveCandidates;
   const auto exactPrevious = s_previousTransformIndices.find(identity.combined);
   const auto stablePrevious = s_previousStableTransformIndices.find(stableIdentity);
+  const auto hasMotionPartner = [&] {
+    if (frame_interpolation_fps() == 0 || !s_previousMotionIndicesBuilt) {
+      return false; // the seal's last pass (see motion_identity) runs only with interpolation on
+    }
+    const auto it = s_previousMotionTransformIndices.find(motion_identity(identity));
+    return it != s_previousMotionTransformIndices.end() && !it->second.empty();
+  };
   const bool hasPreviousPartner =
       (exactPrevious != s_previousTransformIndices.end() && !exactPrevious->second.empty()) ||
-      (stablePrevious != s_previousStableTransformIndices.end() && !stablePrevious->second.empty());
+      (stablePrevious != s_previousStableTransformIndices.end() && !stablePrevious->second.empty()) ||
+      hasMotionPartner();
   if (hasPreviousPartner) {
     ++s_perspectiveMatchable;
   }
-  // A skinned draw with no identity partner can still borrow sibling transforms at
-  // seal time, so stage copies whenever the previous frame held any palette.
+  // A draw with no identity partner can still borrow sibling transforms at seal time (a skinned one a palette
+  // sibling's, a one-matrix one a matrix sibling's), so stage copies whenever the previous frame could supply one.
   const bool stageInterpolation =
       hasPreviousPartner ||
-      (uniformLayout.indexedMatrices && s_previousFrameHasIndexedMatrices);
+      (uniformLayout.indexedMatrices && s_previousFrameHasIndexedMatrices) ||
+      (!uniformLayout.indexedMatrices && !s_previousFrameTransforms.empty());
   // A frame already split by a submitted prefix duplicates its slots instead of
   // replaying, so staging copies for the resumed suffix would only waste space.
   if (frame_interpolation_replay_safe() && stageInterpolation) {
