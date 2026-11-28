@@ -27,7 +27,7 @@ struct Game {
     std::string place = "Shock on the Dock!";
     bool gallery = false;
 
-    void Run(double seconds, const std::string& movieStarted = {}) {
+    void Run(double seconds, const std::string& movieStarted = {}, uint32_t bossesDied = 0) {
         const int steps = static_cast<int>(std::lround(seconds * 60.0));
         for (int i = 0; i < steps; ++i) {
             now += 1.0 / 60.0;
@@ -38,6 +38,7 @@ struct Game {
             f.state = state;
             f.movie = movie;
             f.movieStarted = i == 0 ? movieStarted : std::string{};
+            f.bossesDied = i == 0 ? bossesDied : 0;
             f.progressKnown = progressKnown;
             f.percent = percent;
             f.tokens = tokens;
@@ -50,6 +51,8 @@ struct Game {
         mode = m;
         state = s;
     }
+    // A boss dies (its kill or death event), then `seconds` of play.
+    void Die(Boss boss, double seconds) { Run(seconds, {}, 1u << unsigned(boss)); }
     // A boss's defeat movie: it starts, plays `seconds`, closes.
     void Movie(const char* name, double seconds) {
         movie = true;
@@ -86,6 +89,48 @@ int main() {
         Require(BossForMovie("cin1.bik") == nullptr && BossForMovie("?") == nullptr, "not a defeat");
         Require(BossForMovie("cin3.bik")->boss == Boss::BlackKnight && BossForMovie("cin7.bik")->boss == Boss::Redbeard,
                 "the other two");
+
+        // Boss deaths: asset IDs as the level files have them, and the events that mean a death.
+        Require(AssetId("BLACK_KNIGHT") == 0xEBB8C925u && AssetId("GREEN GHOST") == 0xB6C6E412u &&
+                    AssetId("REDBEARD") == 0x51B8AABBu && AssetId("VIL_MASTERMIND") == 0x0C413492u &&
+                    AssetId("bk_health_cntr") == 0x78C70B3Au,
+                "asset IDs");
+        const uint32_t knight = AssetId("BLACK_KNIGHT"), counter = AssetId("BOSS_BATTLE_OVER_CNTR");
+        Require(BossForEvent(counter, 20, knight, kEventKill)->boss == Boss::BlackKnight, "killed");
+        Require(BossForEvent(AssetId("REDBEARD"), kEventDie, AssetId("FREE_FRED_TRIGGER"), 1)->boss == Boss::Redbeard,
+                "raises its death event");
+        Require(BossForEvent(knight, kEventDie, knight, kEventDie)->boss == Boss::BlackKnight, "to itself");
+        Require(BossForEvent(counter, 20, knight, kEventHurt) == nullptr, "hurt isn't a death");
+        Require(BossForEvent(knight, 0, knight, kEventKill) == nullptr, "a kill it sends itself counts only if it dies");
+        Require(BossForEvent(knight, 50, counter, kEventKill) == nullptr, "killing something else");
+        Require(BossForEvent(counter, kEventDie, knight, 12) == nullptr, "something else dying");
+
+        // A boss splits at its death; its movie later doesn't split again.
+        {
+            Game g;
+            g.NewGame();
+            g.Run(30);
+            g.Die(Boss::BlackKnight, 8);
+            Require(g.tracker.Splits().size() == 1 && g.tracker.Splits()[0].name == "Black Knight", "death split");
+            Near(g.tracker.Splits()[0].realTime, 33.0, 0.05, "at the death");
+            g.Movie("cin3.bik", 5);
+            g.Die(Boss::BlackKnight, 1);
+            Require(g.tracker.Splits().size() == 1, "once per boss");
+            g.Die(Boss::Mastermind, 1);
+            Require(g.tracker.Finished() && g.tracker.Splits().back().name == "Mastermind", "his death ends Any%");
+            Near(g.tracker.RealTime(g.now), 47.0, 0.05, "the run ends at his death");
+        }
+        // Several in one sample (a kill and the death event it causes are the same boss).
+        {
+            Game h;
+            h.tracker.SetCategory(CategoryIndex("all-bosses"));
+            h.NewGame();
+            h.Run(1, {}, (1u << unsigned(Boss::Redbeard)) | (1u << unsigned(Boss::GreenGhost)));
+            Require(h.tracker.Splits().size() == 2 && h.tracker.Running(), "two bosses, run goes on");
+            h.Die(Boss::BlackKnight, 1);
+            h.Die(Boss::Mastermind, 1);
+            Require(h.tracker.Finished(), "all four end All Bosses");
+        }
 
         // Categories.
         std::set<std::string> ids;

@@ -97,10 +97,9 @@ and so does your Discord status.
 
 The same page has a speedrun timer, with speedrun.com's categories for the game (Any%, All Bosses, 100%, All Monster
 Tokens, Reverse Boss Order, Warpless, No Levels Early, Cheat%). As on speedrun.com, a run starts when you press New Game.
-A boss splits when its defeat movie starts (warping out of a fight before the movie, which All Bosses and Reverse Boss
-Order allow, skips its split), All Monster Tokens and 100% also split on each Monster Token, and the run ends when the
-category's goal is reached: for Any%, when the Mastermind's defeat movie starts, a moment after the electrocution that
-speedrun.com times to. **Speedrun overlay** shows the run's time in a corner, with the last splits and the time without
+A boss splits the moment it's defeated, as speedrun.com times it (so warping out before its movie, which All Bosses
+and Reverse Boss Order allow, still splits), All Monster Tokens and 100% also split on each Monster Token, and the run
+ends when the category's goal is reached: for Any%, the instant the Mastermind is electrocuted. **Speedrun overlay** shows the run's time in a corner, with the last splits and the time without
 loads under it. When a run ends, its splits go to `Speedruns` in your saves folder, as a spreadsheet (CSV) and a
 LiveSplit splits file to compare your next runs against. speedrun.com still times runs from your video.
 

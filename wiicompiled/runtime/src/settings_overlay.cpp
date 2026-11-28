@@ -1642,20 +1642,29 @@ void DrawSpeedrunOverlay() {
         ImGui::PushFont(Small());
         ImGui::TextColored(Vec(Colour::CreamDim), "%s", view.category.c_str());
         ImGui::PopFont();
-        if (!view.lastSplits.empty() && ImGui::BeginTable("splits", 2)) {
+        if (!view.lastSplits.empty()) {
+            // Fixed-fit columns: in an auto-sizing window a stretch column gets almost no width, which cut the
+            // right-aligned times to their last digits.
             ImGui::PushFont(Body());
-            for (const auto& split : view.lastSplits) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(split.name.c_str());
-                ImGui::TableNextColumn();
-                const std::string time = no100f_speedrun::FormatTime(split.realTime);
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetColumnWidth() -
-                                     ImGui::CalcTextSize(time.c_str()).x);
-                ImGui::TextUnformatted(time.c_str());
+            float timeWidth = 0.0f;
+            for (const auto& split : view.lastSplits)
+                timeWidth = std::max(timeWidth,
+                                     ImGui::CalcTextSize(no100f_speedrun::FormatTime(split.realTime).c_str()).x);
+            if (ImGui::BeginTable("splits", 2, ImGuiTableFlags_SizingFixedFit)) {
+                ImGui::TableSetupColumn("split", ImGuiTableColumnFlags_WidthFixed);
+                ImGui::TableSetupColumn("time", ImGuiTableColumnFlags_WidthFixed, timeWidth);
+                for (const auto& split : view.lastSplits) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(split.name.c_str());
+                    ImGui::TableNextColumn();
+                    const std::string time = no100f_speedrun::FormatTime(split.realTime);
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + timeWidth - ImGui::CalcTextSize(time.c_str()).x);
+                    ImGui::TextUnformatted(time.c_str());
+                }
+                ImGui::EndTable();
             }
             ImGui::PopFont();
-            ImGui::EndTable();
         }
         ImGui::PushFont(Row());
         ImGui::SetWindowFontScale(2.0f);

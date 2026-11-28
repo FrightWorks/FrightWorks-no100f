@@ -27,6 +27,7 @@
 #include "no100f_light_textures.h"
 #include "no100f_recorder.h"
 #include "no100f_resources.h"
+#include "no100f_speedrun.h"
 #include "build_info.h"
 #include "overlay_theme.h"
 
@@ -283,6 +284,37 @@ uint32_t CurrentSceneId() {
 }
 bool CutscenePlaying() { return Read32Or0(kCutsceneMgr) != 0; }
 bool InPlay() { return Read32Or0(kGameMode) == 0xB && Read32Or0(kGameState) == 1 && CurrentScenePtr(); }
+
+// The entity in this scene with that asset ID (an entity's first word), or 0.
+uint32_t FindEntity(uint32_t id) {
+    const uint32_t scene = CurrentScenePtr();
+    const uint32_t list = scene ? Read32Or0(scene + 0x78) : 0, count = scene ? Read32Or0(scene + 0x74) : 0;
+    for (uint32_t i = 0; IsGuestPtr(list) && i < count && i < 4000; ++i) {
+        const uint32_t base = Read32Or0(list + i * 4);
+        if (IsGuestPtr(base) && Read32Or0(base) == id) return base;
+    }
+    return 0;
+}
+
+// An entity named in a command: its asset name as in the level file (spaces allowed) or its ID in hex (0x...).
+uint32_t EntityIdFromText(const std::string& text) {
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X'))
+        return static_cast<uint32_t>(std::strtoul(text.c_str() + 2, nullptr, 16));
+    return no100f_speedrun::AssetId(text);
+}
+
+// Passes an event to an entity through the game's own event function (0x80048B2C: from, to, event), as a link would:
+// the entity reacts and its links for that event run.
+bool SendEntityEvent(uint32_t base, uint32_t event) {
+    CpuContext* current = TryGetCpuContext();
+    if (!current || !IsGuestPtr(base)) return false;
+    CpuContext call = *current;
+    CpuContextScope scope(&call);
+    call.gpr[3] = call.gpr[4] = base;
+    call.gpr[5] = event;
+    func_80048B2C(&call);
+    return true;
+}
 bool ProgressRead(uint32_t address, uint32_t& value) {
     return GuestRange(address, 4) && Memory::TryRead32(address, value);
 }
@@ -1339,6 +1371,10 @@ void DrawDiagnostics() {
 //   monsters [on|off]   list this scene's monsters; all monsters off (every scene) / back on
 //   monster N|NAME on|off
 //   ents                log the scene's entity list
+//   event N NAME|0xID   pass event N to an entity in this scene (asset name as in the level file, or its ID), as a
+//                       link would: e.g. 12 counts a counter down, 174 hurts an NPC, 37 kills one
+//   boss hit|kill       hurt or kill the boss in this room the way its fight does, once the fight is under way (the
+//                       speedrun timer splits on the death); the Green Ghost takes four hits, Scooby near him
 //   textures            log the texture pack files drawn in this level (count, their names, then how many Xbox textures)
 //   find NAME|off       draw that texture (pack file name, extension optional) solid magenta / back to normal
 //   texreload           read the texture folders and packs again (files added, removed or edited); console.log lists
@@ -1635,6 +1671,73 @@ void PollCommandFile() {
                               IsGuestPtr(frame) ? ReadF(frame + 0x30) : 0.f, IsGuestPtr(frame) ? ReadF(frame + 0x34) : 0.f,
                               IsGuestPtr(frame) ? ReadF(frame + 0x38) : 0.f);
                 g_status += b;
+            }
+        } else if (cmd == "event") {
+            std::istringstream as(arg);
+            uint32_t event = 0;
+            std::string target;
+            if (!(as >> event) || !std::getline(as >> std::ws, target) || target.empty()) {
+                g_status = "usage: event NUMBER NAME|0xID";
+            } else {
+                const uint32_t id = EntityIdFromText(target), base = FindEntity(id);
+                char b[160];
+                std::snprintf(b, sizeof b, "event %u -> %s (%08X): %s", event, target.c_str(), id,
+                              !base ? "not in this scene" : SendEntityEvent(base, event) ? "sent" : "no game thread");
+                g_status = b;
+            }
+        } else if (cmd == "boss") {
+            // The boss in this room, hurt or killed with the events its own fight sends (links in the level files,
+            // 2026-11-27). A hit is what one hit of the fight sends the boss (a button under the Black Knight also
+            // counts his health counter down). A kill counts the fight's own counters down to zero, so the level's
+            // links do the rest: the Black Knight's health counter, Redbeard's anchor counter. The Mastermind dies of
+            // one hurt (his zap). The Green Ghost ignored his hurt counters (2026-11-27 test) but died of four direct
+            // hurts a few seconds apart with Scooby beside him, so his kill is one hurt, repeated.
+            // Each boss's fight has to be under way first (its intro played; event 5 to TRIG_START_CIN2_01A in o008
+            // or START CINEMATIC TRIG in g009 plays it; w028 and s005 play theirs on arrival).
+            using namespace no100f_speedrun;
+            struct Fight {
+                Boss boss;
+                std::vector<uint32_t> hit;           // events a hit sends the boss
+                const char* hitCounter;              // a counter a hit counts down by one, or null
+                std::vector<const char*> counters;   // counters a kill counts down to zero
+            };
+            static const Fight kFights[] = {
+                {Boss::BlackKnight, {kEventHurt}, "BK_HEALTH_CNTR", {"BK_HEALTH_CNTR"}},
+                {Boss::GreenGhost, {kEventHurt}, nullptr, {}},
+                {Boss::Redbeard, {177, kEventHurt}, nullptr, {"ANCHORFALL_CNTR"}},
+                {Boss::Mastermind, {kEventHurt}, nullptr, {}},
+            };
+            const BossInfo* boss = nullptr;
+            uint32_t base = 0;
+            for (const auto& info : kBosses)
+                if ((base = FindEntity(AssetId(info.npc))) != 0) { boss = &info; break; }
+            const std::string what = Lower(arg);
+            if (!boss) {
+                g_status = "boss: no boss in this scene";
+            } else if (what != "hit" && what != "kill") {
+                g_status = "usage: boss hit|kill";
+            } else {
+                const Fight& fight = kFights[size_t(boss->boss)];
+                int sent = 0, failed = 0;
+                auto send = [&](uint32_t entity, uint32_t event) { (SendEntityEvent(entity, event) ? sent : failed)++; };
+                if (what == "hit" || fight.counters.empty()) {
+                    for (uint32_t event : fight.hit) send(base, event);
+                    if (fight.hitCounter) send(FindEntity(AssetId(fight.hitCounter)), 12);
+                } else {
+                    for (const char* name : fight.counters) {
+                        // Reset (10) to the count it starts with (its asset, +8), then count down (a counter that ran
+                        // out ignores more), so a kill can be repeated.
+                        const uint32_t counter = FindEntity(AssetId(name)), asset = Read32Or0(counter + 0x10);
+                        const uint32_t count = IsGuestPtr(asset) ? Read32Or0(asset + 8) >> 16 : 0;
+                        if (!counter || count == 0 || count > 16) { ++failed; continue; }
+                        send(counter, 10);
+                        for (uint32_t i = 0; i < count; ++i) send(counter, 12);
+                    }
+                }
+                g_status = "boss " + what + " " + boss->name + ": " + std::to_string(sent) + " events sent" +
+                           (failed ? ", " + std::to_string(failed) + " failed" : "") +
+                           (boss->boss == Boss::GreenGhost ? " (one hit: he takes four, a few seconds apart, with "
+                                                             "Scooby near him)" : "");
             }
         } else if (cmd == "csn") {
             // Cutscene managers are found by the CSN they name (asset +0x10, its +8 = xStrHash of the cutscene name).
