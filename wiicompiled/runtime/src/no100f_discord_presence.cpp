@@ -64,7 +64,7 @@ void SampleGame() {
     activity.name = kActivityName;
     activity.details = status.details;
     activity.state = status.state;
-    activity.largeImageKey = kLargeImage;
+    activity.largeImageKey = status.largeImage;
     activity.largeImageText = status.largeText;
     activity.largeImageUrl = kGamePage;
     activity.smallImageKey = kSmallImage;

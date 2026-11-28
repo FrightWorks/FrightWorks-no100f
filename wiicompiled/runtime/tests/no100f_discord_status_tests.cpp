@@ -92,6 +92,23 @@ int main() {
         Require(Describe(InPlay("S006")).largeText == kGameTitle, "ending: the game's title");
         Require(Describe(hover) != Describe(InPlay("E002")), "a hover change is a change");
 
+        // Area pictures: every level's area and the hub have one; menus and the ending keep the icon.
+        std::set<std::string> files;
+        for (const AreaPicture& picture : kAreaPictures) files.insert(picture.file);
+        Require(files.size() == sizeof(kAreaPictures) / sizeof(kAreaPictures[0]), "one file per area");
+        for (const Level& level : kLevels)
+            Require(AreaPictureFor(level.area) != kLargeImage, std::string(level.area) + ": has a picture");
+        Require(Describe(InPlay("C003")).largeImage == "https://frightworks.dev/discord/no100f/cliffs-caves.jpg",
+                "level picture URL");
+        Require(Describe(InPlay("H003")).largeImage == "https://frightworks.dev/discord/no100f/hub.jpg", "hub picture");
+        Require(Describe(InPlay("O008")).largeImage == "https://frightworks.dev/discord/no100f/tower.jpg",
+                "boss room: its area's picture");
+        Require(Describe(InPlay("H001", kModeTitle)).largeImage == kLargeImage, "menu: the icon");
+        Require(Describe(InPlay("S006")).largeImage == kLargeImage, "ending: the icon");
+        Status otherPicture = Describe(InPlay("E002"));
+        otherPicture.largeImage = kLargeImage;
+        Require(otherPicture != Describe(InPlay("E002")), "a picture change is a change");
+
         // SnackAreaIndex matches the game's snack-area table (no100f_devmenu_progress.h), scene by scene.
         for (uint32_t area = 0; area < no100f_devmenu::kSnackAreaScenes.size(); ++area)
             for (uint32_t id : no100f_devmenu::kSnackAreaScenes[area])

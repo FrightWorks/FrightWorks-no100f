@@ -79,8 +79,9 @@ numbers the folders (`10-`, `20-`, ...). Your own `texture_replacements` folder 
 
 **Discord.** With the Discord desktop app running, your Discord status shows the launcher, or in the game the level
 you're in (or the boss you're facing), your completion (live, the same percentage the load screen shows for a save) and
-Snacks, whether you're paused, the main menu or the credits, and how long you've played. Hovering over the big picture
-shows the area; the small one shows the level's Snacks found and your Monster Tokens. Friends also see two buttons to
+Snacks, whether you're paused, the main menu or the credits, and how long you've played. In a level or at the Mystery
+Machine the big picture is a painting of the area, and hovering over it names the area; hovering over the small one
+shows the level's Snacks found and your Monster Tokens. Friends also see two buttons to
 get the game (Discord doesn't show you your own buttons), and clicking either picture opens the game's page. On Linux,
 the Flatpak and Snap builds of Discord work too. The launcher and the game only talk to the Discord app on your PC. Discord's **User
 Settings > Activity Privacy** decides who sees it; **Settings > Game > Show in my Discord status** in the launcher
