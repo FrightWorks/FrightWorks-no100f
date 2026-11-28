@@ -8,6 +8,7 @@
 #include "runtime_config.h"
 #include "runtime_log.h"
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -27,6 +28,7 @@ bool g_playTimesRead = false;
 std::vector<PlayTimeEntry> g_playTimes;
 uint16_t g_lastButtons = 0;
 uint32_t g_lastMovie = 0;
+std::atomic<uint32_t> g_bossesDied{0};  // bit (1 << Boss), set by EntityEvent, taken by Tick
 
 double Now() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -115,6 +117,7 @@ void Tick() {
     } else {
         f.layout = false;
     }
+    f.bossesDied = g_bossesDied.exchange(0, std::memory_order_relaxed);
 
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_categoryRead) {
@@ -122,12 +125,12 @@ void Tick() {
         g_tracker.SetCategory(CategoryIndex(RuntimeConfigFile::SpeedrunCategory()));
     }
     const bool wasFinished = g_tracker.Finished();
+    const size_t splitsBefore = g_tracker.Started() ? g_tracker.Splits().size() : 0;
     g_tracker.Update(f);
-    if (!f.movieStarted.empty() && !f.gallery && g_tracker.Running()) {
-        if (const BossInfo* boss = BossForMovie(f.movieStarted)) {
-            RT_LOGF(RT_TAG_RUNTIME, "[speedrun] %s defeated at %s\n", boss->name,
-                    FormatTime(g_tracker.RealTime(f.now)).c_str());
-        }
+    for (size_t i = splitsBefore; g_tracker.Started() && i < g_tracker.Splits().size(); ++i) {
+        const Split& split = g_tracker.Splits()[i];
+        RT_LOGF(RT_TAG_RUNTIME, "[speedrun] split %s at %s (%s without loads)\n", split.name.c_str(),
+                FormatTime(split.realTime).c_str(), FormatTime(split.withoutLoads).c_str());
     }
     if (g_tracker.Started() && g_tracker.StartTime() != g_runStart) {
         g_runStart = g_tracker.StartTime();
@@ -140,6 +143,15 @@ void Tick() {
         g_runWritten = true;
         WriteRunFiles(f.now);
     }
+}
+
+void EntityEvent(uint32_t fromId, uint32_t fromEvent, uint32_t toId, uint32_t toEvent) {
+    const BossInfo* died = BossForEvent(fromId, fromEvent, toId, toEvent);
+    if (died) g_bossesDied.fetch_or(1u << unsigned(died->boss), std::memory_order_relaxed);
+    const BossInfo* boss = died ? died : BossById(toId);
+    if (!boss) return;
+    RT_LOGF(RT_TAG_RUNTIME, "[boss] %s gets event %u (%08X raised %u)%s\n", boss->name, toEvent, fromId, fromEvent,
+            died ? ": died" : "");
 }
 
 void PadButtons(uint16_t buttons) {

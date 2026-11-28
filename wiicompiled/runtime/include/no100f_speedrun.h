@@ -37,20 +37,51 @@ constexpr bool CountsAsPlayTime(uint32_t mode, uint32_t state, bool movie) {
 // A gap between two samples longer than this (the PC slept, a debugger stopped the game) doesn't count as play time.
 inline constexpr double kMaxStep = 0.5;
 
-// The bosses and the Bink movie each one's defeat starts. main.dol names cin_mmpd "cin_mm_post_death"; the other three
-// follow each boss's intro movie (main.dol's intro table: cin_2, cin_4, cin_6, cin_10; frames checked 2026-11-27).
+// The game's asset ID of a name (tools/debug/game/hipedit.py xstrhash): h = h * 131 + the upper-case letter.
+constexpr uint32_t AssetId(std::string_view name) {
+    uint32_t h = 0;
+    for (char c : name) h = h * 131u + uint32_t(uint8_t(c >= 'a' && c <= 'z' ? c - 32 : c));
+    return h;
+}
+
+// Entity events (the links in the level files, 2026-11-27): 37 kills an NPC (a boss's last counter sends it), 36 is
+// the one an NPC raises when it dies (its links open the exit, free the friend, stop the boss music), 174 hurts one.
+inline constexpr uint32_t kEventDie = 36, kEventKill = 37, kEventHurt = 174;
+
+// The bosses: the NPC in each boss room and the movie its defeat leads to (cutscene managers in the level files,
+// 2026-11-27). The split is the moment the boss dies, as speedrun.com times it; the movie is a fallback. The Black
+// Knight's (o008), the Green Ghost's (g009) and Redbeard's (w028) start when Scooby walks into a trigger after the
+// fight; the Mastermind's (s005, "cin_mm_post_death") starts at his death.
 enum class Boss { BlackKnight, GreenGhost, Redbeard, Mastermind };
 struct BossInfo {
     Boss boss;
     const char* name;
+    const char* npc;  // its NPC asset's name in the level file
     const char* defeatMovie;
 };
 inline constexpr std::array<BossInfo, 4> kBosses = {{
-    {Boss::BlackKnight, "Black Knight", "cin3.bik"},
-    {Boss::GreenGhost, "Green Ghost", "cin5.bik"},
-    {Boss::Redbeard, "Redbeard", "cin7.bik"},
-    {Boss::Mastermind, "Mastermind", "cin_mmpd.bik"},
+    {Boss::BlackKnight, "Black Knight", "BLACK_KNIGHT", "cin3.bik"},
+    {Boss::GreenGhost, "Green Ghost", "GREEN GHOST", "cin5.bik"},
+    {Boss::Redbeard, "Redbeard", "REDBEARD", "cin7.bik"},
+    {Boss::Mastermind, "Mastermind", "VIL_MASTERMIND", "cin_mmpd.bik"},
 }};
+
+// The boss with this NPC asset ID.
+inline const BossInfo* BossById(uint32_t id) {
+    for (const BossInfo& info : kBosses)
+        if (id == AssetId(info.npc)) return &info;
+    return nullptr;
+}
+
+// An event passed from one entity to another (the event `from` raised, the event `to` gets) that means a boss died:
+// it raises its death event, or the level kills it (a kill the boss sends itself, as the dev menu's does, only counts
+// once it dies of it: a boss whose fight hasn't started ignores one).
+inline const BossInfo* BossForEvent(uint32_t fromId, uint32_t fromEvent, uint32_t toId, uint32_t toEvent) {
+    if (fromEvent == kEventDie)
+        if (const BossInfo* boss = BossById(fromId)) return boss;
+    if (toEvent == kEventDie || (toEvent == kEventKill && fromId != toId)) return BossById(toId);
+    return nullptr;
+}
 
 inline bool SameName(std::string_view a, std::string_view b) {
     if (a.size() != b.size()) return false;
@@ -72,7 +103,7 @@ inline constexpr uint32_t kTokenTotal = 21;  // no100f_progress::kTokenTotal
 
 // What ends a run. All of speedrun.com's categories (game n100f) start on the press of New Game.
 enum class End {
-    Mastermind,   // "the instant Mastermind is electrocuted": his defeat movie starts
+    Mastermind,   // "the instant Mastermind is electrocuted": the moment he dies
     AllBosses,    // the fourth boss defeated (All Bosses, Reverse Boss Order)
     AllTokens,    // the Mastermind and all 21 Monster Tokens, whichever comes last
     Complete100,  // the Mastermind and 100% completion, whichever comes last
@@ -85,17 +116,17 @@ struct Category {
     const char* rules; // the F10 description: when it ends
 };
 inline constexpr std::array<Category, 8> kCategories = {{
-    {"any", "Any%", End::Mastermind, false, "Ends when the Mastermind's defeat movie starts."},
-    {"all-bosses", "All Bosses", End::AllBosses, false, "Ends when the fourth boss's defeat movie starts."},
+    {"any", "Any%", End::Mastermind, false, "Ends the moment the Mastermind is defeated."},
+    {"all-bosses", "All Bosses", End::AllBosses, false, "Ends the moment the fourth boss is defeated."},
     {"100", "100%", End::Complete100, true,
      "Ends at the Mastermind's defeat or 100% completion, whichever comes last. speedrun.com checks the save."},
     {"amt", "All Monster Tokens", End::AllTokens, true,
      "Ends at the Mastermind's defeat or the 21st Monster Token, whichever comes last."},
     {"rbo", "Reverse Boss Order", End::AllBosses, false,
-     "Ends when the fourth boss's defeat movie starts (the Black Knight, in this category's order)."},
-    {"warpless", "Warpless", End::Mastermind, false, "Ends when the Mastermind's defeat movie starts."},
-    {"nle", "No Levels Early", End::Mastermind, false, "Ends when the Mastermind's defeat movie starts."},
-    {"cheat", "Cheat%", End::Mastermind, false, "Ends when the Mastermind's defeat movie starts."},
+     "Ends the moment the fourth boss is defeated (the Black Knight, in this category's order)."},
+    {"warpless", "Warpless", End::Mastermind, false, "Ends the moment the Mastermind is defeated."},
+    {"nle", "No Levels Early", End::Mastermind, false, "Ends the moment the Mastermind is defeated."},
+    {"cheat", "Cheat%", End::Mastermind, false, "Ends the moment the Mastermind is defeated."},
 }};
 
 inline int CategoryIndex(std::string_view id) {
@@ -111,6 +142,7 @@ struct Frame {
     uint32_t mode = 0, state = 0;
     bool movie = false;          // a Bink movie is open
     std::string movieStarted;    // a movie opened since the last sample: its file name
+    uint32_t bossesDied = 0;     // bosses that died since the last sample: bit (1 << Boss)
     bool progressKnown = false;  // the live completion below can be read
     uint32_t percent = 0, tokens = 0;
     std::string place;  // the level (or area) Scooby is in, for token split names
@@ -167,6 +199,8 @@ public:
         }
         if (running_) {
             if (step > 0 && !IsLoading(f.mode, f.state)) loadless_ += step;
+            for (const BossInfo& boss : kBosses)
+                if (f.bossesDied & (1u << unsigned(boss.boss))) BossDefeated(boss, f.now);
             if (!f.movieStarted.empty() && !f.gallery) {
                 if (const BossInfo* boss = BossForMovie(f.movieStarted)) BossDefeated(*boss, f.now);
             }
@@ -214,7 +248,7 @@ private:
 
     void BossDefeated(const BossInfo& boss, double now) {
         bool& done = defeated_[size_t(boss.boss)];
-        if (done) return;  // a movie watched again from the gallery
+        if (done) return;  // its movie after its death, or the movie watched again from the gallery
         done = true;
         AddSplit(boss.name, now);
     }
@@ -461,6 +495,8 @@ constexpr bool IsSaveWrite(int32_t length) { return length >= 8192; }
 void Tick();
 // Each PADRead (pad.cpp): the buttons the game gets, all controllers together.
 void PadButtons(uint16_t buttons);
+// An entity event that may be a boss's death (hle/no100f_entity_event.cpp; BossForEvent decides).
+void EntityEvent(uint32_t fromId, uint32_t fromEvent, uint32_t toId, uint32_t toEvent);
 // Memory card calls on a save slot's file (card_gc.cpp).
 void CardRead(const std::string& file, int32_t offset, int32_t length);
 void CardWritten(const std::string& file, int32_t length);
